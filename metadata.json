@@ -1,0 +1,5 @@
+{
+  "name": "RAW Image Prompt Studio",
+  "description": "A professional tool for generating, managing, and comparing raw image prompts using Gemini Nano Banana Pro. Features batch processing, style hints, and history management.",
+  "requestFramePermissions": []
+}
