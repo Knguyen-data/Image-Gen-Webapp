@@ -1,89 +1,102 @@
-import { GoogleGenAI, GenerateContentResponse } from "@google/genai";
+import { GoogleGenerativeAI, Part } from "@google/generative-ai";
 import { GenerationRequest, GeneratedImage } from "../types";
 import { GEMINI_MODEL_ID } from "../constants";
 
-const getClient = (apiKey: string) => {
-  // STRICT MODE: Only use the provided apiKey. Do not fallback to process.env.API_KEY.
-  if (!apiKey) throw new Error("API Key is missing. Please set it in the settings.");
-  
-  // Removed manual format check (AIza prefix) per user request.
-  
-  return new GoogleGenAI({ apiKey });
-};
+// Helper to convert base64 to GenerativePart if supported, or just inline data
+// For GoogleGenerativeAI, we usually pass array of parts.
+// Valid parts: string (text) or { inlineData: { mimeType, data } }
 
-const parseResponse = (response: GenerateContentResponse, prompt: string, settings: any): GeneratedImage => {
-    // Extract image from response
-    let base64Data: string | null = null;
-    let mimeType: string = 'image/png';
+const parseResponse = (result: any, prompt: string, settings: any): GeneratedImage => {
+  // result is GenerateContentResult
+  const response = result.response;
+  if (!response) throw new Error("No response received");
 
-    if (response.candidates?.[0]?.content?.parts) {
-      for (const part of response.candidates[0].content.parts) {
-        if (part.inlineData) {
-          base64Data = part.inlineData.data;
-          mimeType = part.inlineData.mimeType || 'image/png';
-          break; // Found the image
-        }
+  // Handling Image Generation response from Gemini 2.0 or Imagen on AI Studio
+  // Usually images come as inlineData in candidates.
+  // NOTE: The SDK text() method gets text, but we need raw parts for images.
+
+  // Using internal structure access since specific helper might not exist for images yet
+  const candidates = response.candidates;
+  if (!candidates || candidates.length === 0) throw new Error("No candidates returned");
+
+  const firstPart = candidates[0].content?.parts?.[0];
+
+  let base64Data: string | null = null;
+  let mimeType: string = 'image/png';
+
+  // Check for inline data (Image)
+  if (firstPart && firstPart.inlineData) {
+    base64Data = firstPart.inlineData.data;
+    mimeType = firstPart.inlineData.mimeType || 'image/png';
+  }
+  // Check for "executable code" or other formats if model generated code to make image? 
+  // No, assuming direct image response.
+
+  if (!base64Data) {
+    // If mostly text, throw error unless we can find image in other parts
+    for (const part of candidates[0].content?.parts || []) {
+      if (part.inlineData) {
+        base64Data = part.inlineData.data;
+        mimeType = part.inlineData.mimeType;
+        break;
       }
     }
+  }
 
-    if (!base64Data) {
-      // Check if there's a text response explaining why image failed
-      const textPart = response.text;
-      if (textPart) {
-          throw new Error(`Model returned text instead of image: "${textPart.slice(0, 100)}..."`);
-      }
-      throw new Error("No image data found in response.");
-    }
+  if (!base64Data) {
+    const text = response.text ? response.text() : "No content";
+    throw new Error(`Model returned text instead of image. Content: "${text.slice(0, 100)}..."`);
+  }
 
-    return {
-      id: crypto.randomUUID(),
-      base64: base64Data,
-      mimeType,
-      createdAt: Date.now(),
-      promptUsed: prompt,
-      settingsSnapshot: settings,
-      seed: Math.floor(Math.random() * 1000000), 
-    };
+  return {
+    id: crypto.randomUUID(),
+    base64: base64Data,
+    mimeType,
+    createdAt: Date.now(),
+    promptUsed: prompt,
+    settingsSnapshot: settings,
+    seed: Math.floor(Math.random() * 1000000),
+  };
 };
 
 export const generateImage = async (
   req: GenerationRequest
 ): Promise<GeneratedImage> => {
-  const ai = getClient(req.apiKey);
-  
+  if (!req.apiKey) throw new Error("API Key is missing.");
+
+  const genAI = new GoogleGenerativeAI(req.apiKey);
+  const model = genAI.getGenerativeModel({
+    model: GEMINI_MODEL_ID,
+    generationConfig: {
+      temperature: req.settings.temperature,
+      // Passing arbitrary imageConfig might be ignored or cause error depending on strictness.
+      // For now, we omit 'imageConfig' as strictly Typed in standard SDK unless using 'any' cast.
+      // But if using Imagen-3 on AI Studio, parameters might be needed properly.
+      // We will attempt to pass unknown properties if they are critical, or skip for now to ensuring conn works.
+    }
+  });
+
   try {
-    // Construct Parts: Text Prompt + Reference Images
-    const parts: any[] = [
-        { text: req.prompt }
+    const parts: Part[] = [
+      { text: req.prompt }
     ];
 
-    // Add Reference Images
     if (req.referenceImages && req.referenceImages.length > 0) {
-        req.referenceImages.forEach(img => {
-            parts.push({
-                inlineData: {
-                    mimeType: img.mimeType,
-                    data: img.base64
-                }
-            });
+      req.referenceImages.forEach(img => {
+        parts.push({
+          inlineData: {
+            mimeType: img.mimeType,
+            data: img.base64
+          }
         });
+      });
     }
 
-    const response: GenerateContentResponse = await ai.models.generateContent({
-      model: GEMINI_MODEL_ID,
-      contents: {
-        parts: parts,
-      },
-      config: {
-        temperature: req.settings.temperature,
-        imageConfig: {
-          aspectRatio: req.settings.aspectRatio,
-          imageSize: req.settings.imageSize,
-        },
-      },
+    const result = await model.generateContent({
+      contents: [{ role: "user", parts: parts }]
     });
 
-    return parseResponse(response, req.prompt, req.settings);
+    return parseResponse(result, req.prompt, req.settings);
 
   } catch (error: any) {
     console.error("Gemini Generation Error:", error);

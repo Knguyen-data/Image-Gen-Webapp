@@ -1,7 +1,7 @@
 import { AppSettings } from './types';
 
-// Using Gemini 3 Pro Image Preview (Nano Banana Pro equivalent)
-export const GEMINI_MODEL_ID = 'gemini-3-pro-image-preview';
+// Using Gemini 2.0 Flash for Generation (faster and newer)
+export const GEMINI_MODEL_ID = 'gemini-2.0-flash';
 
 export const DEFAULT_STYLE_HINT = `Brand: DashBooking
 Tone: Pastel Green, Clean, Minimalist, Tech-forward.

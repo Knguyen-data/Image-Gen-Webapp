@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
 interface ApiKeyModalProps {
   isOpen: boolean;
@@ -22,46 +22,73 @@ const ApiKeyModal: React.FC<ApiKeyModalProps> = ({ isOpen, onClose, apiKey, setA
   if (!isOpen) return null;
 
   const handleSave = async () => {
-    const key = inputVal.trim();
+    // Sanitize key: remove whitespace and accidental quotes
+    let key = inputVal.trim();
+    if (key.startsWith('"') && key.endsWith('"')) {
+      key = key.slice(1, -1);
+    }
+    if (key.startsWith("'") && key.endsWith("'")) {
+      key = key.slice(1, -1);
+    }
+
     if (!key) {
       setErrorMsg("Please enter an API key");
       return;
     }
 
-    // Removed manual format checks per user request. 
-    // Validation relies solely on the actual API call below.
-
     setIsValidating(true);
     setErrorMsg('');
 
     try {
-      const ai = new GoogleGenAI({ apiKey: key });
+      // Use the official SDK 
+      const genAI = new GoogleGenerativeAI(key);
 
-      // Use STABLE model for connection test (Ping)
+      // Try Gemini 2.0 Flash-Lite first as requested
+      // If user keyed 1.5, we surely can try 2.0
+      const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-lite-preview-02-05" });
+
       const nonce = Date.now().toString();
-      const response = await ai.models.generateContent({
-        model: 'gemini-1.5-flash',
-        contents: { parts: [{ text: `Return the word "pong" - ${nonce}` }] },
-      });
+      const result = await model.generateContent(`Return the word "pong" - ${nonce}`);
 
-      if (!response || !response.candidates || response.candidates.length === 0) {
-        throw new Error("Empty response from API");
+      if (!result || !result.response) {
+        throw new Error("No response from AI Service");
       }
 
-      // Trigger getter to ensure parsing works
-      const responseText = response.text;
+      const text = result.response.text();
 
       setApiKey(key);
       localStorage.setItem('raw_studio_api_key', key);
       onClose();
+
     } catch (error: any) {
       console.error("API Validation failed", error);
-      let msg = error.message || "Unknown error";
-      if (msg.includes("400")) msg = "Invalid API Key (400 Bad Request)";
-      if (msg.includes("403")) msg = "Permission Denied (403). Check if key is enabled.";
-      if (msg.includes("404")) msg = "Model not found. Key might be invalid.";
 
-      setErrorMsg(`Validation Failed: ${msg}`);
+      let msg = error.message || "Unknown error";
+
+      // HANDLING 404 AS SUCCESS (Valid Key, Invalid Model)
+      // If we got a 404, it means the server Responded. The key was likely accepted to even check the model.
+      // If the key was invalid, it would be 400 or 401. 
+      // 404 implies "Authenticated, but resource not found". 
+      // User requested we treat 404 as valid.
+      if (msg.includes("404") || msg.includes("not found")) {
+        console.warn("Model 404'd, but assuming key is valid per user request.");
+        setApiKey(key);
+        localStorage.setItem('raw_studio_api_key', key);
+        onClose();
+        return;
+      }
+
+      // SDK specific error mapping
+      if (msg.includes("400")) msg = "Invalid API Key or Request (400). Key format might be wrong.";
+      if (msg.includes("401")) msg = "Unauthorized (401). The Key is invalid.";
+      if (msg.includes("403")) msg = "Permission Denied (403). Key might be restricted or project billing undefined.";
+
+      // Hint for users
+      if (!key.startsWith("AIza")) {
+        msg += " (Hint: API Keys usually start with 'AIza'...)";
+      }
+
+      setErrorMsg(msg);
     } finally {
       setIsValidating(false);
     }
