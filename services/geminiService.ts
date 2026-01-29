@@ -65,15 +65,10 @@ export const generateImage = async (
   if (!req.apiKey) throw new Error("API Key is missing.");
 
   const genAI = new GoogleGenerativeAI(req.apiKey);
+
+  // Use the specific model ID from constants (gemini-3-pro-image-preview)
   const model = genAI.getGenerativeModel({
-    model: GEMINI_MODEL_ID,
-    generationConfig: {
-      temperature: req.settings.temperature,
-      // Passing arbitrary imageConfig might be ignored or cause error depending on strictness.
-      // For now, we omit 'imageConfig' as strictly Typed in standard SDK unless using 'any' cast.
-      // But if using Imagen-3 on AI Studio, parameters might be needed properly.
-      // We will attempt to pass unknown properties if they are critical, or skip for now to ensuring conn works.
-    }
+    model: GEMINI_MODEL_ID
   });
 
   try {
