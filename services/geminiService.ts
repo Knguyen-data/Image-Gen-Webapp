@@ -1,5 +1,5 @@
-import { GoogleGenerativeAI, Part } from "@google/generative-ai";
-import { GenerationRequest, GeneratedImage } from "../types";
+import { GoogleGenerativeAI, Part, HarmCategory, HarmBlockThreshold } from "@google/generative-ai";
+import { GenerationRequest, GeneratedImage, ModificationRequest } from "../types";
 import { GEMINI_MODEL_ID } from "../constants";
 
 // Helper to convert base64 to GenerativePart if supported, or just inline data
@@ -66,9 +66,20 @@ export const generateImage = async (
 
   const genAI = new GoogleGenerativeAI(req.apiKey);
 
+  // Build safety settings - when filter DISABLED, use BLOCK_NONE
+  const safetySettings = !req.settings.safetyFilterEnabled
+    ? [
+        { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+        { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+        { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
+        { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE }
+      ]
+    : undefined;  // When enabled, use API defaults
+
   // Use the specific model ID from constants (gemini-3-pro-image-preview)
   const model = genAI.getGenerativeModel({
-    model: GEMINI_MODEL_ID
+    model: GEMINI_MODEL_ID,
+    safetySettings: safetySettings
   });
 
   try {
@@ -96,5 +107,62 @@ export const generateImage = async (
   } catch (error: any) {
     console.error("Gemini Generation Error:", error);
     throw new Error(error.message || "Failed to generate image");
+  }
+};
+
+export const modifyImage = async (
+  req: ModificationRequest
+): Promise<GeneratedImage> => {
+  if (!req.apiKey) throw new Error("API Key is missing.");
+
+  const genAI = new GoogleGenerativeAI(req.apiKey);
+
+  // Build safety settings - when filter DISABLED, use BLOCK_NONE
+  const safetySettings = !req.settings.safetyFilterEnabled
+    ? [
+        { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+        { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+        { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
+        { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE }
+      ]
+    : undefined;  // When enabled, use API defaults
+
+  const model = genAI.getGenerativeModel({
+    model: GEMINI_MODEL_ID,
+    safetySettings: safetySettings
+  });
+
+  try {
+    const parts: Part[] = [
+      { text: req.prompt },
+      {
+        inlineData: {
+          mimeType: req.sourceImage.mimeType,
+          data: req.sourceImage.base64
+        }
+      }
+    ];
+
+    // Add additional reference images if provided
+    if (req.referenceImages && req.referenceImages.length > 0) {
+      req.referenceImages.forEach(img => {
+        parts.push({
+          inlineData: {
+            mimeType: img.mimeType,
+            data: img.base64
+          }
+        });
+      });
+    }
+
+    const result = await model.generateContent({
+      contents: [{ role: "user", parts: parts }]
+    });
+
+    return parseResponse(result, req.prompt, req.settings);
+
+  } catch (error: any) {
+    console.error("Gemini Modification Error:", error);
+    throw new Error(error.message || "Failed to modify image");
   }
 };

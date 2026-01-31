@@ -257,6 +257,25 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
                             await addLocalImages(index, files);
                           }
                         }}
+                        onPaste={async (e) => {
+                          const items = e.clipboardData?.items;
+                          if (!items) return;
+                          const imageFiles: File[] = [];
+                          for (let i = 0; i < items.length; i++) {
+                            if (items[i].type.startsWith('image/')) {
+                              const file = items[i].getAsFile();
+                              if (file) imageFiles.push(file);
+                            }
+                          }
+                          if (imageFiles.length > 0) {
+                            e.preventDefault();
+                            const fileList = Object.assign(imageFiles, {
+                              length: imageFiles.length,
+                              item: (idx: number) => imageFiles[idx]
+                            }) as unknown as FileList;
+                            await addLocalImages(index, fileList);
+                          }
+                        }}
                       >
                         <textarea
                           className="w-full bg-transparent p-3 text-sm text-gray-200 outline-none resize-y min-h-[80px] font-mono relative z-10"
@@ -316,6 +335,7 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
           {/* --- GLOBAL REFERENCES --- */}
           <div
             className="space-y-2 bg-gray-800/50 p-4 rounded-lg border border-gray-800 transition-all border-dashed hover:border-solid hover:border-gray-700"
+            tabIndex={0}
             onDragOver={(e) => {
               e.preventDefault();
               e.currentTarget.classList.add('ring-2', 'ring-dash-300', 'bg-gray-800', 'border-dash-300');
@@ -337,11 +357,31 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
                 setSettings({ ...safeSettings, globalReferenceImages: [...current, ...newImages] });
               }
             }}
+            onPaste={async (e) => {
+              const items = e.clipboardData?.items;
+              if (!items) return;
+              const imageFiles: File[] = [];
+              for (let i = 0; i < items.length; i++) {
+                if (items[i].type.startsWith('image/')) {
+                  const file = items[i].getAsFile();
+                  if (file) imageFiles.push(file);
+                }
+              }
+              if (imageFiles.length > 0) {
+                const fileList = Object.assign(imageFiles, {
+                  length: imageFiles.length,
+                  item: (index: number) => imageFiles[index]
+                }) as unknown as FileList;
+                const newImages = await processFiles(fileList);
+                const current = safeSettings.globalReferenceImages || [];
+                setSettings({ ...safeSettings, globalReferenceImages: [...current, ...newImages] });
+              }
+            }}
           >
             <div className="flex justify-between items-center mb-2">
               <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider flex items-center gap-2">
                 Global References
-                <span className="text-[9px] bg-gray-700 px-1.5 rounded text-gray-400">Drag & Drop</span>
+                <span className="text-[9px] bg-gray-700 px-1.5 rounded text-gray-400">Drag, Drop or Paste</span>
               </label>
               <span className="text-[10px] text-gray-500">Applies to all • {globalRefImages.length} images</span>
             </div>
@@ -439,6 +479,31 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
                 }}
                 disabled={isGenerating}
               />
+            </div>
+
+            {/* Safety Filter */}
+            <div className="space-y-1 col-span-2 pt-2 border-t border-gray-800/50">
+              <div className="flex justify-between items-center">
+                <div>
+                  <label className="text-xs text-gray-400 block">Safety Filter</label>
+                  <span className="text-[10px] text-gray-600">
+                    {safeSettings.safetyFilterEnabled ? 'Enabled (standard filtering)' : 'Disabled (no filtering)'}
+                  </span>
+                </div>
+                <button
+                  onClick={() => setSettings({ ...safeSettings, safetyFilterEnabled: !safeSettings.safetyFilterEnabled })}
+                  disabled={isGenerating}
+                  className={`w-10 h-5 rounded-full relative transition-colors ${
+                    safeSettings.safetyFilterEnabled
+                      ? 'bg-green-900 ring-1 ring-green-400'
+                      : 'bg-red-900 ring-1 ring-red-400'
+                  }`}
+                >
+                  <div className={`absolute top-1 w-3 h-3 rounded-full bg-white transition-transform ${
+                    safeSettings.safetyFilterEnabled ? 'left-6' : 'left-1'
+                  }`} />
+                </button>
+              </div>
             </div>
           </div>
 

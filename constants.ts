@@ -15,6 +15,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   appendStyleHint: false,
   styleHintRaw: DEFAULT_STYLE_HINT,
   globalReferenceImages: [],
+  safetyFilterEnabled: true, // Default: enabled (use API defaults)
   sceneSettings: {
     depthOfField: 50, // Balanced blur
     referenceImageBase64: null,
@@ -30,3 +31,10 @@ export const ASPECT_RATIO_LABELS: Record<string, string> = {
   '4:3': '4:3 (1440x1080) - Presentation',
   '4:5': '4:5 (1080x1350) - Social/Instagram'
 };
+
+export const SAFETY_CATEGORIES = [
+  'HARM_CATEGORY_DANGEROUS_CONTENT',
+  'HARM_CATEGORY_HARASSMENT',
+  'HARM_CATEGORY_HATE_SPEECH',
+  'HARM_CATEGORY_SEXUALLY_EXPLICIT'
+] as const;

@@ -2,10 +2,13 @@ import React, { useState, useEffect, useRef } from 'react';
 import LeftPanel from './components/LeftPanel';
 import RightPanel from './components/RightPanel';
 import ApiKeyModal from './components/ApiKeyModal';
-import { AppSettings, Run, GeneratedImage, PromptItem } from './types';
+import ModifyImageModal from './components/ModifyImageModal';
+import { AppSettings, Run, GeneratedImage, PromptItem, ReferenceImage } from './types';
 import { DEFAULT_SETTINGS } from './constants';
-import { generateImage } from './services/geminiService';
+import { generateImage, modifyImage } from './services/geminiService';
 import { getAllRunsFromDB, saveRunToDB, deleteRunFromDB } from './services/db';
+import { processBatchQueue, QueueTask, calculateOptimalBatchSize } from './services/batchQueue';
+import { withRateLimitRetry } from './services/rateLimiter';
 
 const App: React.FC = () => {
   // State: Settings & Inputs
@@ -23,6 +26,8 @@ const App: React.FC = () => {
   // State: UI
   const [isGenerating, setIsGenerating] = useState(false);
   const [loadingStatus, setLoadingStatus] = useState('');
+  const [modifyingImage, setModifyingImage] = useState<GeneratedImage | null>(null);
+  const [isModifying, setIsModifying] = useState(false);
 
   // Refs
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -36,15 +41,16 @@ const App: React.FC = () => {
         if (savedKey) setApiKey(savedKey);
         else setIsKeyModalOpen(true); // Prompt if missing
 
-        // Load Settings
+        // Load Settings (exclude globalReferenceImages to avoid localStorage quota issues)
         const savedSettings = localStorage.getItem('raw_studio_settings');
         if (savedSettings) {
           try {
             const parsed = JSON.parse(savedSettings);
+            // Exclude globalReferenceImages from loaded settings to prevent quota issues
+            const { globalReferenceImages, ...settingsWithoutImages } = parsed;
             setSettings(prev => ({
               ...prev,
-              ...parsed,
-              globalReferenceImages: parsed.globalReferenceImages || [] // Restore images if saved? Maybe risky if huge.
+              ...settingsWithoutImages
             }));
           } catch (e) {
             console.warn("Failed to parse settings, using defaults");
@@ -62,9 +68,14 @@ const App: React.FC = () => {
     loadData();
   }, []);
 
-  // Save Settings to LocalStorage
+  // Save Settings to LocalStorage (exclude globalReferenceImages to avoid quota exceeded)
   useEffect(() => {
-    localStorage.setItem('raw_studio_settings', JSON.stringify(settings));
+    const { globalReferenceImages, ...settingsToSave } = settings;
+    try {
+      localStorage.setItem('raw_studio_settings', JSON.stringify(settingsToSave));
+    } catch (e) {
+      console.warn('Failed to save settings to localStorage:', e);
+    }
   }, [settings]);
 
   const handleStop = () => {
@@ -126,9 +137,66 @@ const App: React.FC = () => {
     }
   };
 
-  // --- RATE LIMITED QUEUE LOGIC ---
-  const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+  // --- MODIFY LOGIC ---
+  const handleModifyImage = async (prompt: string, additionalRefs: ReferenceImage[]) => {
+    if (!modifyingImage || !apiKey) return;
 
+    setIsModifying(true);
+    setLoadingStatus('Modifying image...');
+
+    try {
+      const result = await modifyImage({
+        prompt,
+        sourceImage: {
+          id: modifyingImage.id,
+          base64: modifyingImage.base64,
+          mimeType: modifyingImage.mimeType
+        },
+        referenceImages: additionalRefs,
+        settings: modifyingImage.settingsSnapshot,
+        apiKey: apiKey
+      });
+
+      // Find the run that contains the source image
+      const sourceRun = runs.find(r => r.images.some(i => i.id === modifyingImage.id));
+
+      if (sourceRun) {
+        // Append modified image to the same run
+        const updatedRun = {
+          ...sourceRun,
+          images: [...sourceRun.images, result]
+        };
+        await saveRunToDB(updatedRun);
+        setRuns(prev => prev.map(r => r.id === sourceRun.id ? updatedRun : r));
+      } else {
+        // Create new run if source run not found
+        const newRun: Run = {
+          id: crypto.randomUUID(),
+          name: `Modified: ${new Date().toLocaleTimeString()}`,
+          createdAt: Date.now(),
+          promptRaw: prompt,
+          styleHintUsed: false,
+          finalPrompt: prompt,
+          settingsSnapshot: modifyingImage.settingsSnapshot,
+          images: [result]
+        };
+        await saveRunToDB(newRun);
+        setRuns(prev => [newRun, ...prev]);
+      }
+
+      setLoadingStatus('Modification successful!');
+      setModifyingImage(null);
+
+    } catch (err: any) {
+      alert(`Modification failed: ${err.message}`);
+      setLoadingStatus('Modification failed');
+    } finally {
+      setIsModifying(false);
+      setTimeout(() => setLoadingStatus(''), 2000);
+    }
+  };
+
+  // --- BATCH QUEUE LOGIC ---
   const handleGenerate = async () => {
     if (!apiKey) {
       setIsKeyModalOpen(true);
@@ -151,7 +219,6 @@ const App: React.FC = () => {
 
     setIsGenerating(true);
     abortControllerRef.current = new AbortController();
-    const signal = abortControllerRef.current.signal;
 
     const newRunId = crypto.randomUUID();
     const countPerPrompt = settings.outputCount || 1;
@@ -178,7 +245,7 @@ const App: React.FC = () => {
     await saveRunToDB(newRun);
 
     // Build Task Queue
-    const taskQueue: { prompt: string, refs: any[], settings: any }[] = [];
+    const taskQueue: QueueTask[] = [];
     validItems.forEach(item => {
       let finalPrompt = item.text.trim();
       if (settings.appendStyleHint && settings.styleHintRaw.trim()) {
@@ -187,70 +254,70 @@ const App: React.FC = () => {
       const allRefs = [...globalRefs, ...item.referenceImages];
 
       for (let i = 0; i < countPerPrompt; i++) {
-        taskQueue.push({ prompt: finalPrompt, refs: allRefs, settings: settings });
+        taskQueue.push({
+          id: crypto.randomUUID(),
+          prompt: finalPrompt,
+          refs: allRefs,
+          settings: settings
+        });
       }
     });
 
-    setLoadingStatus(`Queued ${taskQueue.length} images...`);
+    const batchSize = calculateOptimalBatchSize(taskQueue.length);
+    setLoadingStatus(`Queued ${taskQueue.length} images (batches of ${batchSize})...`);
 
-    // Process Queue
-    const RATE_DELAY_MS = 3100; // ~20 per min
-    let processedCount = 0;
-    const accumulatedImages: GeneratedImage[] = []; // Local tracker
-
+    // Process with batch queue
     try {
-      for (const task of taskQueue) {
-        if (signal.aborted) throw new Error('Aborted');
-
-        const startTime = Date.now();
-        setLoadingStatus(`Generating ${processedCount + 1}/${taskQueue.length}...`);
-
-        try {
-          const result = await generateImage({
-            prompt: task.prompt,
-            referenceImages: task.refs,
-            settings: task.settings,
-            apiKey: apiKey,
-            signal: signal
-          });
-
-          accumulatedImages.push(result);
-
-          // Update UI State
-          setRuns(prev => prev.map(r => {
-            if (r.id === newRunId) {
-              return { ...r, images: [...accumulatedImages] };
-            }
-            return r;
-          }));
-
-          // Update DB incrementally
-          // We overwrite the run entry with the new list of images
-          const interimRun = { ...newRun, images: [...accumulatedImages] };
-          await saveRunToDB(interimRun);
-
-        } catch (err: any) {
-          console.error("Gen failed for one item", err);
-          // We continue to next item even if one fails
-        }
-
-        processedCount++;
-
-        if (signal.aborted) break;
-
-        if (processedCount < taskQueue.length) {
-          const elapsed = Date.now() - startTime;
-          const waitTime = Math.max(0, RATE_DELAY_MS - elapsed);
-          if (waitTime > 0 && !signal.aborted) {
-            await delay(waitTime);
+      await processBatchQueue(
+        taskQueue,
+        async (task) => {
+          // Wrap with rate limit retry
+          return withRateLimitRetry(
+            () => generateImage({
+              prompt: task.prompt,
+              referenceImages: task.refs,
+              settings: task.settings,
+              apiKey,
+              signal: abortControllerRef.current?.signal
+            }),
+            { maxRetries: 3, baseDelayMs: 2000, maxDelayMs: 30000 }
+          );
+        },
+        {
+          batchSize,
+          batchDelayMs: 3000,
+          signal: abortControllerRef.current.signal,
+          onProgress: (completed, total, batchNum, totalBatches) => {
+            setLoadingStatus(`Batch ${batchNum}/${totalBatches}: ${completed}/${total} images`);
+          },
+          onResult: (result) => {
+            // Update run with new image incrementally
+            setRuns(prev => prev.map(r => {
+              if (r.id === newRunId) {
+                const updated = { ...r, images: [...r.images, result] };
+                // Save to DB incrementally (fire-and-forget)
+                saveRunToDB(updated).catch(err =>
+                  console.error('Failed to save run to DB:', err)
+                );
+                return updated;
+              }
+              return r;
+            }));
+          },
+          onError: (error, task) => {
+            console.error(`Failed: ${task.prompt.slice(0, 30)}...`, error);
           }
         }
-      }
+      );
       setLoadingStatus("Done!");
 
     } catch (err: any) {
-      if (err.message === 'Aborted') setLoadingStatus("Cancelled");
-      else setLoadingStatus("Error occurring during batch.");
+      if (err.message === 'Aborted') {
+        setLoadingStatus("Cancelled");
+      } else {
+        setLoadingStatus("Error during batch generation");
+        console.error("Batch generation error:", err);
+      }
     } finally {
       setIsGenerating(false);
       abortControllerRef.current = null;
@@ -292,6 +359,14 @@ const App: React.FC = () => {
         setApiKey={setApiKey}
       />
 
+      <ModifyImageModal
+        isOpen={!!modifyingImage}
+        sourceImage={modifyingImage}
+        onClose={() => setModifyingImage(null)}
+        onSubmit={handleModifyImage}
+        isLoading={isModifying}
+      />
+
       {/* Toast */}
       {loadingStatus && (
         <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 px-6 py-2 bg-dash-900/90 text-dash-100 rounded-full border border-dash-300 shadow-lg backdrop-blur animate-pulse font-mono text-sm">
@@ -324,6 +399,10 @@ const App: React.FC = () => {
             onDeleteRun={handleDeleteRun}
             onDeleteImage={handleDeleteImage}
             onRetryImage={handleRetry}
+            onModifyImage={setModifyingImage}
+            isGenerating={isGenerating}
+            isModifying={isModifying}
+            loadingStatus={loadingStatus}
           />
         </>
       )}

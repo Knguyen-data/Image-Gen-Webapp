@@ -24,6 +24,7 @@ export interface AppSettings {
   appendStyleHint: boolean;
   styleHintRaw: string;
   globalReferenceImages: ReferenceImage[];
+  safetyFilterEnabled: boolean; // Safety filter (true = enabled, false = BLOCK_NONE)
   // Legacy
   sceneSettings: any;
 }
@@ -55,4 +56,8 @@ export interface GenerationRequest {
   settings: AppSettings;
   apiKey: string;
   signal?: AbortSignal;
+}
+
+export interface ModificationRequest extends GenerationRequest {
+  sourceImage: ReferenceImage;
 }

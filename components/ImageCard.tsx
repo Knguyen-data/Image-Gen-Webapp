@@ -8,9 +8,10 @@ interface ImageCardProps {
   onOpen: () => void;
   onDelete: () => void;
   onRetry: () => void;
+  onModify?: () => void;
 }
 
-const ImageCard: React.FC<ImageCardProps> = ({ image, selected, onToggleSelect, onOpen, onDelete, onRetry }) => {
+const ImageCard: React.FC<ImageCardProps> = ({ image, selected, onToggleSelect, onOpen, onDelete, onRetry, onModify }) => {
   const downloadImage = (e: React.MouseEvent) => {
     e.stopPropagation();
     const link = document.createElement('a');
@@ -44,28 +45,39 @@ const ImageCard: React.FC<ImageCardProps> = ({ image, selected, onToggleSelect, 
         {/* Hover Overlay */}
         <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-end p-3">
            <div className="flex gap-2 justify-end">
-              <button 
+              <button
                 onClick={(e) => { e.stopPropagation(); onRetry(); }}
                 className="p-2 bg-indigo-600/80 hover:bg-indigo-500/80 rounded-full text-white backdrop-blur-sm"
                 title="Retry / Regenerate"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
               </button>
-              <button 
+              {onModify && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); onModify(); }}
+                  className="p-2 bg-purple-600/80 hover:bg-purple-500/80 rounded-full text-white backdrop-blur-sm"
+                  title="Modify Image"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                  </svg>
+                </button>
+              )}
+              <button
                 onClick={downloadImage}
                 className="p-2 bg-gray-800/80 hover:bg-white/20 rounded-full text-white backdrop-blur-sm"
                 title="Download PNG"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
               </button>
-              <button 
+              <button
                 onClick={copyPrompt}
                 className="p-2 bg-gray-800/80 hover:bg-white/20 rounded-full text-white backdrop-blur-sm"
                 title="Copy Prompt"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>
               </button>
-              <button 
+              <button
                 onClick={(e) => { e.stopPropagation(); onDelete(); }}
                 className="p-2 bg-red-900/80 hover:bg-red-600/80 rounded-full text-red-200 hover:text-white backdrop-blur-sm"
                 title="Delete"

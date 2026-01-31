@@ -9,9 +9,22 @@ interface RightPanelProps {
   onDeleteRun: (id: string) => void;
   onDeleteImage: (runId: string, imgId: string) => void;
   onRetryImage: (image: GeneratedImage) => void;
+  onModifyImage: (image: GeneratedImage) => void;
+  isGenerating?: boolean;
+  isModifying?: boolean;
+  loadingStatus?: string;
 }
 
-const RightPanel: React.FC<RightPanelProps> = ({ runs, onDeleteRun, onDeleteImage, onRetryImage }) => {
+const RightPanel: React.FC<RightPanelProps> = ({
+  runs,
+  onDeleteRun,
+  onDeleteImage,
+  onRetryImage,
+  onModifyImage,
+  isGenerating = false,
+  isModifying = false,
+  loadingStatus = ''
+}) => {
   const [selectedImageIds, setSelectedImageIds] = useState<Set<string>>(new Set());
   const [compareMode, setCompareMode] = useState(false);
   const [lightboxImage, setLightboxImage] = useState<GeneratedImage | null>(null);
@@ -133,7 +146,22 @@ const RightPanel: React.FC<RightPanelProps> = ({ runs, onDeleteRun, onDeleteImag
       )}
 
       {/* Toolbar */}
-      <div className="h-16 border-b border-gray-800 flex items-center justify-between px-6 bg-gray-900/50 backdrop-blur-sm z-10 sticky top-0">
+      <div className="h-16 border-b border-gray-800 flex items-center justify-between px-6 bg-gray-900/50 backdrop-blur-sm z-10 sticky top-0 relative">
+        {/* Progress Bar */}
+        {(isGenerating || isModifying) && (
+          <div className="absolute top-0 left-0 right-0 h-1 bg-gray-800 overflow-hidden">
+            <div className="h-full w-1/3 bg-dash-300 animate-[progress_1.5s_ease-in-out_infinite]" />
+          </div>
+        )}
+
+        {/* Status Badge */}
+        {loadingStatus && (
+          <div className="absolute top-2 right-6 flex items-center gap-2 text-xs">
+            <div className="w-2 h-2 bg-dash-300 rounded-full animate-pulse" />
+            <span className="text-gray-400 font-mono">{loadingStatus}</span>
+          </div>
+        )}
+
         <h2 className="font-semibold text-gray-200">Gallery <span className="text-gray-500 font-normal">({allImages.length} items)</span></h2>
 
         {selectedImageIds.size > 0 && (
@@ -170,7 +198,11 @@ const RightPanel: React.FC<RightPanelProps> = ({ runs, onDeleteRun, onDeleteImag
               <div key={run.id} className="animate-in slide-in-from-bottom-4 duration-500">
                 <div className="flex items-center justify-between mb-4 mt-2 py-2 border-b border-gray-800/50">
                   <div className="flex items-baseline gap-3">
-                    <h3 className="text-sm font-bold text-gray-300 uppercase tracking-wider">{run.name}</h3>
+                    <h3 className="text-sm font-bold text-gray-300 uppercase tracking-wider">
+                      {run.name.startsWith('Run #')
+                        ? `Run #${runs.length - runs.indexOf(run)}`
+                        : run.name}
+                    </h3>
                     <span className="text-xs text-gray-600 font-mono">{new Date(run.createdAt).toLocaleString()}</span>
                   </div>
                   <div className="flex items-center gap-3">
@@ -201,6 +233,7 @@ const RightPanel: React.FC<RightPanelProps> = ({ runs, onDeleteRun, onDeleteImag
                       onOpen={() => setLightboxImage(img)}
                       onDelete={() => onDeleteImage(run.id, img.id)}
                       onRetry={() => onRetryImage(img)}
+                      onModify={() => onModifyImage(img)}
                     />
                   ))}
                 </div>
