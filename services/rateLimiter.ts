@@ -51,10 +51,17 @@ export const withRateLimitRetry = async <T>(
           config.maxDelayMs
         );
 
-        console.warn(
-          `Rate limit error (attempt ${attempt + 1}/${config.maxRetries}), ` +
-          `waiting ${delay}ms before retry...`
-        );
+        console.warn(`[Retry] Rate limit detected`, {
+          attempt: attempt + 1,
+          maxRetries: config.maxRetries,
+          delayMs: delay,
+          error: {
+            message: error.message,
+            status: error.status || error.statusCode,
+            isRateLimitError: true
+          },
+          timestamp: new Date().toISOString()
+        });
 
         await new Promise(resolve => setTimeout(resolve, delay));
       } else {
@@ -65,5 +72,10 @@ export const withRateLimitRetry = async <T>(
   }
 
   // All retries exhausted
+  console.error('[Retry] All attempts exhausted', {
+    totalAttempts: config.maxRetries,
+    finalError: lastError?.message,
+    timestamp: new Date().toISOString()
+  });
   throw lastError!;
 };

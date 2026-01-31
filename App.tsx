@@ -127,6 +127,10 @@ const App: React.FC = () => {
 
     } catch (err: any) {
       if (err.name !== 'AbortError') {
+        console.error('[Retry Error]', {
+          message: err.message,
+          timestamp: new Date().toISOString()
+        });
         alert(`Retry failed: ${err.message}`);
         setLoadingStatus('Failed');
       }
@@ -188,6 +192,10 @@ const App: React.FC = () => {
       setModifyingImage(null);
 
     } catch (err: any) {
+      console.error('[Modify Error]', {
+        message: err.message,
+        timestamp: new Date().toISOString()
+      });
       alert(`Modification failed: ${err.message}`);
       setLoadingStatus('Modification failed');
     } finally {
@@ -305,7 +313,15 @@ const App: React.FC = () => {
             }));
           },
           onError: (error, task) => {
-            console.error(`Failed: ${task.prompt.slice(0, 30)}...`, error);
+            console.error('[Batch Error] Task failed', {
+              promptPreview: task.prompt.slice(0, 50),
+              error: {
+                message: error.message,
+                name: error.name,
+                stack: error.stack?.split('\n').slice(0, 3).join('\n')
+              },
+              timestamp: new Date().toISOString()
+            });
           }
         }
       );

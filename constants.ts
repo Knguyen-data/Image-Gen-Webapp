@@ -32,6 +32,12 @@ export const ASPECT_RATIO_LABELS: Record<string, string> = {
   '4:5': '4:5 (1080x1350) - Social/Instagram'
 };
 
+export const IMAGE_SIZE_LABELS: Record<string, string> = {
+  '1K': '1K (~1024px) - Standard',
+  '2K': '2K (~2048px) - High Quality',
+  '4K': '4K (~4096px) - Ultra Quality'
+};
+
 export const SAFETY_CATEGORIES = [
   'HARM_CATEGORY_DANGEROUS_CONTENT',
   'HARM_CATEGORY_HARASSMENT',

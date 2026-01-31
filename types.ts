@@ -1,5 +1,5 @@
 export type AspectRatio = '1:1' | '16:9' | '9:16' | '4:3' | '3:4' | '4:5';
-export type ImageSize = '1K' | '2K'; // Gemini 3 Pro supports 2K
+export type ImageSize = '1K' | '2K' | '4K'; // Gemini 3 Pro supports up to 4K
 
 export type AppMode = 'RAW';
 

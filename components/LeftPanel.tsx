@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
-import { AppSettings, PromptItem, ReferenceImage } from '../types';
-import { ASPECT_RATIO_LABELS, DEFAULT_SETTINGS } from '../constants';
+import { AppSettings, PromptItem, ReferenceImage, ImageSize } from '../types';
+import { ASPECT_RATIO_LABELS, IMAGE_SIZE_LABELS, DEFAULT_SETTINGS } from '../constants';
 import BulkInputModal from './BulkInputModal';
 
 interface LeftPanelProps {
@@ -334,7 +334,7 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
 
           {/* --- GLOBAL REFERENCES --- */}
           <div
-            className="space-y-2 bg-gray-800/50 p-4 rounded-lg border border-gray-800 transition-all border-dashed hover:border-solid hover:border-gray-700"
+            className="space-y-3 bg-gray-800/50 p-4 rounded-lg border border-gray-800 transition-all border-dashed hover:border-solid hover:border-gray-700"
             tabIndex={0}
             onDragOver={(e) => {
               e.preventDefault();
@@ -378,15 +378,15 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
               }
             }}
           >
-            <div className="flex justify-between items-center mb-2">
-              <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider flex items-center gap-2">
+            <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
+              <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider flex items-center gap-2 flex-wrap">
                 Global References
-                <span className="text-[9px] bg-gray-700 px-1.5 rounded text-gray-400">Drag, Drop or Paste</span>
+                <span className="text-[9px] bg-gray-700 px-1.5 py-0.5 rounded text-gray-400 whitespace-nowrap">Drag, Drop or Paste</span>
               </label>
-              <span className="text-[10px] text-gray-500">Applies to all • {globalRefImages.length} images</span>
+              <span className="text-[10px] text-gray-500 whitespace-nowrap">Applies to all • {globalRefImages.length} images</span>
             </div>
 
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap gap-2 items-center">
               {globalRefImages.map(img => (
                 <div key={img.id} className="relative w-12 h-12 rounded overflow-hidden group border border-gray-700">
                   <img src={img.previewUrl} className="w-full h-full object-cover" alt="global ref" />
@@ -398,7 +398,7 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
                   </button>
                 </div>
               ))}
-              <label className="w-12 h-12 flex flex-col items-center justify-center border border-dashed border-gray-600 rounded hover:border-dash-300 hover:bg-gray-700 cursor-pointer text-gray-500 hover:text-dash-300 transition-colors">
+              <label className="w-12 h-12 flex flex-col items-center justify-center border border-dashed border-gray-600 rounded hover:border-dash-300 hover:bg-gray-700 cursor-pointer text-gray-500 hover:text-dash-300 transition-colors" title="Add global reference images">
                 <input ref={globalFileRef} type="file" multiple accept="image/*" className="hidden" onChange={addGlobalImages} />
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" /></svg>
               </label>
@@ -425,7 +425,7 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
             />
           </div>
 
-          {/* --- SHARED SETTINGS (Aspect Ratio, Temp) --- */}
+          {/* --- SHARED SETTINGS (Aspect Ratio, Image Quality, Temp) --- */}
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1">
               <label className="text-xs text-gray-400 block">Aspect Ratio</label>
@@ -436,6 +436,20 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
                 disabled={isGenerating}
               >
                 {Object.entries(ASPECT_RATIO_LABELS).map(([key, label]) => (
+                  <option key={key} value={key}>{label}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-xs text-gray-400 block">Image Quality</label>
+              <select
+                className="w-full bg-gray-950 border border-gray-700 rounded p-2 text-sm text-gray-200"
+                value={safeSettings.imageSize}
+                onChange={(e) => setSettings({ ...safeSettings, imageSize: e.target.value as ImageSize })}
+                disabled={isGenerating}
+              >
+                {Object.entries(IMAGE_SIZE_LABELS).map(([key, label]) => (
                   <option key={key} value={key}>{label}</option>
                 ))}
               </select>
