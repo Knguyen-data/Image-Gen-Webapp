@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
-import { AppSettings, PromptItem, ReferenceImage, ImageSize } from '../types';
-import { ASPECT_RATIO_LABELS, IMAGE_SIZE_LABELS, DEFAULT_SETTINGS } from '../constants';
+import { AppSettings, PromptItem, ReferenceImage, ImageSize, SeedreamQuality } from '../types';
+import { ASPECT_RATIO_LABELS, IMAGE_SIZE_LABELS, SEEDREAM_QUALITY_LABELS, DEFAULT_SETTINGS } from '../constants';
 import BulkInputModal from './bulk-input-modal';
 
 interface LeftPanelProps {
@@ -12,7 +12,15 @@ interface LeftPanelProps {
   onGenerate: (isBatch: boolean) => void;
   onStop: () => void;
   onOpenApiKey: () => void;
+  onOpenSpicyKey: () => void;
   hasApiKey: boolean;
+  hasKieApiKey: boolean;
+  // Spicy Mode props
+  credits: number | null;
+  creditsLoading: boolean;
+  creditsError: string | null;
+  isLowCredits: boolean;
+  isCriticalCredits: boolean;
 }
 
 const LeftPanel: React.FC<LeftPanelProps> = ({
@@ -24,7 +32,14 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
   onGenerate,
   onStop,
   onOpenApiKey,
-  hasApiKey
+  onOpenSpicyKey,
+  hasApiKey,
+  hasKieApiKey,
+  credits,
+  creditsLoading,
+  creditsError,
+  isLowCredits,
+  isCriticalCredits
 }) => {
   const [activePromptIndex, setActivePromptIndex] = useState(0);
   const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
@@ -183,15 +198,47 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
               <span className="w-3 h-3 bg-dash-300 rounded-full animate-pulse"></span>
               RAW Studio
             </h1>
-            <p className="text-xs text-gray-500 mt-1 font-mono">Gemini Nano Banana Pro</p>
+            <p className="text-xs text-gray-500 mt-1 font-mono">
+              {safeSettings.spicyMode?.enabled ? 'Seedream 4.5 Edit' : 'Gemini Nano Banana Pro'}
+            </p>
           </header>
-          <button
-            onClick={onOpenApiKey}
-            className={`p-2 rounded-lg border transition-all ${hasApiKey ? 'bg-gray-800 text-dash-300 border-dash-300/30' : 'bg-red-900/20 text-red-400 border-red-500/50 animate-pulse'}`}
-            title="Manage API Key"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" /></svg>
-          </button>
+          <div className="flex items-center gap-2">
+            {/* Spicy Mode Toggle */}
+            <button
+              onClick={() => setSettings({
+                ...safeSettings,
+                spicyMode: {
+                  ...safeSettings.spicyMode,
+                  enabled: !safeSettings.spicyMode?.enabled
+                }
+              })}
+              disabled={isGenerating}
+              className={`p-2 rounded-lg border transition-all flex items-center gap-1.5 ${
+                safeSettings.spicyMode?.enabled
+                  ? 'bg-orange-900/30 text-orange-400 border-orange-500/50 ring-1 ring-orange-500/30'
+                  : 'bg-gray-800 text-gray-400 border-gray-700 hover:border-gray-600'
+              }`}
+              title={safeSettings.spicyMode?.enabled ? 'Spicy Mode ON (Seedream)' : 'Spicy Mode OFF (Gemini)'}
+            >
+              <span className="text-lg">🌶️</span>
+              {safeSettings.spicyMode?.enabled && credits !== null && (
+                <span className={`text-xs font-mono px-1.5 py-0.5 rounded ${
+                  isCriticalCredits ? 'bg-red-900/50 text-red-300' :
+                  isLowCredits ? 'bg-yellow-900/50 text-yellow-300' :
+                  'bg-gray-800 text-gray-300'
+                }`}>
+                  {creditsLoading ? '...' : credits}
+                </span>
+              )}
+            </button>
+            <button
+              onClick={onOpenApiKey}
+              className={`p-2 rounded-lg border transition-all ${hasApiKey ? 'bg-gray-800 text-dash-300 border-dash-300/30' : 'bg-red-900/20 text-red-400 border-red-500/50 animate-pulse'}`}
+              title="Manage API Key"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" /></svg>
+            </button>
+          </div>
         </div>
 
         <div className="flex-1 px-6 pb-6 space-y-6">
@@ -441,36 +488,77 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
               </select>
             </div>
 
+            {/* Image Quality - Different options for Spicy Mode */}
             <div className="space-y-1">
-              <label className="text-xs text-gray-400 block">Image Quality</label>
-              <select
-                className="w-full bg-gray-950 border border-gray-700 rounded p-2 text-sm text-gray-200"
-                value={safeSettings.imageSize}
-                onChange={(e) => setSettings({ ...safeSettings, imageSize: e.target.value as ImageSize })}
-                disabled={isGenerating}
-              >
-                {Object.entries(IMAGE_SIZE_LABELS).map(([key, label]) => (
-                  <option key={key} value={key}>{label}</option>
-                ))}
-              </select>
+              <label className="text-xs text-gray-400 block">
+                {safeSettings.spicyMode?.enabled ? 'Quality (Spicy)' : 'Image Quality'}
+              </label>
+              {safeSettings.spicyMode?.enabled ? (
+                <select
+                  className="w-full bg-gray-950 border border-orange-700/50 rounded p-2 text-sm text-orange-200"
+                  value={safeSettings.spicyMode.quality}
+                  onChange={(e) => setSettings({
+                    ...safeSettings,
+                    spicyMode: { ...safeSettings.spicyMode, quality: e.target.value as SeedreamQuality }
+                  })}
+                  disabled={isGenerating}
+                >
+                  {Object.entries(SEEDREAM_QUALITY_LABELS).map(([key, label]) => (
+                    <option key={key} value={key}>{label}</option>
+                  ))}
+                </select>
+              ) : (
+                <select
+                  className="w-full bg-gray-950 border border-gray-700 rounded p-2 text-sm text-gray-200"
+                  value={safeSettings.imageSize}
+                  onChange={(e) => setSettings({ ...safeSettings, imageSize: e.target.value as ImageSize })}
+                  disabled={isGenerating}
+                >
+                  {Object.entries(IMAGE_SIZE_LABELS).map(([key, label]) => (
+                    <option key={key} value={key}>{label}</option>
+                  ))}
+                </select>
+              )}
             </div>
 
-            <div className="space-y-1">
-              <div className="flex justify-between">
-                <label className="text-xs text-gray-400 block">Temperature</label>
-                <span className="text-xs text-gray-400 font-mono">{(safeSettings.temperature || 1).toFixed(1)}</span>
+            {/* Temperature - Hidden in Spicy Mode */}
+            {!safeSettings.spicyMode?.enabled && (
+              <div className="space-y-1">
+                <div className="flex justify-between">
+                  <label className="text-xs text-gray-400 block">Temperature</label>
+                  <span className="text-xs text-gray-400 font-mono">{(safeSettings.temperature || 1).toFixed(1)}</span>
+                </div>
+                <input
+                  type="range"
+                  min="0"
+                  max="2"
+                  step="0.1"
+                  className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-dash-300"
+                  value={safeSettings.temperature || 1}
+                  onChange={(e) => setSettings({ ...safeSettings, temperature: parseFloat(e.target.value) })}
+                  disabled={isGenerating}
+                />
               </div>
-              <input
-                type="range"
-                min="0"
-                max="2"
-                step="0.1"
-                className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-dash-300"
-                value={safeSettings.temperature || 1}
-                onChange={(e) => setSettings({ ...safeSettings, temperature: parseFloat(e.target.value) })}
-                disabled={isGenerating}
-              />
-            </div>
+            )}
+
+            {/* Spicy Mode API Key Button */}
+            {safeSettings.spicyMode?.enabled && (
+              <div className="space-y-1">
+                <label className="text-xs text-orange-400 block">Kie.ai API Key</label>
+                <button
+                  onClick={onOpenSpicyKey}
+                  className={`w-full py-2 px-3 rounded border text-sm font-mono transition-all flex items-center justify-center gap-2 ${
+                    hasKieApiKey
+                      ? 'bg-gray-950 border-orange-700/50 text-orange-300 hover:border-orange-500'
+                      : 'bg-orange-900/20 border-orange-500/50 text-orange-400 animate-pulse'
+                  }`}
+                  disabled={isGenerating}
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" /></svg>
+                  {hasKieApiKey ? 'Change Key' : 'Set API Key'}
+                </button>
+              </div>
+            )}
 
             {/* Batch size */}
             <div className="space-y-1 col-span-2">
@@ -495,41 +583,73 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
               />
             </div>
 
-            {/* Safety Filter */}
-            <div className="space-y-1 col-span-2 pt-2 border-t border-gray-800/50">
-              <div className="flex justify-between items-center">
-                <div>
-                  <label className="text-xs text-gray-400 block">Safety Filter</label>
-                  <span className="text-[10px] text-gray-600">
-                    {safeSettings.safetyFilterEnabled ? 'Enabled (standard filtering)' : 'Disabled (no filtering)'}
-                  </span>
+            {/* Safety Filter - Hidden in Spicy Mode */}
+            {!safeSettings.spicyMode?.enabled && (
+              <div className="space-y-1 col-span-2 pt-2 border-t border-gray-800/50">
+                <div className="flex justify-between items-center">
+                  <div>
+                    <label className="text-xs text-gray-400 block">Safety Filter</label>
+                    <span className="text-[10px] text-gray-600">
+                      {safeSettings.safetyFilterEnabled ? 'Enabled (standard filtering)' : 'Disabled (no filtering)'}
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => setSettings({ ...safeSettings, safetyFilterEnabled: !safeSettings.safetyFilterEnabled })}
+                    disabled={isGenerating}
+                    className={`w-10 h-5 rounded-full relative transition-colors ${
+                      safeSettings.safetyFilterEnabled
+                        ? 'bg-green-900 ring-1 ring-green-400'
+                        : 'bg-red-900 ring-1 ring-red-400'
+                    }`}
+                  >
+                    <div className={`absolute top-1 w-3 h-3 rounded-full bg-white transition-transform ${
+                      safeSettings.safetyFilterEnabled ? 'left-6' : 'left-1'
+                    }`} />
+                  </button>
                 </div>
-                <button
-                  onClick={() => setSettings({ ...safeSettings, safetyFilterEnabled: !safeSettings.safetyFilterEnabled })}
-                  disabled={isGenerating}
-                  className={`w-10 h-5 rounded-full relative transition-colors ${
-                    safeSettings.safetyFilterEnabled
-                      ? 'bg-green-900 ring-1 ring-green-400'
-                      : 'bg-red-900 ring-1 ring-red-400'
-                  }`}
-                >
-                  <div className={`absolute top-1 w-3 h-3 rounded-full bg-white transition-transform ${
-                    safeSettings.safetyFilterEnabled ? 'left-6' : 'left-1'
-                  }`} />
-                </button>
               </div>
-            </div>
+            )}
+
+            {/* Spicy Mode Warning */}
+            {safeSettings.spicyMode?.enabled && !hasKieApiKey && (
+              <div className="col-span-2 p-2 bg-orange-900/20 border border-orange-500/30 rounded text-xs text-orange-300">
+                Set your Kie.ai API key to use Spicy Mode
+              </div>
+            )}
+
+            {/* Credit Warning */}
+            {safeSettings.spicyMode?.enabled && isCriticalCredits && (
+              <div className="col-span-2 p-2 bg-red-900/20 border border-red-500/30 rounded text-xs text-red-300">
+                Low credits! Only {credits} remaining
+              </div>
+            )}
           </div>
 
           {/* Action Buttons */}
           <div className="space-y-3 pt-4 border-t border-gray-800">
             {!isGenerating ? (
               <div className="grid grid-cols-2 gap-3">
-                <button onClick={() => onGenerate(false)} disabled={validPromptsCount === 0 || !hasApiKey} className="py-3 px-4 bg-gray-800 hover:bg-gray-700 text-white font-medium rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed flex flex-col items-center justify-center leading-tight">
+                <button
+                  onClick={() => onGenerate(false)}
+                  disabled={validPromptsCount === 0 || (safeSettings.spicyMode?.enabled ? !hasKieApiKey : !hasApiKey)}
+                  className={`py-3 px-4 font-medium rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed flex flex-col items-center justify-center leading-tight ${
+                    safeSettings.spicyMode?.enabled
+                      ? 'bg-orange-900/30 hover:bg-orange-900/50 text-orange-200 border border-orange-500/30'
+                      : 'bg-gray-800 hover:bg-gray-700 text-white'
+                  }`}
+                >
                   <span>Generate</span>
                   <span className="text-[10px] opacity-60 font-mono">({validPromptsCount} total)</span>
                 </button>
-                <button onClick={() => onGenerate(true)} disabled={validPromptsCount === 0 || !hasApiKey} className="py-3 px-4 bg-dash-200 hover:bg-dash-300 text-dash-900 font-bold rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed shadow-[0_0_15px_rgba(134,239,172,0.2)] flex flex-col items-center justify-center leading-tight">
+                <button
+                  onClick={() => onGenerate(true)}
+                  disabled={validPromptsCount === 0 || (safeSettings.spicyMode?.enabled ? !hasKieApiKey : !hasApiKey)}
+                  className={`py-3 px-4 font-bold rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed flex flex-col items-center justify-center leading-tight ${
+                    safeSettings.spicyMode?.enabled
+                      ? 'bg-orange-500 hover:bg-orange-400 text-black shadow-[0_0_15px_rgba(249,115,22,0.3)]'
+                      : 'bg-dash-200 hover:bg-dash-300 text-dash-900 shadow-[0_0_15px_rgba(134,239,172,0.2)]'
+                  }`}
+                >
                   <span>Batch Run</span>
                   <span className="text-[10px] opacity-60 font-mono">({totalImages} total)</span>
                 </button>
@@ -540,8 +660,11 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
                 Stop Generation
               </button>
             )}
-            {!hasApiKey && (
-              <p className="text-center text-xs text-red-400 animate-pulse cursor-pointer" onClick={onOpenApiKey}>API Key required to generate</p>
+            {!safeSettings.spicyMode?.enabled && !hasApiKey && (
+              <p className="text-center text-xs text-red-400 animate-pulse cursor-pointer" onClick={onOpenApiKey}>Gemini API Key required to generate</p>
+            )}
+            {safeSettings.spicyMode?.enabled && !hasKieApiKey && (
+              <p className="text-center text-xs text-orange-400 animate-pulse cursor-pointer" onClick={onOpenSpicyKey}>Kie.ai API Key required for Spicy Mode</p>
             )}
           </div>
 

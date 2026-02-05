@@ -16,6 +16,11 @@ export const DEFAULT_SETTINGS: AppSettings = {
   styleHintRaw: DEFAULT_STYLE_HINT,
   globalReferenceImages: [],
   safetyFilterEnabled: true, // Default: enabled (use API defaults)
+  spicyMode: {
+    enabled: false,
+    kieApiKey: '',
+    quality: 'basic'
+  },
   sceneSettings: {
     depthOfField: 50, // Balanced blur
     referenceImageBase64: null,
@@ -36,6 +41,11 @@ export const IMAGE_SIZE_LABELS: Record<string, string> = {
   '1K': '1K (~1024px) - Standard',
   '2K': '2K (~2048px) - High Quality',
   '4K': '4K (~4096px) - Ultra Quality'
+};
+
+export const SEEDREAM_QUALITY_LABELS: Record<string, string> = {
+  'basic': 'Basic (2K)',
+  'high': 'High (4K)'
 };
 
 export const SAFETY_CATEGORIES = [

@@ -16,6 +16,16 @@ export interface PromptItem {
   referenceImages: ReferenceImage[];
 }
 
+// Seedream 4.5 Edit Types (Spicy Mode)
+export type SeedreamAspectRatio = '1:1' | '4:3' | '3:4' | '16:9' | '9:16' | '2:3' | '3:2' | '21:9';
+export type SeedreamQuality = 'basic' | 'high';
+
+export interface SpicyModeSettings {
+  enabled: boolean;
+  kieApiKey: string;
+  quality: SeedreamQuality;
+}
+
 export interface AppSettings {
   temperature: number;
   outputCount: number; // 1-8
@@ -25,6 +35,8 @@ export interface AppSettings {
   styleHintRaw: string;
   globalReferenceImages: ReferenceImage[];
   safetyFilterEnabled: boolean; // Safety filter (true = enabled, false = BLOCK_NONE)
+  // Spicy Mode (Seedream 4.5 Edit)
+  spicyMode: SpicyModeSettings;
   // Legacy
   sceneSettings: any;
 }
@@ -60,4 +72,18 @@ export interface GenerationRequest {
 
 export interface ModificationRequest extends GenerationRequest {
   sourceImage: ReferenceImage;
+}
+
+export interface SeedreamSettings {
+  aspectRatio: SeedreamAspectRatio;
+  quality: SeedreamQuality;
+}
+
+export interface SeedreamTask {
+  taskId: string;
+  state: 'waiting' | 'success' | 'fail';
+  resultUrls?: string[];
+  failMsg?: string;
+  failCode?: string;
+  costTime?: number;
 }

@@ -1,36 +1,75 @@
 import React, { useState, useEffect } from 'react';
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import { logger } from '../services/logger';
+
+type KeyMode = 'gemini' | 'spicy';
 
 interface ApiKeyModalProps {
   isOpen: boolean;
   onClose: () => void;
   apiKey: string;
   setApiKey: (key: string) => void;
+  // Spicy Mode support
+  mode?: KeyMode;
+  kieApiKey?: string;
+  setKieApiKey?: (key: string) => void;
 }
 
-const ApiKeyModal: React.FC<ApiKeyModalProps> = ({ isOpen, onClose, apiKey, setApiKey }) => {
-  const [inputVal, setInputVal] = useState(apiKey);
+const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
+  isOpen,
+  onClose,
+  apiKey,
+  setApiKey,
+  mode = 'gemini',
+  kieApiKey = '',
+  setKieApiKey
+}) => {
+  const [inputVal, setInputVal] = useState(mode === 'spicy' ? kieApiKey : apiKey);
   const [isVisible, setIsVisible] = useState(false);
   const [isValidating, setIsValidating] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
 
+  const isSpicyMode = mode === 'spicy';
+
   useEffect(() => {
-    setInputVal(apiKey);
+    setInputVal(isSpicyMode ? kieApiKey : apiKey);
     setErrorMsg('');
-  }, [apiKey, isOpen]);
+  }, [apiKey, kieApiKey, isOpen, isSpicyMode]);
 
   if (!isOpen) return null;
 
-  const handleSave = async () => {
-    // Sanitize key: remove whitespace and accidental quotes
-    let key = inputVal.trim();
-    if (key.startsWith('"') && key.endsWith('"')) {
-      key = key.slice(1, -1);
-    }
-    if (key.startsWith("'") && key.endsWith("'")) {
-      key = key.slice(1, -1);
-    }
+  const sanitizeKey = (raw: string): string => {
+    let key = raw.trim();
+    if (key.startsWith('"') && key.endsWith('"')) key = key.slice(1, -1);
+    if (key.startsWith("'") && key.endsWith("'")) key = key.slice(1, -1);
+    return key;
+  };
 
+  const validateGeminiKey = async (key: string): Promise<void> => {
+    const genAI = new GoogleGenerativeAI(key);
+    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-lite-preview-02-05" });
+    const nonce = Date.now().toString();
+    const result = await model.generateContent(`Return the word "pong" - ${nonce}`);
+    if (!result || !result.response) {
+      throw new Error("No response from AI Service");
+    }
+  };
+
+  const validateKieApiKey = async (key: string): Promise<void> => {
+    const response = await fetch('https://api.kie.ai/api/v1/chat/credit', {
+      method: 'GET',
+      headers: { 'Authorization': `Bearer ${key}` }
+    });
+    if (!response.ok) {
+      if (response.status === 401) throw new Error('Invalid Kie.ai API key');
+      throw new Error(`Kie.ai API error: ${response.status}`);
+    }
+    const result = await response.json();
+    if (result.code !== 200) throw new Error(result.msg || 'Unknown error');
+  };
+
+  const handleSave = async () => {
+    const key = sanitizeKey(inputVal);
     if (!key) {
       setErrorMsg("Please enter an API key");
       return;
@@ -40,52 +79,40 @@ const ApiKeyModal: React.FC<ApiKeyModalProps> = ({ isOpen, onClose, apiKey, setA
     setErrorMsg('');
 
     try {
-      // Use the official SDK
-      const genAI = new GoogleGenerativeAI(key);
-
-      // Try Gemini 2.0 Flash-Lite first as requested
-      // If user keyed 1.5, we surely can try 2.0
-      const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-lite-preview-02-05" });
-
-      const nonce = Date.now().toString();
-      const result = await model.generateContent(`Return the word "pong" - ${nonce}`);
-
-      if (!result || !result.response) {
-        throw new Error("No response from AI Service");
+      if (isSpicyMode) {
+        logger.info('ApiKeyModal', 'Validating Kie.ai API key');
+        await validateKieApiKey(key);
+        setKieApiKey?.(key);
+        localStorage.setItem('raw_studio_kie_api_key', key);
+        logger.info('ApiKeyModal', 'Kie.ai API key saved');
+      } else {
+        logger.info('ApiKeyModal', 'Validating Gemini API key');
+        await validateGeminiKey(key);
+        setApiKey(key);
+        localStorage.setItem('raw_studio_api_key', key);
+        logger.info('ApiKeyModal', 'Gemini API key saved');
       }
-
-      const text = result.response.text();
-
-      setApiKey(key);
-      localStorage.setItem('raw_studio_api_key', key);
       onClose();
-
     } catch (error: any) {
-      console.error("API Validation failed", error);
-
+      logger.error('ApiKeyModal', 'Validation failed', error);
       let msg = error.message || "Unknown error";
 
-      // HANDLING 404 AS SUCCESS (Valid Key, Invalid Model)
-      // If we got a 404, it means the server Responded. The key was likely accepted to even check the model.
-      // If the key was invalid, it would be 400 or 401.
-      // 404 implies "Authenticated, but resource not found".
-      // User requested we treat 404 as valid.
-      if (msg.includes("404") || msg.includes("not found")) {
-        console.warn("Model 404'd, but assuming key is valid per user request.");
+      // Handle 404 as success for Gemini (valid key, model not found)
+      if (!isSpicyMode && (msg.includes("404") || msg.includes("not found"))) {
+        logger.warn('ApiKeyModal', 'Model 404d but treating key as valid');
         setApiKey(key);
         localStorage.setItem('raw_studio_api_key', key);
         onClose();
         return;
       }
 
-      // SDK specific error mapping
-      if (msg.includes("400")) msg = "Invalid API Key or Request (400). Key format might be wrong.";
-      if (msg.includes("401")) msg = "Unauthorized (401). The Key is invalid.";
-      if (msg.includes("403")) msg = "Permission Denied (403). Key might be restricted or project billing undefined.";
+      // User-friendly error messages
+      if (msg.includes("400")) msg = "Invalid API Key (400)";
+      if (msg.includes("401")) msg = "Unauthorized (401). Invalid key.";
+      if (msg.includes("403")) msg = "Permission Denied (403)";
 
-      // Hint for users
-      if (!key.startsWith("AIza")) {
-        msg += " (Hint: API Keys usually start with 'AIza'...)";
+      if (!isSpicyMode && !key.startsWith("AIza")) {
+        msg += " (Hint: Gemini keys start with 'AIza')";
       }
 
       setErrorMsg(msg);
@@ -96,24 +123,38 @@ const ApiKeyModal: React.FC<ApiKeyModalProps> = ({ isOpen, onClose, apiKey, setA
 
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/90 backdrop-blur-md p-4 animate-in fade-in duration-200">
-      <div className="bg-gray-900 border border-dash-300/30 rounded-xl w-full max-w-md shadow-2xl relative">
+      <div className={`bg-gray-900 border ${isSpicyMode ? 'border-orange-500/30' : 'border-dash-300/30'} rounded-xl w-full max-w-md shadow-2xl relative`}>
         <div className="p-6 space-y-4">
           <div className="text-center">
-            <div className="w-12 h-12 bg-dash-900/50 rounded-full flex items-center justify-center mx-auto mb-3 text-dash-300">
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" /></svg>
+            <div className={`w-12 h-12 ${isSpicyMode ? 'bg-orange-900/50' : 'bg-dash-900/50'} rounded-full flex items-center justify-center mx-auto mb-3 ${isSpicyMode ? 'text-orange-400' : 'text-dash-300'}`}>
+              {isSpicyMode ? (
+                <span className="text-2xl">🌶️</span>
+              ) : (
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" /></svg>
+              )}
             </div>
-            <h3 className="text-xl font-bold text-white">Gemini API Key</h3>
+            <h3 className="text-xl font-bold text-white">
+              {isSpicyMode ? 'Kie.ai API Key' : 'Gemini API Key'}
+            </h3>
             <p className="text-sm text-gray-400 mt-2">
-              Your API key is stored locally in your browser.
-              Required for Gemini 3 Pro.
+              {isSpicyMode
+                ? 'Required for Spicy Mode (Seedream 4.5 Edit)'
+                : 'Required for Gemini image generation'
+              }
             </p>
           </div>
 
           <div className="relative">
             <input
               type={isVisible ? "text" : "password"}
-              className={`w-full bg-gray-950 border ${errorMsg ? 'border-red-500 focus:ring-red-500' : 'border-gray-700 focus:ring-dash-300'} rounded-lg py-3 pl-4 pr-10 text-sm text-white focus:ring-2 focus:border-transparent outline-none font-mono disabled:opacity-50 transition-colors`}
-              placeholder="Paste your API key here..."
+              className={`w-full bg-gray-950 border ${
+                errorMsg
+                  ? 'border-red-500 focus:ring-red-500'
+                  : isSpicyMode
+                    ? 'border-orange-700/50 focus:ring-orange-500'
+                    : 'border-gray-700 focus:ring-dash-300'
+              } rounded-lg py-3 pl-4 pr-10 text-sm text-white focus:ring-2 focus:border-transparent outline-none font-mono disabled:opacity-50 transition-colors`}
+              placeholder={isSpicyMode ? "Enter Kie.ai API key..." : "Paste your Gemini API key..."}
               value={inputVal}
               onChange={(e) => {
                 setInputVal(e.target.value);
@@ -153,16 +194,25 @@ const ApiKeyModal: React.FC<ApiKeyModalProps> = ({ isOpen, onClose, apiKey, setA
             <button
               onClick={handleSave}
               disabled={isValidating}
-              className="flex-1 py-2 rounded-lg text-sm font-bold text-dash-900 bg-dash-300 hover:bg-dash-200 transition-colors disabled:opacity-70 disabled:cursor-not-allowed flex justify-center items-center gap-2"
+              className={`flex-1 py-2 rounded-lg text-sm font-bold transition-colors disabled:opacity-70 disabled:cursor-not-allowed flex justify-center items-center gap-2 ${
+                isSpicyMode
+                  ? 'text-black bg-orange-500 hover:bg-orange-400'
+                  : 'text-dash-900 bg-dash-300 hover:bg-dash-200'
+              }`}
             >
-              {isValidating && <div className="w-4 h-4 border-2 border-dash-900 border-t-transparent rounded-full animate-spin"></div>}
+              {isValidating && <div className={`w-4 h-4 border-2 ${isSpicyMode ? 'border-black' : 'border-dash-900'} border-t-transparent rounded-full animate-spin`}></div>}
               {isValidating ? 'Validating...' : 'Save Key'}
             </button>
           </div>
 
           <div className="text-center">
-            <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer" className="text-xs text-dash-300 hover:underline">
-              Get API Key -&gt;
+            <a
+              href={isSpicyMode ? "https://kie.ai" : "https://aistudio.google.com/app/apikey"}
+              target="_blank"
+              rel="noreferrer"
+              className={`text-xs ${isSpicyMode ? 'text-orange-400' : 'text-dash-300'} hover:underline`}
+            >
+              Get {isSpicyMode ? 'Kie.ai' : 'Gemini'} API Key →
             </a>
           </div>
         </div>
