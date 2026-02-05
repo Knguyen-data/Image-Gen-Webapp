@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Run, GeneratedImage } from '../types';
-import ImageCard from './ImageCard';
+import ImageCard from './image-card';
 // @ts-ignore
 import JSZip from 'jszip';
 

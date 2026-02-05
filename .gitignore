@@ -22,3 +22,5 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+# Gemini CLI settings (contains user-specific config)
+.gemini/

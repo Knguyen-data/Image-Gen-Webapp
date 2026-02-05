@@ -55,7 +55,7 @@ const parseResponse = (result: any, prompt: string, settings: any): GeneratedIma
     base64Data = firstPart.inlineData.data;
     mimeType = firstPart.inlineData.mimeType || 'image/png';
   }
-  // Check for "executable code" or other formats if model generated code to make image? 
+  // Check for "executable code" or other formats if model generated code to make image?
   // No, assuming direct image response.
 
   if (!base64Data) {

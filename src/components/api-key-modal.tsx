@@ -40,7 +40,7 @@ const ApiKeyModal: React.FC<ApiKeyModalProps> = ({ isOpen, onClose, apiKey, setA
     setErrorMsg('');
 
     try {
-      // Use the official SDK 
+      // Use the official SDK
       const genAI = new GoogleGenerativeAI(key);
 
       // Try Gemini 2.0 Flash-Lite first as requested
@@ -67,8 +67,8 @@ const ApiKeyModal: React.FC<ApiKeyModalProps> = ({ isOpen, onClose, apiKey, setA
 
       // HANDLING 404 AS SUCCESS (Valid Key, Invalid Model)
       // If we got a 404, it means the server Responded. The key was likely accepted to even check the model.
-      // If the key was invalid, it would be 400 or 401. 
-      // 404 implies "Authenticated, but resource not found". 
+      // If the key was invalid, it would be 400 or 401.
+      // 404 implies "Authenticated, but resource not found".
       // User requested we treat 404 as valid.
       if (msg.includes("404") || msg.includes("not found")) {
         console.warn("Model 404'd, but assuming key is valid per user request.");

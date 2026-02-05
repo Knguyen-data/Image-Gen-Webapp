@@ -26,22 +26,22 @@ const ImageCard: React.FC<ImageCardProps> = ({ image, selected, onToggleSelect, 
   };
 
   return (
-    <div 
+    <div
       className={`relative group rounded-xl overflow-hidden bg-gray-900 border transition-all duration-200 ${
         selected ? 'border-dash-300 ring-2 ring-dash-300/30' : 'border-gray-800 hover:border-gray-600'
       }`}
     >
-      <div 
-        className="aspect-[3/4] cursor-pointer bg-gray-950 relative" 
+      <div
+        className="aspect-[3/4] cursor-pointer bg-gray-950 relative"
         onClick={onOpen}
       >
-        <img 
-          src={`data:${image.mimeType};base64,${image.base64}`} 
-          alt="Generated Output" 
+        <img
+          src={`data:${image.mimeType};base64,${image.base64}`}
+          alt="Generated Output"
           className="w-full h-full object-cover"
           loading="lazy"
         />
-        
+
         {/* Hover Overlay */}
         <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-end p-3">
            <div className="flex gap-2 justify-end">
@@ -90,7 +90,7 @@ const ImageCard: React.FC<ImageCardProps> = ({ image, selected, onToggleSelect, 
 
       {/* Select Checkbox (Always visible if selected, or on hover) */}
       <div className={`absolute top-3 left-3 ${selected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'} transition-opacity`}>
-        <div 
+        <div
           onClick={(e) => { e.stopPropagation(); onToggleSelect(); }}
           className={`w-5 h-5 rounded border cursor-pointer flex items-center justify-center ${
             selected ? 'bg-dash-300 border-dash-300' : 'bg-black/50 border-white/50 hover:bg-black/70'
@@ -99,7 +99,7 @@ const ImageCard: React.FC<ImageCardProps> = ({ image, selected, onToggleSelect, 
           {selected && <svg className="w-3 h-3 text-black" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" /></svg>}
         </div>
       </div>
-      
+
       <div className="p-2 bg-gray-900 border-t border-gray-800">
         <p className="text-[10px] text-gray-500 font-mono truncate">{image.settingsSnapshot.aspectRatio} • {new Date(image.createdAt).toLocaleTimeString()}</p>
       </div>

@@ -1,14 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
-import LeftPanel from './components/LeftPanel';
-import RightPanel from './components/RightPanel';
-import ApiKeyModal from './components/ApiKeyModal';
-import ModifyImageModal from './components/ModifyImageModal';
+import LeftPanel from './components/left-panel';
+import RightPanel from './components/right-panel';
+import ApiKeyModal from './components/api-key-modal';
+import ModifyImageModal from './components/modify-image-modal';
 import { AppSettings, Run, GeneratedImage, PromptItem, ReferenceImage } from './types';
 import { DEFAULT_SETTINGS } from './constants';
-import { generateImage, modifyImage } from './services/geminiService';
+import { generateImage, modifyImage } from './services/gemini-service';
 import { getAllRunsFromDB, saveRunToDB, deleteRunFromDB } from './services/db';
-import { processBatchQueue, QueueTask, calculateOptimalBatchSize } from './services/batchQueue';
-import { withRateLimitRetry } from './services/rateLimiter';
+import { processBatchQueue, QueueTask, calculateOptimalBatchSize } from './services/batch-queue';
+import { withRateLimitRetry } from './services/rate-limiter';
 
 const App: React.FC = () => {
   // State: Settings & Inputs
@@ -98,7 +98,7 @@ const App: React.FC = () => {
 
     try {
       // NOTE: Retrying currently uses the EXACT text prompt from history.
-      // It does NOT re-upload original reference images because we didn't store them in DB 
+      // It does NOT re-upload original reference images because we didn't store them in DB
       // to save space. A robust solution would store ref images in IndexedDB.
       // For this version, retries are Text + Settings only unless re-constructed.
 

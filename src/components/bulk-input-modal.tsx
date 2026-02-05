@@ -20,7 +20,7 @@ const BulkInputModal: React.FC<BulkInputModalProps> = ({ isOpen, onClose, onProc
     // Split by new lines, filter empty whitespace
     // Supports splitting by single newline or double newline
     const lines = text
-      .split(/\n+/) 
+      .split(/\n+/)
       .map(line => line.trim())
       .filter(line => line.length > 0);
 
@@ -31,7 +31,7 @@ const BulkInputModal: React.FC<BulkInputModalProps> = ({ isOpen, onClose, onProc
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
       <div className="bg-gray-900 border border-gray-700 rounded-xl w-full max-w-2xl flex flex-col shadow-2xl scale-100 animate-in zoom-in-95 duration-200">
-        
+
         {/* Header */}
         <div className="flex justify-between items-center p-5 border-b border-gray-800">
           <div>
@@ -64,13 +64,13 @@ const BulkInputModal: React.FC<BulkInputModalProps> = ({ isOpen, onClose, onProc
 
         {/* Footer */}
         <div className="p-5 border-t border-gray-800 bg-gray-900/50 rounded-b-xl flex justify-end gap-3">
-          <button 
+          <button
             onClick={onClose}
             className="px-4 py-2 rounded-lg text-sm font-medium text-gray-400 hover:text-white hover:bg-gray-800 transition-colors"
           >
             Cancel
           </button>
-          <button 
+          <button
             onClick={handleProcess}
             disabled={!text.trim()}
             className="px-6 py-2 rounded-lg text-sm font-bold text-dash-900 bg-dash-300 hover:bg-dash-200 transition-all shadow-[0_0_15px_rgba(134,239,172,0.2)] disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none"

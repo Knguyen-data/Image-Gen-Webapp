@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { AppSettings, PromptItem, ReferenceImage, ImageSize } from '../types';
 import { ASPECT_RATIO_LABELS, IMAGE_SIZE_LABELS, DEFAULT_SETTINGS } from '../constants';
-import BulkInputModal from './BulkInputModal';
+import BulkInputModal from './bulk-input-modal';
 
 interface LeftPanelProps {
   prompts: PromptItem[];
