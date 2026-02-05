@@ -87,45 +87,188 @@ We keep all important docs in `./docs` folder and keep updating them, structure 
 
 **IMPORTANT:** *MUST READ* and *MUST COMPLY* all *INSTRUCTIONS* in project `./CLAUDE.md`, especially *WORKFLOWS* section is *CRITICALLY IMPORTANT*, this rule is *MANDATORY. NON-NEGOTIABLE. NO EXCEPTIONS. MUST REMEMBER AT ALL TIMES!!!*
 
-## Session Continuity
+## Context Management (MANDATORY FIRST STEP)
 
-### MCP Memory (Knowledge Graph)
+**⚠️ CRITICAL REQUIREMENT - READ BEFORE ANY WORK:**
 
-At session start, read project context:
-```
-mcp__memory__read_graph  # Get project knowledge, completed work, pending features
-```
+Before starting ANY task, you MUST complete these context management steps IN ORDER:
 
-When completing significant work, store context:
-```
-mcp__memory__add_observations  # Add observations to existing entities
-mcp__memory__create_entities   # Create new entities for features/sessions
-```
-
-### Beads (Persistent Task Tracking)
-
-**Session Start:**
+### Step 1: Read Existing Context (MANDATORY)
 ```bash
-bd ready          # See available tasks
-bd show <id>      # Get task details before starting
+# ALWAYS run these commands FIRST, before doing anything else:
+bd ready                    # Check available Beads tasks
+mcp__memory__read_graph     # Read Knowledge Graph for project context
 ```
 
-**During Work:**
+**Purpose:** Understand existing work, avoid duplicates, maintain continuity.
+
+### Step 2: Create/Update Task Tracking (MANDATORY)
 ```bash
-bd update <id> --status in_progress  # Mark as in progress
-bd create "Title" --priority P2      # Create new tasks
+# For NEW work - create Beads task BEFORE implementing:
+bd create "Task title" --priority P2 --description "Detailed description"
+
+# For EXISTING task - update status BEFORE starting:
+bd update <id> --status in_progress
 ```
 
-**Session End:**
+**Purpose:** Track work across sessions, enable collaboration.
+
+### Step 3: Execute Work
+Now proceed with the actual task implementation.
+
+### Step 4: Update Context After Work (MANDATORY)
 ```bash
-bd close <id> --reason "Completed"   # Close finished tasks
-bd sync                              # Persist to .beads/issues.jsonl
-git push                             # Push all changes
+# After completing ANY significant work, update BOTH systems:
+
+# 1. Update Knowledge Graph with observations
+mcp__memory__add_observations    # Add to existing entities
+mcp__memory__create_entities     # Create new entities if needed
+
+# 2. Close Beads task and sync
+bd close <id> --reason "Completed: <summary>"
+bd sync                          # Persist to .beads/issues.jsonl
 ```
 
-### Key Entities in Memory
+**Purpose:** Preserve knowledge for future sessions, track completion.
 
-- `Image-Gen-Webapp` - Project architecture and conventions
-- `GeminiAPI` - API integration details
-- `CompletedWork-YYYYMMDD` - Session work logs
+---
+
+## Context Management Rules (STRICTLY ENFORCED)
+
+**MANDATORY BEHAVIORS:**
+
+1. **Every user prompt triggers context check:**
+   - Run `bd ready` + `mcp__memory__read_graph` FIRST
+   - Even for small fixes, UI tweaks, or documentation updates
+   - No exceptions - this is NON-NEGOTIABLE
+
+2. **Every task gets a Beads issue:**
+   - Create issue BEFORE starting work
+   - Update description with implementation details
+   - Close with detailed completion summary
+   - Run `bd sync` after every update
+
+3. **Every completion updates Knowledge Graph:**
+   - Add observations to relevant entities
+   - Create session entity for significant work
+   - Document files changed, decisions made, edge cases found
+   - Link entities with relations
+
+4. **Never skip context management:**
+   - Even if user says "quick fix" or "just a small change"
+   - Even if you think the change is trivial
+   - Even if you're in the middle of other work
+   - ALWAYS update both Beads and Knowledge Graph
+
+**VIOLATION CONSEQUENCES:**
+- Lost work context across sessions
+- Duplicate efforts
+- Forgotten edge cases
+- Broken team collaboration
+- User frustration from repeated questions
+
+---
+
+## Session Workflow (ENFORCED ORDER)
+
+```
+┌─────────────────────────────────────────┐
+│ 1. USER SENDS PROMPT                    │
+└──────────────┬──────────────────────────┘
+               │
+               ▼
+┌─────────────────────────────────────────┐
+│ 2. MANDATORY: Read Context              │
+│    - bd ready                           │
+│    - mcp__memory__read_graph            │
+└──────────────┬──────────────────────────┘
+               │
+               ▼
+┌─────────────────────────────────────────┐
+│ 3. MANDATORY: Create/Update Task        │
+│    - bd create (new) OR                 │
+│    - bd update <id> --status in_progress│
+└──────────────┬──────────────────────────┘
+               │
+               ▼
+┌─────────────────────────────────────────┐
+│ 4. Execute Implementation               │
+│    - Code changes                       │
+│    - Tests                              │
+│    - Documentation                      │
+└──────────────┬──────────────────────────┘
+               │
+               ▼
+┌─────────────────────────────────────────┐
+│ 5. MANDATORY: Update Context            │
+│    - mcp__memory__add_observations      │
+│    - bd close <id> --reason "..."       │
+│    - bd sync                            │
+└─────────────────────────────────────────┘
+```
+
+**This workflow is MANDATORY for EVERY user interaction.**
+
+---
+
+## Beads (Persistent Task Tracking)
+
+**Essential Commands:**
+```bash
+bd ready                                  # List tasks with no blockers
+bd list --all                             # List all including closed
+bd create "Title" --priority P2           # Create (P0=critical, P4=low)
+bd show <id>                              # View task details
+bd update <id> --status in_progress       # Update status
+bd update <id> --description "..."        # Update description
+bd close <id> --reason "Completed: ..."   # Close with summary
+bd sync                                   # Commit and persist
+```
+
+**Rules:**
+- NEVER use `bd edit` (requires interactive editor)
+- ALWAYS run `bd sync` after updates
+- ALWAYS include detailed descriptions
+- ALWAYS close with completion summary
+
+---
+
+## MCP Memory (Knowledge Graph)
+
+**Essential Operations:**
+```bash
+mcp__memory__read_graph                   # Read entire graph
+mcp__memory__search_nodes                 # Search for entities
+mcp__memory__add_observations             # Add to existing entities
+mcp__memory__create_entities              # Create new entities
+mcp__memory__create_relations             # Link entities
+```
+
+**Key Entities:**
+- `Image-Gen-Webapp` - Project architecture, conventions, progress
+- `GeminiAPI` / `SeedreamAPI` - API integration details
+- `CompletedWork-YYYYMMDD` - Daily session logs
+- `UI-Fixes-Session-*` - UI improvement sessions
 - `PendingFeature-*` - Features awaiting implementation
+
+**Best Practices:**
+- Create session entity for multi-fix work
+- Link related entities with relations
+- Document files changed, lines modified
+- Capture edge cases and decisions
+- Note TypeScript/test status
+
+---
+
+## Task Management Systems
+
+| System | Scope | Persistence | Use For |
+|--------|-------|-------------|---------|
+| **Claude Code Tasks** (TodoWrite) | Current session | Ephemeral - lost when session ends | Intra-session progress tracking |
+| **Beads** (`bd` CLI) | Cross-session | Persistent in `.beads/` | Cross-session tasks, collaboration |
+| **Knowledge Graph** (MCP Memory) | Project-wide | Persistent via MCP | Project knowledge, decisions, architecture |
+
+**Use ALL THREE systems appropriately:**
+- TodoWrite: For breaking down current work into steps
+- Beads: For tracking tasks across sessions
+- Knowledge Graph: For preserving project knowledge
