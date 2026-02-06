@@ -24,3 +24,31 @@ dist-ssr
 *.sw?
 # Gemini CLI settings (contains user-specific config)
 .gemini/
+
+# AI/Agent tool configs
+.claude/
+.opencode/
+.beads/
+.playwright-mcp/
+
+# Planning and documentation (local only)
+plans/
+AGENTS.md
+.repomixignore
+repomix-output.xml
+
+# Test outputs and coverage
+coverage/
+test-output*.txt
+test-results.txt
+
+# Build artifacts
+artifacts/
+release-manifest.json
+
+# Screenshots and images
+*.png
+!src/**/*.png
+
+# Windows null file
+nul
