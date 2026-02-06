@@ -58,3 +58,29 @@ export const getVideoAspectRatioCSS = (dimensions: VideoDimensions): string => {
   // Use the simplified aspectRatioString (e.g., "16:9") and convert colon to slash for CSS
   return dimensions.aspectRatioString.replace(':', '/');
 };
+
+/**
+ * Get video duration from File object
+ * @param file - Video file to analyze
+ * @returns Promise with duration in seconds
+ */
+export const getVideoDuration = (file: File): Promise<number> => {
+  return new Promise((resolve, reject) => {
+    const video = document.createElement('video');
+    video.preload = 'metadata';
+
+    video.onloadedmetadata = () => {
+      resolve(video.duration);
+      URL.revokeObjectURL(video.src);
+      video.remove();
+    };
+
+    video.onerror = () => {
+      reject(new Error('Failed to load video metadata'));
+      URL.revokeObjectURL(video.src);
+      video.remove();
+    };
+
+    video.src = URL.createObjectURL(file);
+  });
+};

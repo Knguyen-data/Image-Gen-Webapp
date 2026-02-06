@@ -2,7 +2,7 @@ import React, { useRef, useState, useEffect } from 'react';
 import { VideoScene, VideoSettings, ReferenceImage, ReferenceVideo } from '../types';
 import { validateVideoFile } from '../services/kling-motion-control-service';
 import { VIDEO_CONSTRAINTS } from '../constants';
-import { detectVideoDimensions, getVideoAspectRatioCSS } from '../utils/video-dimensions';
+import { detectVideoDimensions, getVideoAspectRatioCSS, getVideoDuration } from '../utils/video-dimensions';
 
 interface VideoSceneQueueProps {
   scenes: VideoScene[];
@@ -118,7 +118,8 @@ const VideoSceneQueue: React.FC<VideoSceneQueueProps> = ({
           const newScene: VideoScene = {
             id: crypto.randomUUID(),
             referenceImage: refImage,
-            prompt: ''
+            prompt: '',
+            usePrompt: true
           };
 
           setScenes([...scenes, newScene]);
@@ -139,7 +140,8 @@ const VideoSceneQueue: React.FC<VideoSceneQueueProps> = ({
       const newScene: VideoScene = {
         id: crypto.randomUUID(),
         referenceImage: image,
-        prompt: ''
+        prompt: '',
+        usePrompt: true
       };
 
       setScenes([...scenes, newScene]);
@@ -155,6 +157,12 @@ const VideoSceneQueue: React.FC<VideoSceneQueueProps> = ({
   const updateScenePrompt = (sceneId: string, prompt: string) => {
     setScenes(scenes.map(s =>
       s.id === sceneId ? { ...s, prompt } : s
+    ));
+  };
+
+  const toggleSceneUsePrompt = (sceneId: string) => {
+    setScenes(scenes.map(s =>
+      s.id === sceneId ? { ...s, usePrompt: !s.usePrompt } : s
     ));
   };
 
@@ -458,14 +466,42 @@ const VideoSceneQueue: React.FC<VideoSceneQueueProps> = ({
                 />
               </div>
 
-              {/* Prompt Input */}
-              <textarea
-                className="w-full bg-gray-950 border border-gray-700 rounded p-2 text-xs text-gray-200 outline-none focus:border-blue-500 resize-none font-mono"
-                rows={2}
-                placeholder={`Describe motion for scene ${index + 1}...`}
-                value={scene.prompt}
-                onChange={(e) => updateScenePrompt(scene.id, e.target.value)}
-              />
+              {/* Prompt Toggle and Input */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs text-gray-400">Motion Prompt (Optional)</label>
+                  <button
+                    onClick={() => toggleSceneUsePrompt(scene.id)}
+                    className={`flex items-center gap-1.5 px-2 py-1 rounded text-xs transition-all ${
+                      scene.usePrompt
+                        ? 'bg-blue-900/30 text-blue-300 border border-blue-500/40'
+                        : 'bg-gray-800 text-gray-500 border border-gray-700'
+                    }`}
+                  >
+                    <div className={`w-3 h-3 rounded border transition-all ${
+                      scene.usePrompt
+                        ? 'bg-blue-500 border-blue-500'
+                        : 'bg-transparent border-gray-600'
+                    }`}>
+                      {scene.usePrompt && (
+                        <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" />
+                        </svg>
+                      )}
+                    </div>
+                    <span>{scene.usePrompt ? 'Enabled' : 'Disabled'}</span>
+                  </button>
+                </div>
+                {scene.usePrompt && (
+                  <textarea
+                    className="w-full bg-gray-950 border border-gray-700 rounded p-2 text-xs text-gray-200 outline-none focus:border-blue-500 resize-none font-mono"
+                    rows={2}
+                    placeholder={`Describe motion for scene ${index + 1}...`}
+                    value={scene.prompt || ''}
+                    onChange={(e) => updateScenePrompt(scene.id, e.target.value)}
+                  />
+                )}
+              </div>
 
               {/* Per-Scene Video Upload (if per-scene mode) */}
               {videoSettings.referenceVideoMode === 'per-scene' && (
@@ -570,26 +606,6 @@ const VideoSceneQueue: React.FC<VideoSceneQueueProps> = ({
       )}
     </div>
   );
-};
-
-// Helper function to get video duration
-const getVideoDuration = (file: File): Promise<number> => {
-  return new Promise((resolve, reject) => {
-    const video = document.createElement('video');
-    video.preload = 'metadata';
-
-    video.onloadedmetadata = () => {
-      URL.revokeObjectURL(video.src);
-      resolve(video.duration);
-    };
-
-    video.onerror = () => {
-      URL.revokeObjectURL(video.src);
-      reject(new Error('Failed to load video metadata'));
-    };
-
-    video.src = URL.createObjectURL(file);
-  });
 };
 
 export default VideoSceneQueue;

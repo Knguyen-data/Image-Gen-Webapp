@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { Run, GeneratedImage, AppMode, GeneratedVideo } from '../types';
 import ImageCard from './image-card';
 import VideoCard from './video-card';
-// @ts-ignore
 import JSZip from 'jszip';
 
 interface RightPanelProps {

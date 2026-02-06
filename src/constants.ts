@@ -18,13 +18,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   safetyFilterEnabled: true, // Default: enabled (use API defaults)
   spicyMode: {
     enabled: false,
-    kieApiKey: '',
-    quality: 'basic'
-  },
-  sceneSettings: {
-    depthOfField: 50, // Balanced blur
-    referenceImageBase64: null,
-    referenceImageMimeType: 'image/png'
+    quality: 'basic',
+    subMode: 'edit'
   }
 };
 
@@ -54,3 +49,16 @@ export const SAFETY_CATEGORIES = [
   'HARM_CATEGORY_HATE_SPEECH',
   'HARM_CATEGORY_SEXUALLY_EXPLICIT'
 ] as const;
+
+// Video Validation Constraints (Kling 2.6 Motion Control)
+export const VIDEO_CONSTRAINTS = {
+  allowedFormats: ['video/mp4', 'video/quicktime'],
+  formatLabels: ['MP4', 'MOV'],
+  maxSizeMB: 100,
+  maxSizeBytes: 100 * 1024 * 1024,
+  minDurationSec: 3,
+  maxDurationImageMode: 10,
+  maxDurationVideoMode: 30,
+  // Aspect ratios for future validation
+  allowedAspectRatios: ['9:16', '16:9', '4:5'],
+} as const;

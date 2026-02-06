@@ -1,7 +1,7 @@
 export type AspectRatio = '1:1' | '16:9' | '9:16' | '4:3' | '3:4' | '4:5';
 export type ImageSize = '1K' | '2K' | '4K'; // Gemini 3 Pro supports up to 4K
 
-export type AppMode = 'RAW';
+export type AppMode = 'image' | 'video';
 
 export interface ReferenceImage {
   id: string;
@@ -19,11 +19,13 @@ export interface PromptItem {
 // Seedream 4.5 Edit Types (Spicy Mode)
 export type SeedreamAspectRatio = '1:1' | '4:3' | '3:4' | '16:9' | '9:16' | '2:3' | '3:2' | '21:9';
 export type SeedreamQuality = 'basic' | 'high';
+export type SpicySubMode = 'edit' | 'generate';
+export type GenerationModel = 'gemini' | 'seedream-edit' | 'seedream-txt2img';
 
 export interface SpicyModeSettings {
   enabled: boolean;
-  kieApiKey: string;
   quality: SeedreamQuality;
+  subMode: SpicySubMode;
 }
 
 export interface AppSettings {
@@ -37,8 +39,6 @@ export interface AppSettings {
   safetyFilterEnabled: boolean; // Safety filter (true = enabled, false = BLOCK_NONE)
   // Spicy Mode (Seedream 4.5 Edit)
   spicyMode: SpicyModeSettings;
-  // Legacy
-  sceneSettings: any;
 }
 
 export interface GeneratedImage {
@@ -49,6 +49,9 @@ export interface GeneratedImage {
   createdAt: number;
   promptUsed: string;
   settingsSnapshot: AppSettings;
+  generatedBy?: GenerationModel;
+  status?: 'pending' | 'generating' | 'success' | 'failed';
+  error?: string;
 }
 
 export interface Run {
@@ -86,4 +89,41 @@ export interface SeedreamTask {
   failMsg?: string;
   failCode?: string;
   costTime?: number;
+}
+
+// Video Generation Types
+export type VideoRefMode = 'global' | 'per-scene';
+
+export interface ReferenceVideo {
+  id: string;
+  file: File;
+  previewUrl: string;  // blob URL for preview
+  duration?: number;   // seconds
+}
+
+export interface VideoScene {
+  id: string;
+  referenceImage: ReferenceImage;  // existing type
+  referenceVideo?: ReferenceVideo; // only if per-scene mode
+  prompt?: string; // Optional prompt for video generation
+  usePrompt?: boolean; // Toggle to enable/disable prompt per scene
+}
+
+export interface VideoSettings {
+  referenceVideoMode: VideoRefMode;
+  globalReferenceVideo?: ReferenceVideo;
+  orientation: 'image' | 'video';
+  resolution: '720p' | '1080p';
+}
+
+export interface GeneratedVideo {
+  id: string;
+  sceneId: string;
+  url: string;
+  thumbnailUrl?: string;
+  duration: number;
+  prompt: string;
+  createdAt: number;
+  status: 'pending' | 'generating' | 'success' | 'failed';
+  error?: string;
 }
