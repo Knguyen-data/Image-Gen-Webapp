@@ -3,15 +3,20 @@ import LeftPanel from './components/left-panel';
 import RightPanel from './components/right-panel';
 import ApiKeyModal from './components/api-key-modal';
 import ModifyImageModal from './components/modify-image-modal';
-import { AppSettings, Run, GeneratedImage, PromptItem, ReferenceImage } from './types';
+import { AppSettings, Run, GeneratedImage, PromptItem, ReferenceImage, AppMode, VideoScene, VideoSettings, GeneratedVideo } from './types';
 import { DEFAULT_SETTINGS } from './constants';
 import { generateImage, modifyImage } from './services/gemini-service';
 import { getAllRunsFromDB, saveRunToDB, deleteRunFromDB } from './services/db';
-import { processBatchQueue, QueueTask, calculateOptimalBatchSize } from './services/batch-queue';
+import { getAllGeneratedVideosFromDB, saveGeneratedVideoToDB, deleteGeneratedVideoFromDB } from './services/indexeddb-video-storage';
+import { processBatchQueue, QueueTask, calculateOptimalBatchSize, BATCH_DELAYS } from './services/batch-queue';
 import { withRateLimitRetry } from './services/rate-limiter';
 import { useSeedreamCredits } from './hooks/use-seedream-credits';
 import { generateWithSeedream, mapAspectRatio } from './services/seedream-service';
+import { generateWithSeedreamTxt2Img } from './services/seedream-txt2img-service';
+import { generateMotionVideo } from './services/kling-motion-control-service';
 import { logger } from './services/logger';
+import { useActivityQueue } from './hooks/use-activity-queue';
+import ActivityPanel from './components/activity-panel';
 
 const App: React.FC = () => {
   // State: Settings & Inputs
@@ -23,6 +28,16 @@ const App: React.FC = () => {
   const [kieApiKey, setKieApiKey] = useState('');
   const [isKeyModalOpen, setIsKeyModalOpen] = useState(false);
   const [keyModalMode, setKeyModalMode] = useState<'gemini' | 'spicy'>('gemini');
+
+  // Video Mode State
+  const [appMode, setAppMode] = useState<AppMode>('image');
+  const [videoScenes, setVideoScenes] = useState<VideoScene[]>([]);
+  const [videoSettings, setVideoSettings] = useState<VideoSettings>({
+    referenceVideoMode: 'global',
+    orientation: 'image',
+    resolution: '720p'
+  });
+  const [generatedVideos, setGeneratedVideos] = useState<GeneratedVideo[]>([]);
 
   // State: Data
   const [runs, setRuns] = useState<Run[]>([]);
@@ -49,6 +64,16 @@ const App: React.FC = () => {
     kieApiKey || null,
     settings.spicyMode?.enabled || false
   );
+
+  // Activity Queue Hook for unified progress tracking
+  const {
+    jobs: activityJobs,
+    logs: activityLogs,
+    addJob,
+    updateJob,
+    addLog,
+    clearCompletedJobs
+  } = useActivityQueue();
 
   // Initial Load
   useEffect(() => {
@@ -95,6 +120,11 @@ const App: React.FC = () => {
         const dbRuns = await getAllRunsFromDB();
         setRuns(dbRuns);
         logger.info('App', `Loaded ${dbRuns.length} runs from database`);
+
+        // Load generated videos from IndexedDB
+        const savedVideos = await getAllGeneratedVideosFromDB();
+        setGeneratedVideos(savedVideos);
+        logger.info('App', `Loaded ${savedVideos.length} generated videos from database`);
       } catch (e) {
         logger.error('App', 'Failed to load data', e);
       } finally {
@@ -114,54 +144,125 @@ const App: React.FC = () => {
     }
   }, [settings]);
 
-  const handleStop = () => {
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-      abortControllerRef.current = null;
-      setIsGenerating(false);
-      setLoadingStatus('Cancelled');
-      setTimeout(() => setLoadingStatus(''), 2000);
-    }
-  };
-
   // --- RETRY LOGIC ---
   const handleRetry = async (image: GeneratedImage) => {
-    if (isGenerating || !apiKey) return;
+    if (isGenerating) return;
 
-    logger.info('App', 'Retrying generation', { imageId: image.id });
+    const model = image.generatedBy || 'gemini'; // Default to gemini for legacy
+
+    logger.info('App', 'Retrying generation', { imageId: image.id, model });
     setIsGenerating(true);
-    setLoadingStatus(`Retrying generation...`);
+    setLoadingStatus(`Retrying with ${model}...`);
     abortControllerRef.current = new AbortController();
 
     try {
-      // NOTE: Retrying currently uses the EXACT text prompt from history.
-      // It does NOT re-upload original reference images because we didn't store them in DB
-      // to save space. A robust solution would store ref images in IndexedDB.
-      // For this version, retries are Text + Settings only unless re-constructed.
+      let result: GeneratedImage;
 
-      const result = await generateImage({
-        prompt: image.promptUsed,
-        referenceImages: [], // Cannot retrieve old images easily without blowing up DB size
-        settings: image.settingsSnapshot,
-        apiKey: apiKey,
-        signal: abortControllerRef.current.signal
-      });
+      if (model === 'gemini') {
+        if (!apiKey) {
+          setKeyModalMode('gemini');
+          setIsKeyModalOpen(true);
+          return;
+        }
+        const genResult = await generateImage({
+          prompt: image.promptUsed,
+          referenceImages: [],
+          settings: image.settingsSnapshot,
+          apiKey: apiKey,
+          signal: abortControllerRef.current.signal
+        });
+        result = { ...genResult, generatedBy: 'gemini' };
 
-      const newRun: Run = {
-        id: crypto.randomUUID(),
-        name: `Retry: ${image.id.slice(0, 4)}`,
-        createdAt: Date.now(),
-        promptRaw: image.promptUsed,
-        styleHintUsed: image.settingsSnapshot.appendStyleHint,
-        finalPrompt: image.promptUsed,
-        settingsSnapshot: image.settingsSnapshot,
-        images: [result]
-      };
+      } else if (model === 'seedream-txt2img') {
+        if (!kieApiKey) {
+          setKeyModalMode('spicy');
+          setIsKeyModalOpen(true);
+          return;
+        }
+        const genResult = await generateWithSeedreamTxt2Img(
+          kieApiKey,
+          image.promptUsed,
+          {
+            aspectRatio: mapAspectRatio(image.settingsSnapshot.aspectRatio),
+            quality: image.settingsSnapshot.spicyMode?.quality || 'basic'
+          },
+          (stage) => setLoadingStatus(`🌶️ Retry: ${stage}`)
+        );
+        result = {
+          id: crypto.randomUUID(),
+          base64: genResult.base64,
+          mimeType: genResult.mimeType,
+          createdAt: Date.now(),
+          promptUsed: image.promptUsed,
+          settingsSnapshot: image.settingsSnapshot,
+          generatedBy: 'seedream-txt2img'
+        };
 
-      await saveRunToDB(newRun);
-      setRuns(prev => [newRun, ...prev]);
-      logger.info('App', 'Retry successful', { newRunId: newRun.id });
-      setLoadingStatus(`Retry Successful!`);
+      } else { // seedream-edit
+        if (!kieApiKey) {
+          setKeyModalMode('spicy');
+          setIsKeyModalOpen(true);
+          return;
+        }
+        // For edit mode retry, we need the source image
+        // Use the image itself as source (re-edit)
+        const genResult = await generateWithSeedream(
+          kieApiKey,
+          image.promptUsed,
+          image.base64,
+          image.mimeType,
+          {
+            aspectRatio: mapAspectRatio(image.settingsSnapshot.aspectRatio),
+            quality: image.settingsSnapshot.spicyMode?.quality || 'basic'
+          },
+          (stage) => setLoadingStatus(`🌶️ Retry: ${stage}`)
+        );
+        result = {
+          id: crypto.randomUUID(),
+          base64: genResult.base64,
+          mimeType: genResult.mimeType,
+          createdAt: Date.now(),
+          promptUsed: image.promptUsed,
+          settingsSnapshot: image.settingsSnapshot,
+          generatedBy: 'seedream-edit'
+        };
+      }
+
+      // Find the original run containing this image
+      const originalRun = runs.find(run =>
+        run.images.some(img => img.id === image.id)
+      );
+
+      if (originalRun) {
+        // Append to existing run
+        const updatedRun: Run = {
+          ...originalRun,
+          images: [...originalRun.images, result]
+        };
+
+        await saveRunToDB(updatedRun);
+        setRuns(prev => prev.map(r =>
+          r.id === originalRun.id ? updatedRun : r
+        ));
+      } else {
+        // Fallback: create new run if original not found (legacy images)
+        const newRun: Run = {
+          id: crypto.randomUUID(),
+          name: `Retry: ${image.id.slice(0, 4)}`,
+          createdAt: Date.now(),
+          promptRaw: image.promptUsed,
+          styleHintUsed: image.settingsSnapshot.appendStyleHint,
+          finalPrompt: image.promptUsed,
+          settingsSnapshot: image.settingsSnapshot,
+          images: [result]
+        };
+
+        await saveRunToDB(newRun);
+        setRuns(prev => [newRun, ...prev]);
+      }
+      setLoadingStatus('Retry Successful!');
+
+      if (model !== 'gemini') refreshCredits();
 
     } catch (err: any) {
       if (err.name !== 'AbortError') {
@@ -177,25 +278,65 @@ const App: React.FC = () => {
   };
 
   // --- MODIFY LOGIC ---
-  const handleModifyImage = async (prompt: string, additionalRefs: ReferenceImage[]) => {
-    if (!modifyingImage || !apiKey) return;
+  const handleModifyImage = async (
+    prompt: string,
+    additionalRefs: ReferenceImage[],
+    model: 'gemini' | 'seedream'
+  ) => {
+    if (!modifyingImage) return;
 
-    logger.info('App', 'Modifying image', { sourceId: modifyingImage.id });
+    logger.info('App', 'Modifying image', { sourceId: modifyingImage.id, model });
     setIsModifying(true);
-    setLoadingStatus('Modifying image...');
+    setLoadingStatus(`Modifying with ${model === 'gemini' ? 'Gemini' : 'Seedream'}...`);
 
     try {
-      const result = await modifyImage({
-        prompt,
-        sourceImage: {
-          id: modifyingImage.id,
-          base64: modifyingImage.base64,
-          mimeType: modifyingImage.mimeType
-        },
-        referenceImages: additionalRefs,
-        settings: modifyingImage.settingsSnapshot,
-        apiKey: apiKey
-      });
+      let result: GeneratedImage;
+
+      if (model === 'seedream') {
+        if (!kieApiKey) {
+          setKeyModalMode('spicy');
+          setIsKeyModalOpen(true);
+          return;
+        }
+        const genResult = await generateWithSeedream(
+          kieApiKey,
+          prompt,
+          modifyingImage.base64,
+          modifyingImage.mimeType,
+          {
+            aspectRatio: mapAspectRatio(modifyingImage.settingsSnapshot.aspectRatio),
+            quality: modifyingImage.settingsSnapshot.spicyMode?.quality || 'basic'
+          },
+          (stage) => setLoadingStatus(`🌶️ ${stage}`)
+        );
+        result = {
+          id: crypto.randomUUID(),
+          base64: genResult.base64,
+          mimeType: genResult.mimeType,
+          createdAt: Date.now(),
+          promptUsed: prompt,
+          settingsSnapshot: modifyingImage.settingsSnapshot,
+          generatedBy: 'seedream-edit'
+        };
+      } else {
+        if (!apiKey) {
+          setKeyModalMode('gemini');
+          setIsKeyModalOpen(true);
+          return;
+        }
+        result = await modifyImage({
+          prompt,
+          sourceImage: {
+            id: modifyingImage.id,
+            base64: modifyingImage.base64,
+            mimeType: modifyingImage.mimeType
+          },
+          referenceImages: additionalRefs,
+          settings: modifyingImage.settingsSnapshot,
+          apiKey: apiKey
+        });
+        result.generatedBy = 'gemini';
+      }
 
       // Find the run that contains the source image
       const sourceRun = runs.find(r => r.images.some(i => i.id === modifyingImage.id));
@@ -265,13 +406,14 @@ const App: React.FC = () => {
       return;
     }
 
-    // Spicy Mode requires at least one reference image
+    // Spicy Edit Mode requires at least one reference image
     const globalRefs = settings.globalReferenceImages || [];
-    if (isSpicyMode) {
+    const isSpicyEditMode = isSpicyMode && settings.spicyMode?.subMode === 'edit';
+    if (isSpicyEditMode) {
       for (const item of validItems) {
         if (item.referenceImages.length + globalRefs.length === 0) {
-          logger.warn('App', 'Spicy Mode requires reference image', { prompt: item.text.slice(0, 30) });
-          alert(`Spicy Mode requires at least one reference image per prompt. Add an image to "${item.text.slice(0, 30)}..."`);
+          logger.warn('App', 'Spicy Edit Mode requires reference image', { prompt: item.text.slice(0, 30) });
+          alert(`Spicy Edit Mode requires at least one reference image per prompt. Add an image to "${item.text.slice(0, 30)}..." or switch to Generate mode.`);
           return;
         }
       }
@@ -293,6 +435,13 @@ const App: React.FC = () => {
 
     setIsGenerating(true);
     abortControllerRef.current = new AbortController();
+
+    // Add job to activity queue
+    const jobId = addJob({
+      type: 'image',
+      status: 'pending',
+      prompt: validItems[0].text.slice(0, 50) + (validItems.length > 1 ? ` (+${validItems.length - 1} more)` : '')
+    });
 
     const newRunId = crypto.randomUUID();
     const countPerPrompt = settings.outputCount || 1;
@@ -338,8 +487,30 @@ const App: React.FC = () => {
       }
     });
 
-    const batchSize = isSpicyMode ? Math.min(5, calculateOptimalBatchSize(taskQueue.length)) : calculateOptimalBatchSize(taskQueue.length);
+    // Create placeholder images immediately for instant visual feedback
+    const placeholderImages: GeneratedImage[] = taskQueue.map(task => ({
+      id: task.id,
+      base64: '',
+      mimeType: 'image/png',
+      createdAt: Date.now(),
+      promptUsed: task.prompt,
+      settingsSnapshot: task.settings,
+      generatedBy: isSpicyMode ? (settings.spicyMode?.subMode === 'generate' ? 'seedream-txt2img' : 'seedream-edit') : 'gemini',
+      status: 'generating' as const
+    }));
+
+    // Add placeholders to the run immediately
+    newRun.images = [...placeholderImages];
+    setRuns(prev => prev.map(r => r.id === newRunId ? { ...r, images: [...placeholderImages] } : r));
+
+    const provider = isSpicyMode ? 'seedream' : 'gemini';
+    const batchSize = calculateOptimalBatchSize(taskQueue.length, provider);
+    const batchDelayMs = isSpicyMode ? BATCH_DELAYS.seedream : BATCH_DELAYS.gemini;
     setLoadingStatus(`Queued ${taskQueue.length} images${isSpicyMode ? ' (Spicy)' : ''} (batches of ${batchSize})...`);
+
+    // Update job to active status
+    updateJob(jobId, { status: 'active' });
+    addLog({ level: 'info', message: `Processing ${taskQueue.length} images in batches of ${batchSize}`, jobId });
 
     // Process with batch queue
     try {
@@ -347,37 +518,66 @@ const App: React.FC = () => {
         taskQueue,
         async (task) => {
           if (isSpicyMode) {
-            // Use Seedream service
-            if (task.refs.length === 0) {
-              throw new Error('Spicy Mode requires at least one reference image');
-            }
-            const sourceImage = task.refs[0];
-            const result = await generateWithSeedream(
-              effectiveApiKey,
-              task.prompt,
-              sourceImage.base64,
-              sourceImage.mimeType,
-              {
-                aspectRatio: mapAspectRatio(task.settings.aspectRatio),
-                quality: task.settings.spicyMode?.quality || 'basic'
-              },
-              (stage, detail) => {
-                setLoadingStatus(`🌶️ ${stage}: ${detail || ''}`);
+            const subMode = task.settings.spicyMode?.subMode || 'edit';
+
+            if (subMode === 'generate') {
+              // Use Txt2Img service (no image required)
+              const result = await generateWithSeedreamTxt2Img(
+                effectiveApiKey,
+                task.prompt,
+                {
+                  aspectRatio: mapAspectRatio(task.settings.aspectRatio),
+                  quality: task.settings.spicyMode?.quality || 'basic'
+                },
+                (stage, detail) => {
+                  setLoadingStatus(`🌶️ Generate: ${detail || ''}`);
+                }
+              );
+              // Convert to GeneratedImage format
+              const generatedImage: GeneratedImage = {
+                id: crypto.randomUUID(),
+                base64: result.base64,
+                mimeType: result.mimeType,
+                createdAt: Date.now(),
+                promptUsed: task.prompt,
+                settingsSnapshot: task.settings,
+                generatedBy: 'seedream-txt2img'
+              };
+              return generatedImage;
+            } else {
+              // Use Edit service (requires image)
+              if (task.refs.length === 0) {
+                throw new Error('Spicy Edit Mode requires at least one reference image');
               }
-            );
-            // Convert to GeneratedImage format
-            const generatedImage: GeneratedImage = {
-              id: crypto.randomUUID(),
-              base64: result.base64,
-              mimeType: result.mimeType,
-              createdAt: Date.now(),
-              promptUsed: task.prompt,
-              settingsSnapshot: task.settings
-            };
-            return generatedImage;
+              const sourceImage = task.refs[0];
+              const result = await generateWithSeedream(
+                effectiveApiKey,
+                task.prompt,
+                sourceImage.base64,
+                sourceImage.mimeType,
+                {
+                  aspectRatio: mapAspectRatio(task.settings.aspectRatio),
+                  quality: task.settings.spicyMode?.quality || 'basic'
+                },
+                (stage, detail) => {
+                  setLoadingStatus(`🌶️ Edit: ${detail || ''}`);
+                }
+              );
+              // Convert to GeneratedImage format
+              const generatedImage: GeneratedImage = {
+                id: crypto.randomUUID(),
+                base64: result.base64,
+                mimeType: result.mimeType,
+                createdAt: Date.now(),
+                promptUsed: task.prompt,
+                settingsSnapshot: task.settings,
+                generatedBy: 'seedream-edit'
+              };
+              return generatedImage;
+            }
           } else {
             // Use Gemini service
-            return withRateLimitRetry(
+            const geminiResult = await withRateLimitRetry(
               () => generateImage({
                 prompt: task.prompt,
                 referenceImages: task.refs,
@@ -387,21 +587,27 @@ const App: React.FC = () => {
               }),
               { maxRetries: 3, baseDelayMs: 2000, maxDelayMs: 30000 }
             );
+            return { ...geminiResult, generatedBy: 'gemini' };
           }
         },
         {
           batchSize,
-          batchDelayMs: isSpicyMode ? 1000 : 3000, // Faster for Seedream (rate limiter handles it)
+          batchDelayMs,
           signal: abortControllerRef.current.signal,
           onProgress: (completed, total, batchNum, totalBatches) => {
             const prefix = isSpicyMode ? '🌶️ ' : '';
             setLoadingStatus(`${prefix}Batch ${batchNum}/${totalBatches}: ${completed}/${total} images`);
           },
-          onResult: (result) => {
-            // Update run with new image incrementally
+          onResult: (result, task) => {
+            // Replace placeholder with real image
             setRuns(prev => prev.map(r => {
               if (r.id === newRunId) {
-                const updated = { ...r, images: [...r.images, result] };
+                const updatedImages = r.images.map(img =>
+                  img.id === task.id
+                    ? { ...result, id: task.id, status: 'success' as const }
+                    : img
+                );
+                const updated = { ...r, images: updatedImages };
                 // Save to DB incrementally (fire-and-forget)
                 saveRunToDB(updated).catch(err =>
                   console.error('Failed to save run to DB:', err)
@@ -417,11 +623,39 @@ const App: React.FC = () => {
               error: error.message,
               stack: error.stack?.split('\n').slice(0, 3)
             });
+            // Show error flash for 3 seconds, then remove
+            setRuns(prev => prev.map(r => {
+              if (r.id === newRunId) {
+                return {
+                  ...r,
+                  images: r.images.map(img =>
+                    img.id === task.id
+                      ? { ...img, status: 'failed' as const, error: error.message }
+                      : img
+                  )
+                };
+              }
+              return r;
+            }));
+            // Remove after 3 seconds
+            setTimeout(() => {
+              setRuns(prev => prev.map(r => {
+                if (r.id === newRunId) {
+                  return {
+                    ...r,
+                    images: r.images.filter(img => img.id !== task.id)
+                  };
+                }
+                return r;
+              }));
+            }, 3000);
           }
         }
       );
       logger.info('App', `Generation complete`, { mode: isSpicyMode ? 'spicy' : 'gemini' });
       setLoadingStatus(isSpicyMode ? "🌶️ Done!" : "Done!");
+      updateJob(jobId, { status: 'completed' });
+      addLog({ level: 'info', message: `Generation complete`, jobId });
 
       // Refresh credits after batch completes (Spicy Mode only)
       if (isSpicyMode) {
@@ -432,9 +666,13 @@ const App: React.FC = () => {
       if (err.message === 'Aborted') {
         logger.info('App', 'Generation cancelled by user');
         setLoadingStatus("Cancelled");
+        updateJob(jobId, { status: 'failed', error: 'Cancelled by user' });
+        addLog({ level: 'warn', message: 'Generation cancelled', jobId });
       } else {
         logger.error('App', 'Batch generation error', err);
         setLoadingStatus("Error during batch generation");
+        updateJob(jobId, { status: 'failed', error: err.message });
+        addLog({ level: 'error', message: `Error: ${err.message}`, jobId });
       }
     } finally {
       setIsGenerating(false);
@@ -468,6 +706,173 @@ const App: React.FC = () => {
     }
   };
 
+  // --- VIDEO HANDLERS ---
+  const handleDeleteVideo = async (videoId: string) => {
+    setGeneratedVideos(prev => prev.filter(v => v.id !== videoId));
+    // Also delete from IndexedDB
+    try {
+      await deleteGeneratedVideoFromDB(videoId);
+      logger.debug('App', 'Deleted video from IndexedDB', { videoId });
+    } catch (e) {
+      logger.warn('App', 'Failed to delete video from IndexedDB', e);
+    }
+  };
+
+  const handleRetryVideo = async (video: GeneratedVideo) => {
+    // Find the scene for this video
+    const scene = videoScenes.find(s => s.id === video.sceneId);
+    if (!scene) {
+      alert('Original scene not found');
+      return;
+    }
+
+    // Re-generate video for this single scene
+    if (!kieApiKey) {
+      setKeyModalMode('spicy');
+      setIsKeyModalOpen(true);
+      return;
+    }
+
+    logger.info('App', 'Retrying video generation', { sceneId: scene.id });
+    setIsGenerating(true);
+    setLoadingStatus('Retrying video generation...');
+
+    try {
+      const result = await generateMotionVideo(
+        kieApiKey,
+        scene,
+        videoSettings.globalReferenceVideo,
+        videoSettings,
+        (stage, detail) => setLoadingStatus(`🎬 Retry: ${detail || stage}`)
+      );
+
+      if (result.status === 'success') {
+        // Replace the failed video with new one
+        setGeneratedVideos(prev => prev.map(v => v.id === video.id ? result : v));
+        setLoadingStatus('Retry successful!');
+        // Save to IndexedDB
+        saveGeneratedVideoToDB(result).catch(e =>
+          logger.warn('App', 'Failed to persist retried video to IndexedDB', e)
+        );
+      } else {
+        // Keep the failed video, just update error message
+        setGeneratedVideos(prev => prev.map(v => v.id === video.id ? result : v));
+        setLoadingStatus('Retry failed');
+      }
+
+      refreshCredits();
+    } catch (error: any) {
+      logger.error('App', 'Video retry failed', { error });
+      alert(`Retry failed: ${error.message}`);
+      setLoadingStatus('Failed');
+    } finally {
+      setIsGenerating(false);
+      setTimeout(() => setLoadingStatus(''), 2000);
+    }
+  };
+
+  const handleVideoGenerate = async () => {
+    if (!kieApiKey) {
+      logger.warn('App', 'No Kie.ai API key for video generation');
+      setKeyModalMode('spicy');
+      setIsKeyModalOpen(true);
+      return;
+    }
+
+    if (videoScenes.length === 0) {
+      alert('Add at least one scene to generate videos');
+      return;
+    }
+
+    // Validate that all scenes have prompts
+    const scenesWithoutPrompts = videoScenes.filter(s => !s.prompt.trim());
+    if (scenesWithoutPrompts.length > 0) {
+      alert('All scenes must have motion prompts');
+      return;
+    }
+
+    logger.info('App', `Starting video generation for ${videoScenes.length} scene(s)`);
+    setIsGenerating(true);
+
+    // Add job to activity queue
+    const jobId = addJob({
+      type: 'video',
+      status: 'active',
+      prompt: videoScenes[0].prompt.slice(0, 50) + (videoScenes.length > 1 ? ` (+${videoScenes.length - 1} more)` : '')
+    });
+    addLog({ level: 'info', message: `Starting ${videoScenes.length} video${videoScenes.length > 1 ? 's' : ''}`, jobId });
+
+    const results: GeneratedVideo[] = [];
+
+    for (let i = 0; i < videoScenes.length; i++) {
+      const scene = videoScenes[i];
+      setLoadingStatus(`🎬 Generating video ${i + 1}/${videoScenes.length}...`);
+
+      try {
+        const video = await generateMotionVideo(
+          kieApiKey,
+          scene,
+          videoSettings.globalReferenceVideo,
+          videoSettings,
+          (stage, detail) => setLoadingStatus(`🎬 Scene ${i + 1}: ${detail || stage}`)
+        );
+        results.push(video);
+
+        // Add to gallery immediately
+        setGeneratedVideos(prev => [...prev, video]);
+
+        if (video.status === 'success') {
+          logger.info('App', `Scene ${i + 1} completed successfully`);
+          // Save successful video to IndexedDB for persistence
+          saveGeneratedVideoToDB(video).catch(e =>
+            logger.warn('App', 'Failed to persist video to IndexedDB', e)
+          );
+        } else {
+          logger.warn('App', `Scene ${i + 1} failed`, { error: video.error });
+        }
+      } catch (error: any) {
+        logger.error('App', `Scene ${i + 1} generation error`, { error });
+        // Create failed video entry
+        const failedVideo: GeneratedVideo = {
+          id: `video-${Date.now()}-${i}`,
+          sceneId: scene.id,
+          url: '',
+          duration: 0,
+          prompt: scene.prompt,
+          createdAt: Date.now(),
+          status: 'failed',
+          error: error.message
+        };
+        results.push(failedVideo);
+        setGeneratedVideos(prev => [...prev, failedVideo]);
+      }
+    }
+
+    const successCount = results.filter(v => v.status === 'success').length;
+    const failCount = results.filter(v => v.status === 'failed').length;
+
+    setLoadingStatus(
+      successCount > 0
+        ? `🎬 Done! ${successCount} success, ${failCount} failed`
+        : '🎬 All videos failed'
+    );
+
+    logger.info('App', 'Video generation complete', { success: successCount, failed: failCount });
+
+    // Update job status
+    if (failCount === videoScenes.length) {
+      updateJob(jobId, { status: 'failed', error: 'All videos failed' });
+      addLog({ level: 'error', message: 'All videos failed', jobId });
+    } else {
+      updateJob(jobId, { status: 'completed' });
+      addLog({ level: 'info', message: `Videos complete: ${successCount} success, ${failCount} failed`, jobId });
+    }
+
+    setIsGenerating(false);
+    refreshCredits();
+    setTimeout(() => setLoadingStatus(''), 3000);
+  };
+
   return (
     <div className="flex h-screen w-screen overflow-hidden text-gray-200 font-sans">
       <ApiKeyModal
@@ -486,14 +891,16 @@ const App: React.FC = () => {
         onClose={() => setModifyingImage(null)}
         onSubmit={handleModifyImage}
         isLoading={isModifying}
+        hasGeminiKey={!!apiKey}
+        hasKieApiKey={!!kieApiKey}
       />
 
-      {/* Toast */}
-      {loadingStatus && (
-        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 px-6 py-2 bg-dash-900/90 text-dash-100 rounded-full border border-dash-300 shadow-lg backdrop-blur animate-pulse font-mono text-sm">
-          {loadingStatus}
-        </div>
-      )}
+      {/* Activity Panel - replaces old toast */}
+      <ActivityPanel
+        jobs={activityJobs}
+        logs={activityLogs}
+        onClearCompleted={clearCompletedJobs}
+      />
 
       {!isDbLoaded ? (
         <div className="fixed inset-0 bg-gray-950 z-[100] flex items-center justify-center">
@@ -511,13 +918,8 @@ const App: React.FC = () => {
             setSettings={setSettings}
             isGenerating={isGenerating}
             onGenerate={handleGenerate}
-            onStop={handleStop}
             onOpenApiKey={() => {
               setKeyModalMode('gemini');
-              setIsKeyModalOpen(true);
-            }}
-            onOpenSpicyKey={() => {
-              setKeyModalMode('spicy');
               setIsKeyModalOpen(true);
             }}
             hasApiKey={!!apiKey}
@@ -527,6 +929,12 @@ const App: React.FC = () => {
             creditsError={creditsError}
             isLowCredits={isLowCredits}
             isCriticalCredits={isCriticalCredits}
+            appMode={appMode}
+            videoScenes={videoScenes}
+            setVideoScenes={setVideoScenes}
+            videoSettings={videoSettings}
+            setVideoSettings={setVideoSettings}
+            onVideoGenerate={handleVideoGenerate}
           />
           <RightPanel
             runs={runs}
@@ -537,6 +945,11 @@ const App: React.FC = () => {
             isGenerating={isGenerating}
             isModifying={isModifying}
             loadingStatus={loadingStatus}
+            appMode={appMode}
+            setAppMode={setAppMode}
+            generatedVideos={generatedVideos}
+            onDeleteVideo={handleDeleteVideo}
+            onRetryVideo={handleRetryVideo}
           />
         </>
       )}

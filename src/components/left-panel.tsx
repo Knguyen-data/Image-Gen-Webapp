@@ -12,7 +12,6 @@ interface LeftPanelProps {
   setSettings: (s: AppSettings) => void;
   isGenerating: boolean;
   onGenerate: (isBatch: boolean) => void;
-  onStop: () => void;
   onOpenApiKey: () => void;
   hasApiKey: boolean;
   hasKieApiKey: boolean;
@@ -39,7 +38,6 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
   setSettings,
   isGenerating,
   onGenerate,
-  onStop,
   onOpenApiKey,
   hasApiKey,
   hasKieApiKey,
@@ -307,12 +305,34 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
               </button>
             )}
 
+            {/* Video Mode Credit Balance - Header */}
+            {appMode === 'video' && hasKieApiKey && credits !== null && (
+              <div
+                className={`px-2.5 py-1.5 rounded-lg text-xs font-mono flex items-center gap-1.5 border ${
+                  isCriticalCredits
+                    ? 'bg-red-900/30 text-red-200 border-red-500/40'
+                    : isLowCredits
+                    ? 'bg-yellow-900/30 text-yellow-200 border-yellow-500/40'
+                    : 'bg-blue-900/30 text-blue-200 border-blue-500/40'
+                }`}
+                title="Kie.ai Credits (for video generation)"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span className="font-semibold">{creditsLoading ? '...' : credits}</span>
+                {isCriticalCredits && <span className="text-[10px] opacity-80">LOW!</span>}
+              </div>
+            )}
+
+
             <button
               onClick={onOpenApiKey}
               className={`p-2 rounded-lg border transition-all ${hasApiKey ? 'bg-gray-800 text-dash-300 border-dash-300/30' : 'bg-red-900/20 text-red-400 border-red-500/50 animate-pulse'}`}
-              title="Manage API Key"
+              title="Manage API Keys"
             >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1721 9z" /></svg>
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+              </svg>
             </button>
           </div>
         </div>
@@ -388,26 +408,6 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
               <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
                 Video Settings
               </label>
-
-              {/* Video Mode Credit Balance - Separate Component */}
-              {hasKieApiKey && credits !== null && (
-                <div
-                  className={`px-3 py-1.5 rounded-lg text-xs font-mono flex items-center gap-2 ${
-                    isCriticalCredits
-                      ? 'bg-red-900/30 text-red-200 border border-red-500/40'
-                      : isLowCredits
-                      ? 'bg-yellow-900/30 text-yellow-200 border border-yellow-500/40'
-                      : 'bg-blue-900/30 text-blue-200 border border-blue-500/40'
-                  }`}
-                  title="Kie.ai Credits (for video generation)"
-                >
-                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                  <span className="font-semibold">{creditsLoading ? '...' : credits}</span>
-                  {isCriticalCredits && <span className="text-[10px] opacity-80">LOW!</span>}
-                </div>
-              )}
             </div>
 
             {/* Orientation Control */}
@@ -475,7 +475,7 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
               <p className="font-medium mb-1">Kling 2.6 Motion Control</p>
               <p className="text-blue-400/80">
                 {videoSettings.orientation === 'image'
-                  ? 'Image-to-Video: Up to 10 seconds per scene'
+                  ? 'Video-to-Video: Up to 10 seconds per scene'
                   : 'Video-to-Video: Up to 30 seconds per scene'}
               </p>
             </div>
@@ -849,42 +849,33 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
             )}
           </div>
 
-          {/* Action Buttons */}
+          {/* Action Buttons - Always show Generate (allow parallel runs) */}
           <div className="space-y-3 pt-4 border-t border-gray-800">
-            {!isGenerating ? (
-              <>
-                {validPromptsCount <= 1 ? (
-                  <button
-                    onClick={() => onGenerate(false)}
-                    disabled={validPromptsCount === 0 || (safeSettings.spicyMode?.enabled ? !hasKieApiKey : !hasApiKey)}
-                    className={`w-full py-3 px-4 font-medium rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed flex flex-col items-center justify-center leading-tight ${
-                      safeSettings.spicyMode?.enabled
-                        ? 'bg-orange-900/30 hover:bg-orange-900/50 text-orange-200 border border-orange-500/30'
-                        : 'bg-gray-800 hover:bg-gray-700 text-white'
-                    }`}
-                  >
-                    <span>Generate</span>
-                    <span className="text-[10px] opacity-60 font-mono">({validPromptsCount} total)</span>
-                  </button>
-                ) : (
-                  <button
-                    onClick={() => onGenerate(true)}
-                    disabled={validPromptsCount === 0 || (safeSettings.spicyMode?.enabled ? !hasKieApiKey : !hasApiKey)}
-                    className={`w-full py-3 px-4 font-bold rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed flex flex-col items-center justify-center leading-tight ${
-                      safeSettings.spicyMode?.enabled
-                        ? 'bg-orange-500 hover:bg-orange-400 text-black shadow-[0_0_15px_rgba(249,115,22,0.3)]'
-                        : 'bg-dash-200 hover:bg-dash-300 text-dash-900 shadow-[0_0_15px_rgba(134,239,172,0.2)]'
-                    }`}
-                  >
-                    <span>Batch Run</span>
-                    <span className="text-[10px] opacity-60 font-mono">({totalImages} total)</span>
-                  </button>
-                )}
-              </>
+            {validPromptsCount <= 1 ? (
+              <button
+                onClick={() => onGenerate(false)}
+                disabled={validPromptsCount === 0 || (safeSettings.spicyMode?.enabled ? !hasKieApiKey : !hasApiKey)}
+                className={`w-full py-3 px-4 font-medium rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed flex flex-col items-center justify-center leading-tight ${
+                  safeSettings.spicyMode?.enabled
+                    ? 'bg-orange-900/30 hover:bg-orange-900/50 text-orange-200 border border-orange-500/30'
+                    : 'bg-gray-800 hover:bg-gray-700 text-white'
+                }`}
+              >
+                <span>Generate</span>
+                <span className="text-[10px] opacity-60 font-mono">({validPromptsCount} total)</span>
+              </button>
             ) : (
-              <button onClick={onStop} className="w-full py-3 px-4 bg-red-900/30 border border-red-500/50 hover:bg-red-900/50 text-red-200 font-medium rounded-lg transition flex items-center justify-center gap-2">
-                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M6 6h12v12H6z" /></svg>
-                Stop Generation
+              <button
+                onClick={() => onGenerate(true)}
+                disabled={validPromptsCount === 0 || (safeSettings.spicyMode?.enabled ? !hasKieApiKey : !hasApiKey)}
+                className={`w-full py-3 px-4 font-bold rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed flex flex-col items-center justify-center leading-tight ${
+                  safeSettings.spicyMode?.enabled
+                    ? 'bg-orange-500 hover:bg-orange-400 text-black shadow-[0_0_15px_rgba(249,115,22,0.3)]'
+                    : 'bg-dash-200 hover:bg-dash-300 text-dash-900 shadow-[0_0_15px_rgba(134,239,172,0.2)]'
+                }`}
+              >
+                <span>Batch Run</span>
+                <span className="text-[10px] opacity-60 font-mono">({totalImages} total)</span>
               </button>
             )}
             {!safeSettings.spicyMode?.enabled && !hasApiKey && (
