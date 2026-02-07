@@ -107,7 +107,7 @@ export const generateAnimateVideo = async (
     onProgress?.('generating', 'Generating animated video...');
     const task = await pollForResult(apiKey, taskId, (state, attempt) => {
       onProgress?.('polling', `Polling (${attempt + 1}/${MAX_POLL_ATTEMPTS}): ${state}`);
-    });
+    }, MAX_POLL_ATTEMPTS);
 
     if (task.state === 'success' && task.resultUrls && task.resultUrls.length > 0) {
       logger.info('WanAnimate', 'Generation complete', {

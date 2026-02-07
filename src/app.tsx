@@ -841,24 +841,20 @@ const App: React.FC = () => {
           addLog({ level: 'info', message: 'Animate video generated', jobId: activityJobId });
           setLoadingStatus('🎭 Animation complete!');
         } else {
-          setAnimateJobs(prev => prev.map(j =>
-            j.id === jobId ? { ...j, status: 'failed' as const, error: result.error } : j
-          ));
+          setAnimateJobs(prev => prev.filter(j => j.id !== jobId));
           updateJob(activityJobId, { status: 'failed', error: result.error });
           addLog({ level: 'error', message: `Animate failed: ${result.error}`, jobId: activityJobId });
-          setLoadingStatus('🎭 Animation failed');
+          setLoadingStatus(`🎭 Animation failed: ${result.error}`);
         }
       } catch (error: any) {
         logger.error('App', 'Animate generation error', { error });
-        setAnimateJobs(prev => prev.map(j =>
-          j.id === jobId ? { ...j, status: 'failed' as const, error: error.message } : j
-        ));
+        setAnimateJobs(prev => prev.filter(j => j.id !== jobId));
         updateJob(activityJobId, { status: 'failed', error: error.message });
-        setLoadingStatus('Failed');
+        setLoadingStatus(`🎭 Animation failed: ${error.message}`);
       } finally {
         setIsGenerating(false);
         refreshCredits();
-        setTimeout(() => setLoadingStatus(''), 3000);
+        setTimeout(() => setLoadingStatus(''), 5000);
       }
       return;
     }
@@ -1009,21 +1005,18 @@ const App: React.FC = () => {
         updateJob(activityJobId, { status: 'completed' });
         setLoadingStatus('🎭 Retry successful!');
       } else {
-        setAnimateJobs(prev => prev.map(j =>
-          j.id === job.id ? { ...j, status: 'failed' as const, error: result.error } : j
-        ));
+        setAnimateJobs(prev => prev.filter(j => j.id !== job.id));
         updateJob(activityJobId, { status: 'failed', error: result.error });
-        setLoadingStatus('🎭 Retry failed');
+        setLoadingStatus(`🎭 Retry failed: ${result.error}`);
       }
     } catch (error: any) {
-      setAnimateJobs(prev => prev.map(j =>
-        j.id === job.id ? { ...j, status: 'failed' as const, error: error.message } : j
-      ));
+      setAnimateJobs(prev => prev.filter(j => j.id !== job.id));
       updateJob(activityJobId, { status: 'failed', error: error.message });
+      setLoadingStatus(`🎭 Retry failed: ${error.message}`);
     } finally {
       setIsGenerating(false);
       refreshCredits();
-      setTimeout(() => setLoadingStatus(''), 2000);
+      setTimeout(() => setLoadingStatus(''), 5000);
     }
   };
 

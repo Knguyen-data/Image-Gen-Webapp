@@ -171,12 +171,13 @@ export const queryTask = async (
 export const pollForResult = async (
   apiKey: string,
   taskId: string,
-  onProgress?: (state: string, attempt: number) => void
+  onProgress?: (state: string, attempt: number) => void,
+  maxAttempts: number = MAX_POLL_ATTEMPTS
 ): Promise<SeedreamTask> => {
   let attempt = 0;
   let interval = INITIAL_POLL_INTERVAL_MS;
 
-  while (attempt < MAX_POLL_ATTEMPTS) {
+  while (attempt < maxAttempts) {
     const task = await queryTask(apiKey, taskId);
 
     onProgress?.(task.state, attempt);
