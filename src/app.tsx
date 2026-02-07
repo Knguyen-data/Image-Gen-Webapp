@@ -3,7 +3,7 @@ import LeftPanel from './components/left-panel';
 import RightPanel from './components/right-panel';
 import ApiKeyModal from './components/api-key-modal';
 import ModifyImageModal from './components/modify-image-modal';
-import { AppSettings, Run, GeneratedImage, PromptItem, ReferenceImage, AppMode, VideoScene, VideoSettings, GeneratedVideo } from './types';
+import { AppSettings, Run, GeneratedImage, PromptItem, ReferenceImage, AppMode, VideoScene, VideoSettings, GeneratedVideo, AnimateSettings, AnimateJob, VideoModel } from './types';
 import { DEFAULT_SETTINGS } from './constants';
 import { generateImage, modifyImage } from './services/gemini-service';
 import { getAllRunsFromDB, saveRunToDB, deleteRunFromDB } from './services/db';
@@ -14,6 +14,7 @@ import { useSeedreamCredits } from './hooks/use-seedream-credits';
 import { generateWithSeedream, mapAspectRatio } from './services/seedream-service';
 import { generateWithSeedreamTxt2Img } from './services/seedream-txt2img-service';
 import { generateMotionVideo } from './services/kling-motion-control-service';
+import { generateAnimateVideo } from './services/wan-animate-service';
 import { logger } from './services/logger';
 import { useActivityQueue } from './hooks/use-activity-queue';
 import ActivityPanel from './components/activity-panel';
@@ -31,6 +32,7 @@ const App: React.FC = () => {
 
   // Video Mode State
   const [appMode, setAppMode] = useState<AppMode>('image');
+  const [videoModel, setVideoModel] = useState<VideoModel>('kling-2.6');
   const [videoScenes, setVideoScenes] = useState<VideoScene[]>([]);
   const [videoSettings, setVideoSettings] = useState<VideoSettings>({
     referenceVideoMode: 'global',
@@ -38,6 +40,16 @@ const App: React.FC = () => {
     resolution: '720p'
   });
   const [generatedVideos, setGeneratedVideos] = useState<GeneratedVideo[]>([]);
+
+  // Animate Mode State
+  const [animateSettings, setAnimateSettings] = useState<AnimateSettings>({
+    subMode: 'move',
+    resolution: '480p',
+  });
+  const [animateCharacterImage, setAnimateCharacterImage] = useState<ReferenceImage | null>(null);
+  const [animateVideoFile, setAnimateVideoFile] = useState<File | null>(null);
+  const [animateVideoPreviewUrl, setAnimateVideoPreviewUrl] = useState<string | null>(null);
+  const [animateJobs, setAnimateJobs] = useState<AnimateJob[]>([]);
 
   // State: Data
   const [runs, setRuns] = useState<Run[]>([]);
@@ -779,6 +791,79 @@ const App: React.FC = () => {
       return;
     }
 
+    // Wan 2.2 models use animate flow
+    if (videoModel === 'wan-2.2-move' || videoModel === 'wan-2.2-replace') {
+      if (!animateCharacterImage || !animateVideoFile) {
+        alert('Please upload both a character image and a reference video.');
+        return;
+      }
+
+      const wanSubMode = videoModel === 'wan-2.2-move' ? 'move' : 'replace';
+      logger.info('App', `Starting animate generation (${wanSubMode})`);
+      setIsGenerating(true);
+
+      const jobId = `animate-${Date.now()}`;
+      const newJob: AnimateJob = {
+        id: jobId,
+        characterImage: animateCharacterImage,
+        referenceVideoFile: animateVideoFile,
+        referenceVideoPreviewUrl: animateVideoPreviewUrl || '',
+        subMode: wanSubMode,
+        resolution: animateSettings.resolution,
+        status: 'generating',
+        createdAt: Date.now(),
+      };
+      setAnimateJobs(prev => [newJob, ...prev]);
+
+      const activityJobId = addJob({
+        type: 'video',
+        status: 'active',
+        prompt: `Animate ${wanSubMode} (${animateSettings.resolution})`,
+      });
+      addLog({ level: 'info', message: `Starting animate ${wanSubMode}`, jobId: activityJobId });
+
+      try {
+        const result = await generateAnimateVideo(
+          kieApiKey,
+          animateCharacterImage.base64,
+          animateCharacterImage.mimeType,
+          animateVideoFile,
+          wanSubMode,
+          animateSettings.resolution,
+          (stage, detail) => setLoadingStatus(`🎭 ${detail || stage}`)
+        );
+
+        if (result.success && result.videoUrl) {
+          setAnimateJobs(prev => prev.map(j =>
+            j.id === jobId ? { ...j, status: 'success' as const, resultVideoUrl: result.videoUrl } : j
+          ));
+          updateJob(activityJobId, { status: 'completed' });
+          addLog({ level: 'info', message: 'Animate video generated', jobId: activityJobId });
+          setLoadingStatus('🎭 Animation complete!');
+        } else {
+          setAnimateJobs(prev => prev.map(j =>
+            j.id === jobId ? { ...j, status: 'failed' as const, error: result.error } : j
+          ));
+          updateJob(activityJobId, { status: 'failed', error: result.error });
+          addLog({ level: 'error', message: `Animate failed: ${result.error}`, jobId: activityJobId });
+          setLoadingStatus('🎭 Animation failed');
+        }
+      } catch (error: any) {
+        logger.error('App', 'Animate generation error', { error });
+        setAnimateJobs(prev => prev.map(j =>
+          j.id === jobId ? { ...j, status: 'failed' as const, error: error.message } : j
+        ));
+        updateJob(activityJobId, { status: 'failed', error: error.message });
+        setLoadingStatus('Failed');
+      } finally {
+        setIsGenerating(false);
+        refreshCredits();
+        setTimeout(() => setLoadingStatus(''), 3000);
+      }
+      return;
+    }
+
+    // Kling 2.6 flow (original video generation)
     if (videoScenes.length === 0) {
       alert('Add at least one scene to generate videos');
       return;
@@ -873,6 +958,75 @@ const App: React.FC = () => {
     setTimeout(() => setLoadingStatus(''), 3000);
   };
 
+  // --- ANIMATE HANDLERS ---
+  const setAnimateReferenceVideo = (file: File | null, previewUrl: string | null) => {
+    // Clean up old preview URL
+    if (animateVideoPreviewUrl) URL.revokeObjectURL(animateVideoPreviewUrl);
+    setAnimateVideoFile(file);
+    setAnimateVideoPreviewUrl(previewUrl);
+  };
+
+  const handleAnimateDelete = (jobId: string) => {
+    setAnimateJobs(prev => prev.filter(j => j.id !== jobId));
+  };
+
+  const handleAnimateRetry = async (job: AnimateJob) => {
+    if (!kieApiKey) {
+      setKeyModalMode('spicy');
+      setIsKeyModalOpen(true);
+      return;
+    }
+
+    setIsGenerating(true);
+    setLoadingStatus('🎭 Retrying animation...');
+
+    // Update job status to generating
+    setAnimateJobs(prev => prev.map(j =>
+      j.id === job.id ? { ...j, status: 'generating' as const, error: undefined } : j
+    ));
+
+    const activityJobId = addJob({
+      type: 'video',
+      status: 'active',
+      prompt: `Retry animate ${job.subMode}`,
+    });
+
+    try {
+      const result = await generateAnimateVideo(
+        kieApiKey,
+        job.characterImage.base64,
+        job.characterImage.mimeType,
+        job.referenceVideoFile,
+        job.subMode,
+        job.resolution,
+        (stage, detail) => setLoadingStatus(`🎭 Retry: ${detail || stage}`)
+      );
+
+      if (result.success && result.videoUrl) {
+        setAnimateJobs(prev => prev.map(j =>
+          j.id === job.id ? { ...j, status: 'success' as const, resultVideoUrl: result.videoUrl, error: undefined } : j
+        ));
+        updateJob(activityJobId, { status: 'completed' });
+        setLoadingStatus('🎭 Retry successful!');
+      } else {
+        setAnimateJobs(prev => prev.map(j =>
+          j.id === job.id ? { ...j, status: 'failed' as const, error: result.error } : j
+        ));
+        updateJob(activityJobId, { status: 'failed', error: result.error });
+        setLoadingStatus('🎭 Retry failed');
+      }
+    } catch (error: any) {
+      setAnimateJobs(prev => prev.map(j =>
+        j.id === job.id ? { ...j, status: 'failed' as const, error: error.message } : j
+      ));
+      updateJob(activityJobId, { status: 'failed', error: error.message });
+    } finally {
+      setIsGenerating(false);
+      refreshCredits();
+      setTimeout(() => setLoadingStatus(''), 2000);
+    }
+  };
+
   return (
     <div className="flex h-screen w-screen overflow-hidden text-gray-200 font-sans">
       <ApiKeyModal
@@ -935,6 +1089,15 @@ const App: React.FC = () => {
             videoSettings={videoSettings}
             setVideoSettings={setVideoSettings}
             onVideoGenerate={handleVideoGenerate}
+            // Animate Mode props
+            animateSettings={animateSettings}
+            setAnimateSettings={setAnimateSettings}
+            animateCharacterImage={animateCharacterImage}
+            setAnimateCharacterImage={setAnimateCharacterImage}
+            animateVideoFile={animateVideoFile}
+            animateVideoPreviewUrl={animateVideoPreviewUrl}
+            setAnimateReferenceVideo={setAnimateReferenceVideo}
+            onAnimateGenerate={handleVideoGenerate}
           />
           <RightPanel
             runs={runs}
@@ -950,6 +1113,10 @@ const App: React.FC = () => {
             generatedVideos={generatedVideos}
             onDeleteVideo={handleDeleteVideo}
             onRetryVideo={handleRetryVideo}
+            // Animate Mode props
+            animateJobs={animateJobs}
+            onAnimateDelete={handleAnimateDelete}
+            onAnimateRetry={handleAnimateRetry}
           />
         </>
       )}

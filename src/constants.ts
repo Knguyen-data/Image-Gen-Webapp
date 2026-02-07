@@ -1,4 +1,4 @@
-import { AppSettings } from './types';
+import { AppSettings, UnifiedVideoSettings, VideoModel } from './types';
 
 // Reverting to the model ID user requested (Nano Banana Pro equivalent)
 export const GEMINI_MODEL_ID = 'gemini-3-pro-image-preview';
@@ -62,3 +62,19 @@ export const VIDEO_CONSTRAINTS = {
   // Aspect ratios for future validation
   allowedAspectRatios: ['9:16', '16:9', '4:5'],
 } as const;
+
+// Video Model Labels
+export const VIDEO_MODEL_LABELS: Record<VideoModel, string> = {
+  'kling-2.6': 'Kling 2.6 Motion Control',
+  'wan-2.2-move': 'Wan 2.2 Animate (Move)',
+  'wan-2.2-replace': 'Wan 2.2 Animate (Replace)',
+};
+
+// Default Unified Video Settings
+export const DEFAULT_UNIFIED_VIDEO_SETTINGS: UnifiedVideoSettings = {
+  model: 'kling-2.6',
+  referenceVideoMode: 'global',
+  orientation: 'image',
+  klingResolution: '720p',
+  wanResolution: '480p',
+};

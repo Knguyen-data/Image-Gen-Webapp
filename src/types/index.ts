@@ -3,6 +3,8 @@ export type ImageSize = '1K' | '2K' | '4K'; // Gemini 3 Pro supports up to 4K
 
 export type AppMode = 'image' | 'video';
 
+export type VideoModel = 'kling-2.6' | 'wan-2.2-move' | 'wan-2.2-replace';
+
 export interface ReferenceImage {
   id: string;
   base64: string;
@@ -109,6 +111,7 @@ export interface VideoScene {
   usePrompt?: boolean; // Toggle to enable/disable prompt per scene
 }
 
+/** @deprecated Use UnifiedVideoSettings instead */
 export interface VideoSettings {
   referenceVideoMode: VideoRefMode;
   globalReferenceVideo?: ReferenceVideo;
@@ -126,4 +129,39 @@ export interface GeneratedVideo {
   createdAt: number;
   status: 'pending' | 'generating' | 'success' | 'failed';
   error?: string;
+}
+
+// Animate Mode Types (Wan 2.2 Animate)
+export type AnimateSubMode = 'move' | 'replace';
+export type AnimateResolution = '480p' | '580p' | '720p';
+
+/** @deprecated Use UnifiedVideoSettings instead */
+export interface AnimateSettings {
+  subMode: AnimateSubMode;
+  resolution: AnimateResolution;
+}
+
+export interface AnimateJob {
+  id: string;
+  characterImage: ReferenceImage;
+  referenceVideoFile: File;
+  referenceVideoPreviewUrl: string;
+  subMode: AnimateSubMode;
+  resolution: AnimateResolution;
+  status: 'pending' | 'generating' | 'success' | 'failed';
+  resultVideoUrl?: string;
+  error?: string;
+  createdAt: number;
+}
+
+// Unified Video Settings (merges Kling 2.6 + Wan 2.2)
+export interface UnifiedVideoSettings {
+  model: VideoModel;
+  // Kling-specific
+  referenceVideoMode: VideoRefMode;
+  globalReferenceVideo?: ReferenceVideo;
+  orientation: 'image' | 'video';
+  klingResolution: '720p' | '1080p';
+  // Wan-specific
+  wanResolution: AnimateResolution; // '480p' | '580p' | '720p'
 }
