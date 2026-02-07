@@ -1,5 +1,6 @@
 /**
- * Token Bucket Rate Limiter for Seedream API
+ * Unified Token Bucket Rate Limiter for Kie.ai APIs
+ * Shared by: Seedream Edit, Seedream Txt2Img, Kling Motion Control
  * Limit: 20 requests per 10 seconds per account
  * HTTP 429 = rejected (not queued)
  */
@@ -77,7 +78,7 @@ export const consumeToken = (): boolean => {
 export const waitForSlot = async (): Promise<void> => {
   while (!canMakeRequest()) {
     const waitTime = getTimeUntilNextToken();
-    console.log(`[SeedreamRateLimiter] Waiting ${waitTime}ms for rate limit slot`);
+    console.log(`[KieRateLimiter] Waiting ${waitTime}ms for rate limit slot`);
     await new Promise(resolve => setTimeout(resolve, Math.max(100, waitTime)));
   }
   consumeToken();

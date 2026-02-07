@@ -5,9 +5,9 @@ import {
   getAvailableTokens,
   resetBucket,
   waitForSlot,
-} from '../services/seedream-rate-limiter';
+} from '../services/unified-kie-rate-limiter';
 
-describe('seedream-rate-limiter', () => {
+describe('unified-kie-rate-limiter', () => {
   beforeEach(() => {
     vi.clearAllTimers();
     resetBucket();

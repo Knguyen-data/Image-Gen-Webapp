@@ -5,8 +5,10 @@ interface ModifyImageModalProps {
   isOpen: boolean;
   sourceImage: GeneratedImage | null;
   onClose: () => void;
-  onSubmit: (prompt: string, additionalRefs: ReferenceImage[]) => void;
+  onSubmit: (prompt: string, additionalRefs: ReferenceImage[], model: 'gemini' | 'seedream') => void;
   isLoading: boolean;
+  hasGeminiKey: boolean;
+  hasKieApiKey: boolean;
 }
 
 const ModifyImageModal: React.FC<ModifyImageModalProps> = ({
@@ -14,19 +16,28 @@ const ModifyImageModal: React.FC<ModifyImageModalProps> = ({
   sourceImage,
   onClose,
   onSubmit,
-  isLoading
+  isLoading,
+  hasGeminiKey,
+  hasKieApiKey
 }) => {
   const [modifyPrompt, setModifyPrompt] = useState('');
   const [additionalRefs, setAdditionalRefs] = useState<ReferenceImage[]>([]);
   const [isDragging, setIsDragging] = useState(false);
+  const [selectedModel, setSelectedModel] = useState<'gemini' | 'seedream'>('gemini');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (isOpen) {
       setModifyPrompt('');
       setAdditionalRefs([]);
+      // Default based on source image model if available
+      if (sourceImage?.generatedBy?.startsWith('seedream')) {
+        setSelectedModel('seedream');
+      } else {
+        setSelectedModel('gemini');
+      }
     }
-  }, [isOpen]);
+  }, [isOpen, sourceImage]);
 
   if (!isOpen || !sourceImage) return null;
 
@@ -91,7 +102,7 @@ const ModifyImageModal: React.FC<ModifyImageModalProps> = ({
       alert('Please enter a modification prompt');
       return;
     }
-    onSubmit(modifyPrompt, additionalRefs);
+    onSubmit(modifyPrompt, additionalRefs, selectedModel);
   };
 
   return (
@@ -157,6 +168,58 @@ const ModifyImageModal: React.FC<ModifyImageModalProps> = ({
                   placeholder="E.g., Change the background to a sunset, add a rainbow, make it vintage style..."
                   className="w-full h-32 bg-gray-950 border border-gray-800 rounded-lg p-3 text-sm text-gray-200 focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none resize-none disabled:opacity-50"
                 />
+              </div>
+
+              {/* Model Selector */}
+              <div className="space-y-2">
+                <label className="text-sm font-semibold text-gray-300 block">
+                  Modification Model
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedModel('gemini')}
+                    disabled={!hasGeminiKey || isLoading}
+                    className={`p-3 rounded-lg border transition-all text-left ${
+                      selectedModel === 'gemini'
+                        ? 'border-blue-500 bg-blue-900/20'
+                        : 'border-gray-700 bg-gray-900 hover:border-gray-600'
+                    } ${!hasGeminiKey ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  >
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-blue-400">🔷</span>
+                      <span className={`font-medium ${selectedModel === 'gemini' ? 'text-white' : 'text-gray-300'}`}>
+                        Gemini
+                      </span>
+                      {!hasGeminiKey && <span className="text-[10px] text-red-400">No key</span>}
+                    </div>
+                    <p className="text-[10px] text-gray-500">
+                      Nano Banana Pro - Creative edits
+                    </p>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setSelectedModel('seedream')}
+                    disabled={!hasKieApiKey || isLoading}
+                    className={`p-3 rounded-lg border transition-all text-left ${
+                      selectedModel === 'seedream'
+                        ? 'border-orange-500 bg-orange-900/20'
+                        : 'border-gray-700 bg-gray-900 hover:border-gray-600'
+                    } ${!hasKieApiKey ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  >
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-orange-400">🌶️</span>
+                      <span className={`font-medium ${selectedModel === 'seedream' ? 'text-white' : 'text-gray-300'}`}>
+                        Seedream 4.5
+                      </span>
+                      {!hasKieApiKey && <span className="text-[10px] text-red-400">No key</span>}
+                    </div>
+                    <p className="text-[10px] text-gray-500">
+                      High quality image edits
+                    </p>
+                  </button>
+                </div>
               </div>
 
               {/* Additional Reference Images */}

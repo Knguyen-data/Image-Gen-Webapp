@@ -41,6 +41,10 @@ export const openDB = async (): Promise<IDBDatabase> => {
       }
     };
 
+    request.onblocked = () => {
+      console.warn("DB upgrade blocked — close other tabs using this app");
+    };
+
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => {
       console.error("IndexedDB Error:", request.error);
@@ -64,6 +68,10 @@ const handleVersionMismatch = (): Promise<IDBDatabase> => {
   return new Promise((resolve, reject) => {
     console.warn("Deleting old database due to version mismatch...");
     const deleteRequest = indexedDB.deleteDatabase(DB_NAME);
+
+    deleteRequest.onblocked = () => {
+      console.warn("DB delete blocked — close other tabs using this app");
+    };
 
     deleteRequest.onsuccess = () => {
       console.log("Old database deleted. Creating new database...");
@@ -89,13 +97,22 @@ const handleVersionMismatch = (): Promise<IDBDatabase> => {
 export const saveRunToDB = async (run: Run): Promise<void> => {
   try {
     const db = await openDB();
+
+    // Check if store exists before transaction
+    if (!db.objectStoreNames.contains(STORE_NAME)) {
+      console.warn('Object store not found, reinitializing database...');
+      db.close();
+      await handleVersionMismatch();
+      return saveRunToDB(run);
+    }
+
     return new Promise((resolve, reject) => {
       const tx = db.transaction(STORE_NAME, 'readwrite');
       const store = tx.objectStore(STORE_NAME);
-      const request = store.put(run); // .put updates if exists, adds if new
+      store.put(run);
 
-      request.onsuccess = () => resolve();
-      request.onerror = () => reject(request.error);
+      tx.oncomplete = () => { db.close(); resolve(); };
+      tx.onerror = () => { db.close(); reject(tx.error); };
     });
   } catch (error) {
     console.error("Failed to save to DB:", error);
@@ -107,18 +124,27 @@ export const saveRunToDB = async (run: Run): Promise<void> => {
 export const getAllRunsFromDB = async (): Promise<Run[]> => {
   try {
     const db = await openDB();
+
+    // Check if store exists before transaction
+    if (!db.objectStoreNames.contains(STORE_NAME)) {
+      console.warn('Object store not found, reinitializing database...');
+      db.close();
+      await handleVersionMismatch();
+      return [];
+    }
+
     return new Promise((resolve, reject) => {
       const tx = db.transaction(STORE_NAME, 'readonly');
       const store = tx.objectStore(STORE_NAME);
       const request = store.getAll();
 
-      request.onsuccess = () => {
+      tx.oncomplete = () => {
+        db.close();
         const results = request.result as Run[];
-        // Sort by Newest First
         results.sort((a, b) => b.createdAt - a.createdAt);
         resolve(results);
       };
-      request.onerror = () => reject(request.error);
+      tx.onerror = () => { db.close(); reject(request.error); };
     });
   } catch (error) {
     console.error("Failed to fetch from DB:", error);
@@ -129,12 +155,20 @@ export const getAllRunsFromDB = async (): Promise<Run[]> => {
 // Delete a run by ID
 export const deleteRunFromDB = async (id: string): Promise<void> => {
   const db = await openDB();
+
+  // Check if store exists before transaction
+  if (!db.objectStoreNames.contains(STORE_NAME)) {
+    console.warn('Object store not found, skipping delete');
+    db.close();
+    return;
+  }
+
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE_NAME, 'readwrite');
     const store = tx.objectStore(STORE_NAME);
-    const request = store.delete(id);
+    store.delete(id);
 
-    request.onsuccess = () => resolve();
-    request.onerror = () => reject(request.error);
+    tx.oncomplete = () => { db.close(); resolve(); };
+    tx.onerror = () => { db.close(); reject(tx.error); };
   });
 };

@@ -3,6 +3,45 @@
 **Project:** Raw Image Prompt Studio
 **Last Updated:** 2026-02-05
 
+## [1.2.2] - 2026-02-05 - Video Mode Critical Fixes
+
+### Fixed
+
+#### 1. Credit Badge Not Displaying in Video Mode (Complete)
+- Fixed credit monitoring icon not appearing in header when in video mode
+- **Root Cause:** `useSeedreamCredits` hook only fetched credits when `spicyModeEnabled=true` (image mode only), but video mode needed credits without spicy mode flag
+- **Solution:** Removed spicyModeEnabled dependency from hook, now fetches whenever API key exists
+- **Files:** `src/hooks/use-seedream-credits.ts`, `src/app.tsx`
+- **Impact:** Credit badge now displays correctly in video mode header next to API key icon
+
+#### 2. Duplicate Generate Buttons (Complete)
+- Removed duplicate generate button causing UI confusion
+- **Root Cause:** Two separate button implementations rendering simultaneously (VideoSceneQueue component + LeftPanel component)
+- **Solution:** Removed button from LeftPanel video settings panel (lines 485-509), kept VideoSceneQueue button as it logically owns scene generation action
+- **Files:** `src/components/left-panel.tsx`
+- **Impact:** Only one generate button visible, cleaner UI
+
+#### 3. Motion Prompt Toggle Functionality (Complete)
+- Fixed non-functional prompt toggle button in scene cards
+- **Root Cause:** Missing `toggleSceneUsePrompt` function implementation
+- **Solution:** Added toggle function to update scene `usePrompt` state
+- **Files:** `src/components/video-scene-queue.tsx`
+- **Impact:** Toggle button now properly enables/disables prompt per scene
+
+### Changed
+
+#### Credit Hook Behavior
+- **Before:** Only fetches credits when spicy mode enabled (image mode)
+- **After:** Fetches credits whenever Kie API key exists (both image + video modes)
+- **Impact:** Video mode users can now monitor credit balance
+
+#### Button Layout
+- **Before:** Two generate buttons stacked in video settings
+- **After:** Single button in scene queue component
+- **Impact:** Clearer user intent, less confusion
+
+---
+
 ## [1.2.1] - 2026-02-05 - Video Mode UI Polish
 
 ### Fixed

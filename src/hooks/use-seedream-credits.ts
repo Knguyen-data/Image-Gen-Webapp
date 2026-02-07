@@ -23,7 +23,7 @@ export const useSeedreamCredits = (
   const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
-    if (!apiKey || !spicyModeEnabled) {
+    if (!apiKey) {
       setCredits(null);
       return;
     }
@@ -41,17 +41,17 @@ export const useSeedreamCredits = (
     } finally {
       setLoading(false);
     }
-  }, [apiKey, spicyModeEnabled]);
+  }, [apiKey]);
 
-  // Auto-fetch on spicy mode activation or API key change
+  // Auto-fetch whenever API key exists (works for both spicy mode and video mode)
   useEffect(() => {
-    if (spicyModeEnabled && apiKey) {
+    if (apiKey) {
       refresh();
     } else {
       setCredits(null);
       setError(null);
     }
-  }, [spicyModeEnabled, apiKey, refresh]);
+  }, [apiKey, refresh]);
 
   return {
     credits,

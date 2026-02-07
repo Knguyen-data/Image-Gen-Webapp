@@ -17,7 +17,7 @@ export interface BatchQueueConfig {
   batchSize: number;
   batchDelayMs: number;
   onProgress: (completed: number, total: number, batchNum: number, totalBatches: number) => void;
-  onResult: (result: GeneratedImage) => void;
+  onResult: (result: GeneratedImage, task: QueueTask) => void;
   onError: (error: Error, task: QueueTask) => void;
   signal?: AbortSignal;
 }
@@ -40,12 +40,29 @@ const delay = (ms: number): Promise<void> =>
   new Promise(resolve => setTimeout(resolve, ms));
 
 /**
- * Calculate optimal batch size based on queue length
+ * Batch delays by provider (ms)
  */
-export const calculateOptimalBatchSize = (queueLength: number): number => {
-  if (queueLength <= 5) return queueLength;  // All at once
-  if (queueLength <= 20) return 5;            // 5 per batch
-  return 10;                                  // Max concurrent for large batches
+export const BATCH_DELAYS = {
+  gemini: 70000,    // 70s = 60s rate limit + 10s buffer
+  seedream: 10000,  // 10s (handled by unified rate limiter)
+} as const;
+
+/**
+ * Calculate optimal batch size based on queue length and provider
+ */
+export const calculateOptimalBatchSize = (
+  queueLength: number,
+  provider: 'gemini' | 'seedream' = 'gemini'
+): number => {
+  if (provider === 'seedream') {
+    // Seedream uses unified rate limiter, keep conservative
+    if (queueLength <= 5) return queueLength;
+    return 5;
+  }
+
+  // Gemini/Nano Banana Pro: 20 req/min
+  if (queueLength <= 20) return queueLength;  // All at once if ≤20
+  return 20;  // Max batch size for Gemini
 };
 
 /**
@@ -83,7 +100,7 @@ export const processBatchQueue = async (
     batchResults.forEach((result, idx) => {
       if (result.status === 'fulfilled') {
         results.push(result.value);
-        config.onResult(result.value);
+        config.onResult(result.value, batch[idx]);
       } else {
         const error = result.reason instanceof Error
           ? result.reason

@@ -97,7 +97,8 @@ Before starting ANY task, you MUST complete these context management steps IN OR
 ```bash
 # ALWAYS run these commands FIRST, before doing anything else:
 bd ready                    # Check available Beads tasks
-mcp__memory__read_graph     # Read Knowledge Graph for project context
+mcp__memora__memory_list limit=10           # Recent memories
+mcp__memora__memory_semantic_search query="current task"  # Find relevant context
 ```
 
 **Purpose:** Understand existing work, avoid duplicates, maintain continuity.
@@ -109,6 +110,9 @@ bd create "Task title" --priority P2 --description "Detailed description"
 
 # For EXISTING task - update status BEFORE starting:
 bd update <id> --status in_progress
+
+# Also checkpoint in Memora:
+mcp__memora__memory_create content="ACTIVE TASK: <goal>, <context>, <decisions>"
 ```
 
 **Purpose:** Track work across sessions, enable collaboration.
@@ -120,9 +124,8 @@ Now proceed with the actual task implementation.
 ```bash
 # After completing ANY significant work, update BOTH systems:
 
-# 1. Update Knowledge Graph with observations
-mcp__memory__add_observations    # Add to existing entities
-mcp__memory__create_entities     # Create new entities if needed
+# 1. Store learnings/decisions in Memora
+mcp__memora__memory_create content="<what was done, decisions made, files changed>"
 
 # 2. Close Beads task and sync
 bd close <id> --reason "Completed: <summary>"
@@ -138,7 +141,7 @@ bd sync                          # Persist to .beads/issues.jsonl
 **MANDATORY BEHAVIORS:**
 
 1. **Every user prompt triggers context check:**
-   - Run `bd ready` + `mcp__memory__read_graph` FIRST
+   - Run `bd ready` + `mcp__memora__memory_list limit=10` FIRST
    - Even for small fixes, UI tweaks, or documentation updates
    - No exceptions - this is NON-NEGOTIABLE
 
@@ -148,17 +151,17 @@ bd sync                          # Persist to .beads/issues.jsonl
    - Close with detailed completion summary
    - Run `bd sync` after every update
 
-3. **Every completion updates Knowledge Graph:**
-   - Add observations to relevant entities
-   - Create session entity for significant work
-   - Document files changed, decisions made, edge cases found
-   - Link entities with relations
+3. **Every completion stores to Memora:**
+   - Create memory with what was done, decisions, files changed
+   - Use `mcp__memora__memory_create` for new knowledge
+   - Use `mcp__memora__memory_update` to update existing memories
+   - Use `mcp__memora__memory_create_todo` for open tasks
 
 4. **Never skip context management:**
    - Even if user says "quick fix" or "just a small change"
    - Even if you think the change is trivial
    - Even if you're in the middle of other work
-   - ALWAYS update both Beads and Knowledge Graph
+   - ALWAYS update both Beads and Memora
 
 **VIOLATION CONSEQUENCES:**
 - Lost work context across sessions
@@ -180,7 +183,8 @@ bd sync                          # Persist to .beads/issues.jsonl
 ┌─────────────────────────────────────────┐
 │ 2. MANDATORY: Read Context              │
 │    - bd ready                           │
-│    - mcp__memory__read_graph            │
+│    - mcp__memora__memory_list limit=10  │
+│    - mcp__memora__memory_semantic_search │
 └──────────────┬──────────────────────────┘
                │
                ▼
@@ -201,7 +205,7 @@ bd sync                          # Persist to .beads/issues.jsonl
                ▼
 ┌─────────────────────────────────────────┐
 │ 5. MANDATORY: Update Context            │
-│    - mcp__memory__add_observations      │
+│    - mcp__memora__memory_create          │
 │    - bd close <id> --reason "..."       │
 │    - bd sync                            │
 └─────────────────────────────────────────┘
@@ -233,30 +237,29 @@ bd sync                                   # Commit and persist
 
 ---
 
-## MCP Memory (Knowledge Graph)
+## Memora (Persistent Memory - Cloud)
+
+**Memora** is the primary memory system backed by Cloudflare D1 with OpenAI embeddings.
 
 **Essential Operations:**
 ```bash
-mcp__memory__read_graph                   # Read entire graph
-mcp__memory__search_nodes                 # Search for entities
-mcp__memory__add_observations             # Add to existing entities
-mcp__memory__create_entities              # Create new entities
-mcp__memory__create_relations             # Link entities
+mcp__memora__memory_list limit=10                    # Recent memories
+mcp__memora__memory_semantic_search query="..."       # Semantic search
+mcp__memora__memory_hybrid_search query="..."         # Keyword + semantic
+mcp__memora__memory_create content="..."              # Store new memory
+mcp__memora__memory_update memory_id=X content="..."  # Update existing
+mcp__memora__memory_create_todo content="..." priority=high  # Create TODO
+mcp__memora__memory_create_issue content="..." severity=major  # Create issue
+mcp__memora__memory_find_duplicates                   # Find duplicates
+mcp__memora__memory_insights period=7d                # Get insights
 ```
 
-**Key Entities:**
-- `Image-Gen-Webapp` - Project architecture, conventions, progress
-- `GeminiAPI` / `SeedreamAPI` - API integration details
-- `CompletedWork-YYYYMMDD` - Daily session logs
-- `UI-Fixes-Session-*` - UI improvement sessions
-- `PendingFeature-*` - Features awaiting implementation
-
 **Best Practices:**
-- Create session entity for multi-fix work
-- Link related entities with relations
-- Document files changed, lines modified
-- Capture edge cases and decisions
-- Note TypeScript/test status
+- Store decisions, architecture notes, and learnings
+- Create TODOs for pending work
+- Search before creating to avoid duplicates
+- Update memories when context changes
+- Use semantic search to find related context
 
 ---
 
@@ -266,9 +269,9 @@ mcp__memory__create_relations             # Link entities
 |--------|-------|-------------|---------|
 | **Claude Code Tasks** (TodoWrite) | Current session | Ephemeral - lost when session ends | Intra-session progress tracking |
 | **Beads** (`bd` CLI) | Cross-session | Persistent in `.beads/` | Cross-session tasks, collaboration |
-| **Knowledge Graph** (MCP Memory) | Project-wide | Persistent via MCP | Project knowledge, decisions, architecture |
+| **Memora** (MCP) | Project-wide | Persistent in Cloudflare D1 | Project knowledge, decisions, architecture |
 
 **Use ALL THREE systems appropriately:**
 - TodoWrite: For breaking down current work into steps
 - Beads: For tracking tasks across sessions
-- Knowledge Graph: For preserving project knowledge
+- Memora: For preserving project knowledge

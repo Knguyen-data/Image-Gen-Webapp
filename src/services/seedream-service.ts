@@ -4,7 +4,7 @@
  */
 
 import { SeedreamSettings, SeedreamTask, SeedreamAspectRatio } from '../types';
-import { waitForSlot } from './seedream-rate-limiter';
+import { waitForSlot } from './unified-kie-rate-limiter';
 import { logger } from './logger';
 
 const UPLOAD_URL = 'https://kieai.redpandaai.co/api/file-base64-upload';

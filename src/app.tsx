@@ -1084,6 +1084,8 @@ const App: React.FC = () => {
             isLowCredits={isLowCredits}
             isCriticalCredits={isCriticalCredits}
             appMode={appMode}
+            videoModel={videoModel}
+            setVideoModel={setVideoModel}
             videoScenes={videoScenes}
             setVideoScenes={setVideoScenes}
             videoSettings={videoSettings}
@@ -1110,6 +1112,7 @@ const App: React.FC = () => {
             loadingStatus={loadingStatus}
             appMode={appMode}
             setAppMode={setAppMode}
+            videoModel={videoModel}
             generatedVideos={generatedVideos}
             onDeleteVideo={handleDeleteVideo}
             onRetryVideo={handleRetryVideo}

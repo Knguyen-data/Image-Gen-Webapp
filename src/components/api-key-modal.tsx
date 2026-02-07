@@ -24,17 +24,26 @@ const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
   kieApiKey = '',
   setKieApiKey
 }) => {
+  const [activeTab, setActiveTab] = useState<KeyMode>(mode);
   const [inputVal, setInputVal] = useState(mode === 'spicy' ? kieApiKey : apiKey);
   const [isVisible, setIsVisible] = useState(false);
   const [isValidating, setIsValidating] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
 
-  const isSpicyMode = mode === 'spicy';
+  const isSpicyMode = activeTab === 'spicy';
 
+  // Initialize activeTab from mode prop when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      setActiveTab(mode);
+    }
+  }, [isOpen, mode]);
+
+  // Sync inputVal when tab changes
   useEffect(() => {
     setInputVal(isSpicyMode ? kieApiKey : apiKey);
     setErrorMsg('');
-  }, [apiKey, kieApiKey, isOpen, isSpicyMode]);
+  }, [activeTab, apiKey, kieApiKey, isSpicyMode]);
 
   if (!isOpen) return null;
 
@@ -125,6 +134,42 @@ const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
     <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/90 backdrop-blur-md p-4 animate-in fade-in duration-200">
       <div className={`bg-gray-900 border ${isSpicyMode ? 'border-orange-500/30' : 'border-dash-300/30'} rounded-xl w-full max-w-md shadow-2xl relative`}>
         <div className="p-6 space-y-4">
+          {/* Tab Bar */}
+          <div className="flex border-b border-gray-800 -mt-2 mb-4">
+            <button
+              onClick={() => setActiveTab('gemini')}
+              className={`flex-1 py-3 px-4 text-sm font-medium transition-colors border-b-2 ${
+                activeTab === 'gemini'
+                  ? 'text-dash-300 border-dash-300'
+                  : 'text-gray-500 hover:text-gray-300 border-transparent'
+              }`}
+            >
+              <span className="flex items-center justify-center gap-2">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" /></svg>
+                Gemini
+                {apiKey && activeTab !== 'gemini' && (
+                  <span className="w-2 h-2 bg-green-500 rounded-full"></span>
+                )}
+              </span>
+            </button>
+            <button
+              onClick={() => setActiveTab('spicy')}
+              className={`flex-1 py-3 px-4 text-sm font-medium transition-colors border-b-2 ${
+                activeTab === 'spicy'
+                  ? 'text-orange-400 border-orange-500'
+                  : 'text-gray-500 hover:text-gray-300 border-transparent'
+              }`}
+            >
+              <span className="flex items-center justify-center gap-2">
+                <span className="text-base">🌶️</span>
+                Kie.ai
+                {kieApiKey && activeTab !== 'spicy' && (
+                  <span className="w-2 h-2 bg-green-500 rounded-full"></span>
+                )}
+              </span>
+            </button>
+          </div>
+
           <div className="text-center">
             <div className={`w-12 h-12 ${isSpicyMode ? 'bg-orange-900/50' : 'bg-dash-900/50'} rounded-full flex items-center justify-center mx-auto mb-3 ${isSpicyMode ? 'text-orange-400' : 'text-dash-300'}`}>
               {isSpicyMode ? (
