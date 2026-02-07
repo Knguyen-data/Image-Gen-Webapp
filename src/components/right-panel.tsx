@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Run, GeneratedImage, AppMode, GeneratedVideo, AnimateJob, VideoModel } from '../types';
+import { Run, GeneratedImage, AppMode, GeneratedVideo } from '../types';
 import ImageCard from './image-card';
 import VideoCard from './video-card';
-import AnimateGallery from './animate-gallery';
 import JSZip from 'jszip';
 
 interface RightPanelProps {
@@ -16,15 +15,10 @@ interface RightPanelProps {
   loadingStatus?: string;
   appMode: AppMode;
   setAppMode: (mode: AppMode) => void;
-  videoModel?: VideoModel;
   // Video props
   generatedVideos?: GeneratedVideo[];
   onDeleteVideo?: (videoId: string) => void;
   onRetryVideo?: (video: GeneratedVideo) => void;
-  // Animate props
-  animateJobs?: AnimateJob[];
-  onAnimateDelete?: (jobId: string) => void;
-  onAnimateRetry?: (job: AnimateJob) => void;
 }
 
 const RightPanel: React.FC<RightPanelProps> = ({
@@ -38,16 +32,10 @@ const RightPanel: React.FC<RightPanelProps> = ({
   loadingStatus = '',
   appMode,
   setAppMode,
-  videoModel = 'kling-2.6',
   generatedVideos = [],
   onDeleteVideo = (_videoId: string) => {},
-  onRetryVideo = (_video: GeneratedVideo) => {},
-  animateJobs = [],
-  onAnimateDelete = (_jobId: string) => {},
-  onAnimateRetry = (_job: AnimateJob) => {}
+  onRetryVideo = (_video: GeneratedVideo) => {}
 }) => {
-  const isWanModel = videoModel === 'wan-2.2-move' || videoModel === 'wan-2.2-replace';
-  const isAnimateView = appMode === 'video' && isWanModel;
   const [selectedImageIds, setSelectedImageIds] = useState<Set<string>>(new Set());
   const [compareMode, setCompareMode] = useState(false);
   const [lightboxImage, setLightboxImage] = useState<GeneratedImage | null>(null);
@@ -388,7 +376,9 @@ const RightPanel: React.FC<RightPanelProps> = ({
           <div className="mt-4 p-4 bg-gray-900 rounded-lg max-h-32 overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <p className="text-xs text-gray-400 font-mono mb-1">MOTION PROMPT:</p>
             <p className="text-sm text-gray-200">{lightboxVideo.prompt}</p>
-            <p className="text-xs text-gray-500 mt-2">Duration: {Math.floor(lightboxVideo.duration / 60)}:{(lightboxVideo.duration % 60).toString().padStart(2, '0')}</p>
+            {lightboxVideo.duration > 0 && (
+              <p className="text-xs text-gray-500 mt-2">Duration: {Math.floor(lightboxVideo.duration / 60)}:{(lightboxVideo.duration % 60).toString().padStart(2, '0')}</p>
+            )}
           </div>
         </div>
       )}
@@ -404,14 +394,7 @@ const RightPanel: React.FC<RightPanelProps> = ({
 
         <div className="flex items-center gap-3">
           <h2 className="font-semibold text-gray-200">
-            {isAnimateView ? (
-              <>
-                <span className="text-purple-400">Animate</span> Gallery
-                <span className="text-gray-500 font-normal ml-2">
-                  ({animateJobs.length})
-                </span>
-              </>
-            ) : appMode === 'video' ? (
+            {appMode === 'video' ? (
               <>
                 <span className="text-blue-400">Video</span> Gallery
                 <span className="text-gray-500 font-normal ml-2">
@@ -469,14 +452,7 @@ const RightPanel: React.FC<RightPanelProps> = ({
 
       {/* Grid Content */}
       <div className="flex-1 overflow-y-auto scroll-smooth">
-        {isAnimateView ? (
-          // ANIMATE MODE: Dedicated gallery
-          <AnimateGallery
-            jobs={animateJobs}
-            onDelete={onAnimateDelete}
-            onRetry={onAnimateRetry}
-          />
-        ) : appMode === 'video' ? (
+        {appMode === 'video' ? (
           // VIDEO MODE: 50/50 Split Layout
           <div className="h-full flex flex-col">
             {/* IMAGES SECTION - Top 50% (for drag-drop source) */}

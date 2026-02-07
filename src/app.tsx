@@ -3,7 +3,7 @@ import LeftPanel from './components/left-panel';
 import RightPanel from './components/right-panel';
 import ApiKeyModal from './components/api-key-modal';
 import ModifyImageModal from './components/modify-image-modal';
-import { AppSettings, Run, GeneratedImage, PromptItem, ReferenceImage, AppMode, VideoScene, VideoSettings, GeneratedVideo, AnimateSettings, AnimateJob, VideoModel } from './types';
+import { AppSettings, Run, GeneratedImage, PromptItem, ReferenceImage, AppMode, VideoScene, VideoSettings, GeneratedVideo, AnimateSettings, VideoModel } from './types';
 import { DEFAULT_SETTINGS } from './constants';
 import { generateImage, modifyImage } from './services/gemini-service';
 import { getAllRunsFromDB, saveRunToDB, deleteRunFromDB } from './services/db';
@@ -49,7 +49,6 @@ const App: React.FC = () => {
   const [animateCharacterImage, setAnimateCharacterImage] = useState<ReferenceImage | null>(null);
   const [animateVideoFile, setAnimateVideoFile] = useState<File | null>(null);
   const [animateVideoPreviewUrl, setAnimateVideoPreviewUrl] = useState<string | null>(null);
-  const [animateJobs, setAnimateJobs] = useState<AnimateJob[]>([]);
 
   // State: Data
   const [runs, setRuns] = useState<Run[]>([]);
@@ -802,18 +801,18 @@ const App: React.FC = () => {
       logger.info('App', `Starting animate generation (${wanSubMode})`);
       setIsGenerating(true);
 
-      const jobId = `animate-${Date.now()}`;
-      const newJob: AnimateJob = {
-        id: jobId,
-        characterImage: animateCharacterImage,
-        referenceVideoFile: animateVideoFile,
-        referenceVideoPreviewUrl: animateVideoPreviewUrl || '',
-        subMode: wanSubMode,
-        resolution: animateSettings.resolution,
-        status: 'generating',
+      // Create placeholder GeneratedVideo for instant visual feedback
+      const videoId = `wan-${Date.now()}`;
+      const placeholder: GeneratedVideo = {
+        id: videoId,
+        sceneId: videoId,
+        url: '',
+        duration: 0,
+        prompt: `Animate ${wanSubMode} (${animateSettings.resolution})`,
         createdAt: Date.now(),
+        status: 'generating',
       };
-      setAnimateJobs(prev => [newJob, ...prev]);
+      setGeneratedVideos(prev => [placeholder, ...prev]);
 
       const activityJobId = addJob({
         type: 'video',
@@ -834,21 +833,31 @@ const App: React.FC = () => {
         );
 
         if (result.success && result.videoUrl) {
-          setAnimateJobs(prev => prev.map(j =>
-            j.id === jobId ? { ...j, status: 'success' as const, resultVideoUrl: result.videoUrl } : j
+          const successVideo: GeneratedVideo = {
+            ...placeholder,
+            url: result.videoUrl,
+            status: 'success',
+          };
+          setGeneratedVideos(prev => prev.map(v =>
+            v.id === videoId ? successVideo : v
           ));
+          // Persist to IndexedDB
+          saveGeneratedVideoToDB(successVideo).catch(e =>
+            logger.warn('App', 'Failed to persist Wan video to IndexedDB', e)
+          );
           updateJob(activityJobId, { status: 'completed' });
           addLog({ level: 'info', message: 'Animate video generated', jobId: activityJobId });
           setLoadingStatus('🎭 Animation complete!');
         } else {
-          setAnimateJobs(prev => prev.filter(j => j.id !== jobId));
+          // Remove placeholder on failure
+          setGeneratedVideos(prev => prev.filter(v => v.id !== videoId));
           updateJob(activityJobId, { status: 'failed', error: result.error });
           addLog({ level: 'error', message: `Animate failed: ${result.error}`, jobId: activityJobId });
           setLoadingStatus(`🎭 Animation failed: ${result.error}`);
         }
       } catch (error: any) {
         logger.error('App', 'Animate generation error', { error });
-        setAnimateJobs(prev => prev.filter(j => j.id !== jobId));
+        setGeneratedVideos(prev => prev.filter(v => v.id !== videoId));
         updateJob(activityJobId, { status: 'failed', error: error.message });
         setLoadingStatus(`🎭 Animation failed: ${error.message}`);
       } finally {
@@ -954,70 +963,10 @@ const App: React.FC = () => {
     setTimeout(() => setLoadingStatus(''), 3000);
   };
 
-  // --- ANIMATE HANDLERS ---
   const setAnimateReferenceVideo = (file: File | null, previewUrl: string | null) => {
-    // Clean up old preview URL
     if (animateVideoPreviewUrl) URL.revokeObjectURL(animateVideoPreviewUrl);
     setAnimateVideoFile(file);
     setAnimateVideoPreviewUrl(previewUrl);
-  };
-
-  const handleAnimateDelete = (jobId: string) => {
-    setAnimateJobs(prev => prev.filter(j => j.id !== jobId));
-  };
-
-  const handleAnimateRetry = async (job: AnimateJob) => {
-    if (!kieApiKey) {
-      setKeyModalMode('spicy');
-      setIsKeyModalOpen(true);
-      return;
-    }
-
-    setIsGenerating(true);
-    setLoadingStatus('🎭 Retrying animation...');
-
-    // Update job status to generating
-    setAnimateJobs(prev => prev.map(j =>
-      j.id === job.id ? { ...j, status: 'generating' as const, error: undefined } : j
-    ));
-
-    const activityJobId = addJob({
-      type: 'video',
-      status: 'active',
-      prompt: `Retry animate ${job.subMode}`,
-    });
-
-    try {
-      const result = await generateAnimateVideo(
-        kieApiKey,
-        job.characterImage.base64,
-        job.characterImage.mimeType,
-        job.referenceVideoFile,
-        job.subMode,
-        job.resolution,
-        (stage, detail) => setLoadingStatus(`🎭 Retry: ${detail || stage}`)
-      );
-
-      if (result.success && result.videoUrl) {
-        setAnimateJobs(prev => prev.map(j =>
-          j.id === job.id ? { ...j, status: 'success' as const, resultVideoUrl: result.videoUrl, error: undefined } : j
-        ));
-        updateJob(activityJobId, { status: 'completed' });
-        setLoadingStatus('🎭 Retry successful!');
-      } else {
-        setAnimateJobs(prev => prev.filter(j => j.id !== job.id));
-        updateJob(activityJobId, { status: 'failed', error: result.error });
-        setLoadingStatus(`🎭 Retry failed: ${result.error}`);
-      }
-    } catch (error: any) {
-      setAnimateJobs(prev => prev.filter(j => j.id !== job.id));
-      updateJob(activityJobId, { status: 'failed', error: error.message });
-      setLoadingStatus(`🎭 Retry failed: ${error.message}`);
-    } finally {
-      setIsGenerating(false);
-      refreshCredits();
-      setTimeout(() => setLoadingStatus(''), 5000);
-    }
   };
 
   return (
@@ -1105,14 +1054,9 @@ const App: React.FC = () => {
             loadingStatus={loadingStatus}
             appMode={appMode}
             setAppMode={setAppMode}
-            videoModel={videoModel}
             generatedVideos={generatedVideos}
             onDeleteVideo={handleDeleteVideo}
             onRetryVideo={handleRetryVideo}
-            // Animate Mode props
-            animateJobs={animateJobs}
-            onAnimateDelete={handleAnimateDelete}
-            onAnimateRetry={handleAnimateRetry}
           />
         </>
       )}

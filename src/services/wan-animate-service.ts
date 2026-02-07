@@ -3,7 +3,7 @@
  * Two sub-modes: Move (motion transfer) and Replace (character swap)
  */
 
-import { AnimateSubMode, AnimateResolution, AnimateJob } from '../types';
+import { AnimateSubMode, AnimateResolution } from '../types';
 import { uploadImageBase64, pollForResult } from './seedream-service';
 import { uploadVideoStream } from './kling-motion-control-service';
 import { waitForSlot } from './unified-kie-rate-limiter';
@@ -17,7 +17,7 @@ const MODEL_IDS: Record<AnimateSubMode, string> = {
 };
 
 // Move takes ~10min, Replace ~3min — need more poll attempts
-const MAX_POLL_ATTEMPTS = 180;
+const MAX_POLL_ATTEMPTS = 240;
 
 /**
  * Create Wan 2.2 Animate task

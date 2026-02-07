@@ -141,19 +141,6 @@ export interface AnimateSettings {
   resolution: AnimateResolution;
 }
 
-export interface AnimateJob {
-  id: string;
-  characterImage: ReferenceImage;
-  referenceVideoFile: File;
-  referenceVideoPreviewUrl: string;
-  subMode: AnimateSubMode;
-  resolution: AnimateResolution;
-  status: 'pending' | 'generating' | 'success' | 'failed';
-  resultVideoUrl?: string;
-  error?: string;
-  createdAt: number;
-}
-
 // Unified Video Settings (merges Kling 2.6 + Wan 2.2)
 export interface UnifiedVideoSettings {
   model: VideoModel;
