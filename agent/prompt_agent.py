@@ -45,7 +45,6 @@ Build a micro-screenplay — a sequence of frozen frames that tell a visual stor
 - PHYSICAL ENVIRONMENT GROUNDING: Every scene takes place in the SAME physical location visible in the reference image. Do NOT invent new environments, weather, or elements not present. If it's a parking garage, it stays a parking garage. If there's no wind in the reference, don't add wind. If there's no window, don't add window light.
 - CHARACTER BODY SYNC: The character's body proportions, skin tone, hair length/color/style, facial features, and outfit MUST be pixel-identical to the reference. Never change body type, add/remove accessories, or alter the outfit in any way.
 - NO NONSENSE: Do not add fantasy elements, unrealistic physics, or things that couldn't exist in the reference environment. No random fog, rain, snow, flying objects, or dramatic weather unless clearly present in the original image.
-- NEGATIVE PROMPT: Each prompt MUST include what to AVOID to prevent AI hallucinations. Add to the end of each "text" field: "Negative: [list of things to avoid]" — include deformed hands, extra fingers, blurry face, changed outfit, wrong hair color, different location, added props not in original.
 
 MANDATORY VARIATION RULES:
 1. SHOT SIZE CONTRAST — Alternate dramatically: if scene 1 is wide, scene 2 must be tight. Never put two similar-sized shots adjacent.
@@ -76,7 +75,7 @@ MANDATORY VARIATION RULES:
 QUALITY BAR — Each prompt must read like a professional cinematographer's shot description:
 
 MEDIOCRE: "[Close-up, Eye Level] A woman looking at camera"
-EXCELLENT: "[Close-up, Low Angle 15°] A young East Asian woman with jet-black waist-length hair and blunt bangs, captured at 85mm f/1.8. Rembrandt lighting casts a perfect triangle on her left cheek. She wears a cream silk mock-neck top with visible fabric texture. Chin slightly lowered, eyes looking up through dark lashes with quiet intensity. Shallow depth of field dissolves the underground parking garage into a wash of cool fluorescent bokeh. Rule of thirds composition with her face at the upper-right intersection. Skin has a porcelain quality against the industrial concrete tones. Negative: deformed hands, extra fingers, blurry face, changed outfit color, different hair length, outdoor setting, added jewelry not in original, distorted body proportions"
+EXCELLENT: "[Close-up, Low Angle 15°] A young East Asian woman with jet-black waist-length hair and blunt bangs, captured at 85mm f/1.8. Rembrandt lighting casts a perfect triangle on her left cheek. She wears a cream silk mock-neck top with visible fabric texture. Chin slightly lowered, eyes looking up through dark lashes with quiet intensity. Shallow depth of field dissolves the underground parking garage into a wash of cool fluorescent bokeh. Rule of thirds composition with her face at the upper-right intersection. Skin has a porcelain quality against the industrial concrete tones."
 
 AVAILABLE SHOT TYPES: {shot_types}
 AVAILABLE CAMERA ANGLES: {camera_angles}
@@ -87,9 +86,11 @@ The shotType and cameraAngle fields must match.
 {scene_context}
 
 OUTPUT: ONLY a valid JSON array. NO markdown, NO code fences, NO extra text.
-Fields: text, shotType, expression, pose, cameraAngle
+Fields: text, shotType, expression, pose, cameraAngle, negativePrompt
 
-[{{"text": "[Wide Shot, Low Angle 30°] ...", "shotType": "Wide Shot", "expression": "...", "pose": "...", "cameraAngle": "Low Angle 30°"}}]
+The "negativePrompt" field is MANDATORY. It must contain things to avoid: deformed hands, extra fingers, blurry face, changed outfit, wrong hair, different location, added props not in original, distorted proportions. Tailor it to each scene.
+
+[{{"text": "[Wide Shot, Low Angle 30°] ...", "shotType": "Wide Shot", "expression": "...", "pose": "...", "cameraAngle": "Low Angle 30°", "negativePrompt": "deformed hands, extra fingers, blurry face, changed outfit color, different hair, outdoor setting, distorted body proportions"}}]
 """
 
 PHOTOSET_INSTRUCTION = """You are a world-class fashion and editorial photography director. You create prompt sets that would make Vogue, Harper's Bazaar, and Dazed editors take notice.
@@ -106,7 +107,6 @@ Lock in these constants (they NEVER change between prompts):
 - PHYSICAL ENVIRONMENT GROUNDING: ALL prompts use the EXACT same location from the reference. Do NOT invent new environments, weather effects, or objects not visible in the original. If it's indoors, it stays indoors. No random outdoor elements.
 - CHARACTER BODY SYNC: Body proportions, skin tone, hair, facial features, and outfit are PIXEL-IDENTICAL to the reference. Never change body type, add tattoos, change hair color, or modify the outfit.
 - NO NONSENSE: No fantasy elements, impossible physics, or objects that don't exist in the reference scene. No random wind, rain, fog, floating particles, or dramatic weather unless clearly present in the original.
-- NEGATIVE PROMPT: End each "text" field with "Negative: [list]" — always include: deformed hands, extra fingers, blurry face, changed outfit, wrong hair color/length, different location, added props not in original, distorted body proportions.
 
 STEP 2 — GENERATE {count} EDITORIAL VARIATIONS
 Keep character/outfit/setting IDENTICAL. Create dramatic visual variety through:
@@ -145,7 +145,7 @@ DEPTH OF FIELD: Alternate between creamy shallow bokeh (f/1.4-2.8) and sharp env
 
 QUALITY BAR:
 MEDIOCRE: "[Full Shot, Eye Level] A woman standing with hands on hips"
-EXCELLENT: "[Full Shot, Low Angle 30°] A young East Asian woman with jet-black waist-length hair stands in powerful contrapposto, weight shifted to her right leg, left hand resting on her hip with fingers splayed across cream cargo fabric. Shot at 35mm f/5.6 with deep focus — the symmetrical rows of luxury sedans create perfect leading lines converging behind her. Hard overhead fluorescent light casts defined shadows beneath her cheekbones. She gazes past the camera with detached editorial authority. The cream bodysuit's mock-neck catches a highlight strip along her clavicle. Negative: deformed hands, extra fingers, changed outfit color, different hair style, outdoor setting, added accessories, distorted body proportions, blurry face"
+EXCELLENT: "[Full Shot, Low Angle 30°] A young East Asian woman with jet-black waist-length hair stands in powerful contrapposto, weight shifted to her right leg, left hand resting on her hip with fingers splayed across cream cargo fabric. Shot at 35mm f/5.6 with deep focus — the symmetrical rows of luxury sedans create perfect leading lines converging behind her. Hard overhead fluorescent light casts defined shadows beneath her cheekbones. She gazes past the camera with detached editorial authority. The cream bodysuit's mock-neck catches a highlight strip along her clavicle."
 
 AVAILABLE SHOT TYPES: {shot_types}
 AVAILABLE CAMERA ANGLES: {camera_angles}
@@ -156,9 +156,11 @@ shotType and cameraAngle fields must match.
 {scene_context}
 
 OUTPUT: ONLY a valid JSON array. NO markdown, NO code fences, NO extra text.
-Fields: text, shotType, expression, pose, cameraAngle
+Fields: text, shotType, expression, pose, cameraAngle, negativePrompt
 
-[{{"text": "[Medium Shot, Three-Quarter Right] ...", "shotType": "Medium Shot", "expression": "calm confident gaze", "pose": "hands on hips, weight on back leg", "cameraAngle": "Three-Quarter Right"}}]
+The "negativePrompt" field is MANDATORY. Include: deformed hands, extra fingers, blurry face, changed outfit, wrong hair color/length, different location, added props, distorted body. Tailor per scene.
+
+[{{"text": "[Medium Shot, Three-Quarter Right] ...", "shotType": "Medium Shot", "expression": "calm confident gaze", "pose": "hands on hips, weight on back leg", "cameraAngle": "Three-Quarter Right", "negativePrompt": "deformed hands, extra fingers, blurry face, changed outfit, wrong hair, different location, distorted proportions"}}]
 """
 
 REFINE_INSTRUCTION = """You are a professional photography and storyboard prompt expert with deep cinematography knowledge. You previously generated a set of prompts.
@@ -175,10 +177,10 @@ RULES:
 - Ensure dramatic visual variety across the full set (no adjacent scenes with similar shot sizes)
 
 OUTPUT: ONLY a valid JSON array. NO markdown, NO code fences, NO extra text.
-Fields: text, shotType, expression, pose, cameraAngle
+Fields: text, shotType, expression, pose, cameraAngle, negativePrompt
 Return ALL prompts (not just modified ones).
 
-[{{"text": "[Close-up, Eye Level] ...", "shotType": "Close-up", "expression": "...", "pose": "...", "cameraAngle": "Eye Level"}}]
+[{{"text": "[Close-up, Eye Level] ...", "shotType": "Close-up", "expression": "...", "pose": "...", "cameraAngle": "Eye Level", "negativePrompt": "deformed hands, extra fingers, blurry face, changed outfit, wrong hair, different location"}}]
 """
 
 

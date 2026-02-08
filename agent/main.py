@@ -77,6 +77,7 @@ class PromptItem(BaseModel):
     expression: str
     pose: str
     cameraAngle: str
+    negativePrompt: str = ""
 
 
 class GenerateResponse(BaseModel):
@@ -139,6 +140,7 @@ def prompts_to_response(raw_prompts: list[dict]) -> list[PromptItem]:
             expression=p.get("expression", ""),
             pose=p.get("pose", ""),
             cameraAngle=p.get("cameraAngle", ""),
+            negativePrompt=p.get("negativePrompt", p.get("negative_prompt", "")),
         ))
     return items
 
