@@ -55,3 +55,4 @@ nul
 
 # Generated video files (local dev)
 generated-videos/
+.mcp.json
