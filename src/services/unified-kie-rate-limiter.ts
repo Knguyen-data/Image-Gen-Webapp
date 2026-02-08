@@ -74,14 +74,21 @@ export const consumeToken = (): boolean => {
 
 /**
  * Wait until a token is available, then consume it
+ * Atomic check-and-consume to avoid TOCTOU race condition
  */
 export const waitForSlot = async (): Promise<void> => {
-  while (!canMakeRequest()) {
-    const waitTime = getTimeUntilNextToken();
-    console.log(`[KieRateLimiter] Waiting ${waitTime}ms for rate limit slot`);
-    await new Promise(resolve => setTimeout(resolve, Math.max(100, waitTime)));
+  let acquired = false;
+  while (!acquired) {
+    refillTokens();
+    if (bucket.tokens > 0) {
+      bucket.tokens--;
+      acquired = true;
+    } else {
+      const waitTime = getTimeUntilNextToken();
+      console.log(`[KieRateLimiter] Waiting ${waitTime}ms for rate limit slot`);
+      await new Promise(resolve => setTimeout(resolve, Math.max(100, waitTime)));
+    }
   }
-  consumeToken();
 };
 
 /**

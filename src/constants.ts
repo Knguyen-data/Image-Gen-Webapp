@@ -79,3 +79,6 @@ export const DEFAULT_UNIFIED_VIDEO_SETTINGS: UnifiedVideoSettings = {
   klingProNegativePrompt: '',
   klingProGenerateAudio: false,
 };
+
+// Maximum reference images per prompt
+export const MAX_REFERENCE_IMAGES = 7;

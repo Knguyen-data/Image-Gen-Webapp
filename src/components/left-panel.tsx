@@ -1,9 +1,11 @@
 import React, { useState, useRef } from 'react';
 import { AppSettings, PromptItem, ReferenceImage, ImageSize, SeedreamQuality, AppMode, VideoScene, VideoSettings, VideoModel, KlingProDuration, KlingProAspectRatio } from '../types';
-import { ASPECT_RATIO_LABELS, IMAGE_SIZE_LABELS, SEEDREAM_QUALITY_LABELS, DEFAULT_SETTINGS } from '../constants';
+import { ASPECT_RATIO_LABELS, IMAGE_SIZE_LABELS, SEEDREAM_QUALITY_LABELS, DEFAULT_SETTINGS, MAX_REFERENCE_IMAGES } from '../constants';
 import BulkInputModal from './bulk-input-modal';
 import VideoSceneQueue from './video-scene-queue';
 import VideoTrimmerModal from './video-trimmer-modal';
+import VideoReferenceModal from './video-reference-modal';
+import PromptGenerator from './prompt-generator';
 
 interface LeftPanelProps {
   prompts: PromptItem[];
@@ -68,6 +70,11 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
   const [trimmerIsGlobal, setTrimmerIsGlobal] = useState(false);
   const [trimmerSceneId, setTrimmerSceneId] = useState<string | undefined>();
 
+  // Video reference modal state (image mode - extract frames from video)
+  const [videoRefOpen, setVideoRefOpen] = useState(false);
+  const [videoRefFile, setVideoRefFile] = useState<File | null>(null);
+  const [videoRefPromptIndex, setVideoRefPromptIndex] = useState(0);
+
   // Use parent video model state (no local shadow)
   const selectedVideoModel = videoModelProp;
   const setSelectedVideoModel = setVideoModelProp;
@@ -101,22 +108,29 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
     });
   };
 
-  const processFiles = async (files: FileList | null): Promise<ReferenceImage[]> => {
-    if (!files) return [];
+  const processFiles = async (files: FileList | null): Promise<{ images: ReferenceImage[], nonImageCount: number }> => {
+    if (!files) return { images: [], nonImageCount: 0 };
     const promises: Promise<ReferenceImage>[] = [];
+    let nonImageCount = 0;
     for (let i = 0; i < files.length; i++) {
       if (files[i].type.startsWith('image/')) {
         promises.push(handleImageUpload(files[i]));
+      } else {
+        nonImageCount++;
       }
     }
-    return Promise.all(promises);
+    const images = await Promise.all(promises);
+    return { images, nonImageCount };
   };
 
   // --- FIXED BLOCK IMAGES ---
   const addFixedBlockImages = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newImages = await processFiles(e.target.files);
+    const { images, nonImageCount } = await processFiles(e.target.files);
+    if (nonImageCount > 0) {
+      alert(`Only image files are supported. ${nonImageCount} non-image file(s) were ignored.`);
+    }
     const current = safeSettings.fixedBlockImages || [];
-    setSettings({ ...safeSettings, fixedBlockImages: [...current, ...newImages] });
+    setSettings({ ...safeSettings, fixedBlockImages: [...current, ...images] });
     if (fixedBlockFileRef.current) fixedBlockFileRef.current.value = '';
   };
 
@@ -126,10 +140,54 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
   };
 
   // --- LOCAL REFERENCE ---
+  const VIDEO_MIME_TYPES = ['video/mp4', 'video/quicktime', 'video/webm'];
+
   const addLocalImages = async (promptIndex: number, files: FileList | null) => {
-    const newImages = await processFiles(files);
+    if (!files) return;
+
+    // Check if any dropped file is a video (image mode only)
+    if (!isVideoMode) {
+      const videoFiles: File[] = [];
+      for (let i = 0; i < files.length; i++) {
+        if (VIDEO_MIME_TYPES.includes(files[i].type)) {
+          videoFiles.push(files[i]);
+        }
+      }
+
+      if (videoFiles.length > 0) {
+        // Open video reference modal for the first video file
+        setVideoRefFile(videoFiles[0]);
+        setVideoRefPromptIndex(promptIndex);
+        setVideoRefOpen(true);
+        if (videoFiles.length > 1) {
+          alert(`Only the first video (${videoFiles[0].name}) will be processed. ${videoFiles.length - 1} additional video(s) were ignored.`);
+        }
+        return;
+      }
+    }
+
+    const { images, nonImageCount } = await processFiles(files);
+    if (nonImageCount > 0) {
+      alert(`Only image files are supported. ${nonImageCount} non-image file(s) were ignored.`);
+    }
+
     const newPrompts = [...prompts];
-    newPrompts[promptIndex].referenceImages = [...newPrompts[promptIndex].referenceImages, ...newImages];
+    const currentRefCount = newPrompts[promptIndex].referenceImages.length;
+    const totalAfterAdd = currentRefCount + images.length;
+
+    if (totalAfterAdd > MAX_REFERENCE_IMAGES) {
+      const allowedCount = MAX_REFERENCE_IMAGES - currentRefCount;
+      if (allowedCount <= 0) {
+        alert(`Maximum of ${MAX_REFERENCE_IMAGES} reference images per prompt reached. Remove some images before adding more.`);
+        return;
+      }
+      // Truncate to fit limit
+      const truncatedImages = images.slice(0, allowedCount);
+      newPrompts[promptIndex].referenceImages = [...newPrompts[promptIndex].referenceImages, ...truncatedImages];
+      alert(`Only ${allowedCount} of ${images.length} image(s) added. Maximum ${MAX_REFERENCE_IMAGES} reference images per prompt.`);
+    } else {
+      newPrompts[promptIndex].referenceImages = [...newPrompts[promptIndex].referenceImages, ...images];
+    }
     setPrompts(newPrompts);
   };
 
@@ -284,6 +342,25 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
         maxDuration={trimmerMaxDuration}
         onConfirm={handleTrimmerConfirm}
         onCancel={handleTrimmerCancel}
+      />
+
+      <VideoReferenceModal
+        isOpen={videoRefOpen}
+        file={videoRefFile}
+        onConfirm={(images) => {
+          const newPrompts = [...prompts];
+          newPrompts[videoRefPromptIndex].referenceImages = [
+            ...newPrompts[videoRefPromptIndex].referenceImages,
+            ...images,
+          ];
+          setPrompts(newPrompts);
+          setVideoRefOpen(false);
+          setVideoRefFile(null);
+        }}
+        onCancel={() => {
+          setVideoRefOpen(false);
+          setVideoRefFile(null);
+        }}
       />
 
       <div className="flex flex-col h-full bg-gray-900 border-r border-gray-800 p-0 overflow-y-auto w-full md:w-[450px] shrink-0 custom-scrollbar relative">
@@ -759,7 +836,7 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
               {prompts.map((pItem, index) => {
                 const fixedCount = safeSettings.fixedBlockEnabled ? fixedBlockImages.length : 0;
                 const totalCardRefs = pItem.referenceImages.length + fixedCount;
-                const isOverLimit = totalCardRefs > 7;
+                const isOverLimit = totalCardRefs > MAX_REFERENCE_IMAGES;
 
                 return (
                   <div key={pItem.id} className="relative group animate-in slide-in-from-left-2 duration-200">
@@ -817,7 +894,7 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
                         <div className="px-3 pb-3 flex flex-wrap gap-2 items-center rounded-b-lg">
                           {pItem.referenceImages.map(img => (
                             <div key={img.id} className="relative w-10 h-10 rounded overflow-hidden group/img border border-gray-700">
-                              <img src={img.previewUrl} className="w-full h-full object-cover" alt="ref" />
+                              {img.previewUrl && <img src={img.previewUrl} className="w-full h-full object-cover" alt="ref" />}
                               <button
                                 onClick={() => removeLocalImage(index, img.id)}
                                 className="absolute inset-0 bg-black/60 opacity-0 group-hover/img:opacity-100 flex items-center justify-center text-white"
@@ -827,10 +904,10 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
                             </div>
                           ))}
                           <label className="w-10 h-10 flex items-center justify-center border border-dashed border-gray-700 rounded hover:border-dash-300 hover:bg-gray-900 cursor-pointer text-gray-500 hover:text-dash-300 transition-colors" title="Click or Drag onto card">
-                            <input type="file" multiple accept="image/*" className="hidden" onChange={(e) => addLocalImages(index, e.target.files)} />
+                            <input type="file" multiple accept="image/*,video/mp4,video/quicktime,video/webm" className="hidden" onChange={(e) => addLocalImages(index, e.target.files)} />
                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
                           </label>
-                          {isOverLimit && <span className="text-[10px] text-red-400 font-bold ml-auto">Max 7 imgs exceeded!</span>}
+                          {isOverLimit && <span className="text-[10px] text-red-400 font-bold ml-auto">Max {MAX_REFERENCE_IMAGES} imgs exceeded!</span>}
                         </div>
 
                         {prompts.length > 1 && (
@@ -879,9 +956,12 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
               e.currentTarget.classList.add('border-gray-800');
               const files = e.dataTransfer.files;
               if (files && files.length > 0) {
-                const newImages = await processFiles(files);
+                const { images, nonImageCount } = await processFiles(files);
+                if (nonImageCount > 0) {
+                  alert(`Only image files are supported. ${nonImageCount} non-image file(s) were ignored.`);
+                }
                 const current = safeSettings.fixedBlockImages || [];
-                setSettings({ ...safeSettings, fixedBlockImages: [...current, ...newImages] });
+                setSettings({ ...safeSettings, fixedBlockImages: [...current, ...images] });
               }
             }}
             onPaste={async (e) => {
@@ -899,9 +979,12 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
                   length: imageFiles.length,
                   item: (index: number) => imageFiles[index]
                 }) as unknown as FileList;
-                const newImages = await processFiles(fileList);
+                const { images, nonImageCount } = await processFiles(fileList);
+                if (nonImageCount > 0) {
+                  alert(`Only image files are supported. ${nonImageCount} non-image file(s) were ignored.`);
+                }
                 const current = safeSettings.fixedBlockImages || [];
-                setSettings({ ...safeSettings, fixedBlockImages: [...current, ...newImages] });
+                setSettings({ ...safeSettings, fixedBlockImages: [...current, ...images] });
               }
             }}
           >
@@ -959,7 +1042,7 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
             <div className={`flex flex-wrap gap-2 items-center transition-opacity ${!safeSettings.fixedBlockEnabled && 'opacity-50'}`}>
               {fixedBlockImages.map(img => (
                 <div key={img.id} className="relative w-12 h-12 rounded overflow-hidden group border border-gray-700">
-                  <img src={img.previewUrl} className="w-full h-full object-contain" alt="fixed ref" />
+                  {img.previewUrl && <img src={img.previewUrl} className="w-full h-full object-contain" alt="fixed ref" />}
                   <button
                     onClick={() => removeFixedBlockImage(img.id)}
                     className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white"
@@ -977,6 +1060,18 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
               )}
             </div>
           </div>
+
+          {/* --- PROMPT GENERATOR --- */}
+          <PromptGenerator
+            prompts={prompts}
+            setPrompts={setPrompts}
+            hasApiKey={hasApiKey}
+            existingReferenceImage={
+              prompts[activePromptIndex]?.referenceImages?.[0] ||
+              (safeSettings.fixedBlockEnabled ? fixedBlockImages[0] : null) ||
+              null
+            }
+          />
 
           {/* --- SHARED SETTINGS (Aspect Ratio, Image Quality, Temp) --- */}
           <div className="grid grid-cols-2 gap-4">

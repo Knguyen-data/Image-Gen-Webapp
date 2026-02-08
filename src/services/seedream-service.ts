@@ -40,6 +40,7 @@ export const uploadImageBase64 = async (
       base64Data: dataUrl,
       uploadPath: 'seedream/inputs',
     }),
+    signal: AbortSignal.timeout(30000),
   });
 
   if (!response.ok) {
@@ -51,7 +52,12 @@ export const uploadImageBase64 = async (
     throw new Error(`Upload failed: ${response.status} ${response.statusText}`);
   }
 
-  const result = await response.json();
+  // Handle both real Response API and test mocks
+  const text = await (('text' in response)
+    ? response.text()
+    : JSON.stringify(await response.json()));
+  if (!text) throw new Error('Empty response from server');
+  const result = JSON.parse(text);
 
   if (result.code !== 200 || !result.success) {
     logger.error('Seedream', 'Upload error', { msg: result.msg });
@@ -91,6 +97,7 @@ export const createEditTask = async (
         quality: settings.quality,
       },
     }),
+    signal: AbortSignal.timeout(30000),
   });
 
   if (!response.ok) {
@@ -110,7 +117,12 @@ export const createEditTask = async (
     throw new Error(`Task creation failed: ${response.status} ${response.statusText}`);
   }
 
-  const result = await response.json();
+  // Handle both real Response API and test mocks
+  const text = await (('text' in response)
+    ? response.text()
+    : JSON.stringify(await response.json()));
+  if (!text) throw new Error('Empty response from server');
+  const result = JSON.parse(text);
 
   if (result.code !== 200) {
     logger.error('Seedream', 'Task creation error', { msg: result.msg });
@@ -133,13 +145,19 @@ export const queryTask = async (
     headers: {
       'Authorization': `Bearer ${apiKey}`,
     },
+    signal: AbortSignal.timeout(30000),
   });
 
   if (!response.ok) {
     throw new Error(`Query failed: ${response.status} ${response.statusText}`);
   }
 
-  const result = await response.json();
+  // Handle both real Response API and test mocks
+  const text = await (('text' in response)
+    ? response.text()
+    : JSON.stringify(await response.json()));
+  if (!text) throw new Error('Empty response from server');
+  const result = JSON.parse(text);
 
   if (result.code !== 200) {
     throw new Error(`Query failed: ${result.msg || 'Unknown error'}`);
@@ -201,10 +219,14 @@ export const pollForResult = async (
  * Download image from URL and convert to base64
  */
 export const downloadImageAsBase64 = async (url: string): Promise<{ base64: string; mimeType: string }> => {
-  const response = await fetch(url);
+  const response = await fetch(url, { signal: AbortSignal.timeout(30000) });
 
   if (!response.ok) {
     throw new Error(`Download failed: ${response.status} ${response.statusText}`);
+  }
+
+  if (!response.body) {
+    throw new Error('Empty response body from server');
   }
 
   const blob = await response.blob();
