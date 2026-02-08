@@ -18,6 +18,7 @@ export interface ReferenceImage {
 export interface PromptItem {
   id: string;
   text: string;
+  negativePrompt?: string;
   referenceImages: ReferenceImage[];
 }
 

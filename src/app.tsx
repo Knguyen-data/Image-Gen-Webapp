@@ -595,6 +595,7 @@ INSTRUCTIONS:
         taskQueue.push({
           id: crypto.randomUUID(),
           prompt: finalPrompt,
+          negativePrompt: item.negativePrompt || undefined,
           refs: allRefs,
           settings: settings
         });

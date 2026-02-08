@@ -41,15 +41,25 @@ export const MODE_DEFAULTS = {
  * Otherwise the shot type and camera angle are prepended as `[ShotType, CameraAngle]`.
  */
 export function buildFullPromptText(gp: GeneratedPrompt): string {
-  // If text already has bracket prefix, use as-is
-  if (gp.text.startsWith('[')) return gp.text;
-  // Otherwise prepend shot type + angle
-  const parts: string[] = [];
-  if (gp.shotType || gp.cameraAngle) {
-    parts.push(`[${gp.shotType || 'Medium Shot'}, ${gp.cameraAngle || 'Eye Level'}]`);
+  // If text already has bracket prefix, use as-is; otherwise prepend shot type + angle
+  let result: string;
+  if (gp.text.startsWith('[')) {
+    result = gp.text;
+  } else {
+    const parts: string[] = [];
+    if (gp.shotType || gp.cameraAngle) {
+      parts.push(`[${gp.shotType || 'Medium Shot'}, ${gp.cameraAngle || 'Eye Level'}]`);
+    }
+    parts.push(gp.text);
+    result = parts.join(' ');
   }
-  parts.push(gp.text);
-  return parts.join(' ');
+
+  // Append negative prompt if present
+  if (gp.negativePrompt && gp.negativePrompt.trim()) {
+    result += `\n\nAvoid: ${gp.negativePrompt.trim()}`;
+  }
+
+  return result;
 }
 
 /**

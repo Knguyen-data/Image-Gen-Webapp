@@ -200,6 +200,7 @@ const PromptGenerator: React.FC<PromptGeneratorProps> = ({
     const newPrompt: PromptItem = {
       id: crypto.randomUUID(),
       text: buildFullPromptText(gp),
+      negativePrompt: gp.negativePrompt || undefined,
       referenceImages: activeRef ? [{ ...activeRef, id: crypto.randomUUID() }] : [],
     };
     if (prompts.length === 1 && prompts[0].text.trim() === '') {
@@ -214,6 +215,7 @@ const PromptGenerator: React.FC<PromptGeneratorProps> = ({
     const newPrompts: PromptItem[] = generatedPrompts.map(gp => ({
       id: crypto.randomUUID(),
       text: buildFullPromptText(gp),
+      negativePrompt: gp.negativePrompt || undefined,
       referenceImages: activeRef ? [{ ...activeRef, id: crypto.randomUUID() }] : [],
     }));
     if (prompts.length === 1 && prompts[0].text.trim() === '') {

@@ -6,6 +6,7 @@ import { GeneratedImage, AppSettings, ReferenceImage } from '../types';
 export interface QueueTask {
   id: string;
   prompt: string;
+  negativePrompt?: string;
   refs: ReferenceImage[];
   settings: AppSettings;
 }
