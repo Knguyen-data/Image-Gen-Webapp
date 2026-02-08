@@ -3,6 +3,11 @@ import { VideoScene, VideoSettings, ReferenceImage, ReferenceVideo } from '../ty
 import { validateVideoFile } from '../services/kling-motion-control-service';
 import { VIDEO_CONSTRAINTS } from '../constants';
 import { getVideoDuration } from '../utils/video-dimensions';
+import {
+  generateMotionPrompts,
+  MotionStylePreset,
+  MOTION_STYLE_OPTIONS,
+} from '../services/motion-director-service';
 
 interface VideoSceneQueueProps {
   scenes: VideoScene[];
@@ -14,6 +19,7 @@ interface VideoSceneQueueProps {
   onGenerate: () => void;
   isGenerating: boolean;
   hideReferenceVideo?: boolean;
+  geminiApiKey?: string;
 }
 
 const VideoSceneQueue: React.FC<VideoSceneQueueProps> = ({
@@ -25,13 +31,67 @@ const VideoSceneQueue: React.FC<VideoSceneQueueProps> = ({
   appMode,
   onGenerate,
   isGenerating,
-  hideReferenceVideo = false
+  hideReferenceVideo = false,
+  geminiApiKey = ''
 }) => {
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   const [globalVideoDragOver, setGlobalVideoDragOver] = useState(false);
   const [perSceneVideoDragOver, setPerSceneVideoDragOver] = useState<string | null>(null);
   const globalVideoRef = useRef<HTMLInputElement>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
+
+  // Auto Motion state
+  const [showStylePicker, setShowStylePicker] = useState(false);
+  const [isAutoMotion, setIsAutoMotion] = useState(false);
+  const [autoMotionError, setAutoMotionError] = useState<string | null>(null);
+
+  // Auto Motion handler
+  const handleAutoMotion = async (preset: MotionStylePreset) => {
+    setShowStylePicker(false);
+    if (!geminiApiKey) {
+      setAutoMotionError('Set your Gemini API key first');
+      setTimeout(() => setAutoMotionError(null), 3000);
+      return;
+    }
+
+    const scenesWithImages = scenes.filter(s => s.referenceImage);
+    if (scenesWithImages.length === 0) {
+      setAutoMotionError('Add images to scenes first');
+      setTimeout(() => setAutoMotionError(null), 3000);
+      return;
+    }
+
+    setIsAutoMotion(true);
+    setAutoMotionError(null);
+
+    try {
+      const images = scenesWithImages.map(s => ({
+        base64: s.referenceImage.base64,
+        mime_type: s.referenceImage.mimeType,
+      }));
+
+      const result = await generateMotionPrompts(geminiApiKey, images, preset);
+
+      // Auto-fill prompts into scenes
+      const updated = scenes.map((scene, i) => {
+        const match = result.prompts.find(p => p.scene_index === i);
+        if (match && scene.referenceImage) {
+          return {
+            ...scene,
+            prompt: match.motion_prompt,
+            usePrompt: true,
+          };
+        }
+        return scene;
+      });
+      setScenes(updated);
+    } catch (err: any) {
+      setAutoMotionError(err.message || 'Motion Director failed');
+      setTimeout(() => setAutoMotionError(null), 5000);
+    } finally {
+      setIsAutoMotion(false);
+    }
+  };
 
   // Handle drop of video file onto global video zone
   const handleGlobalVideoDrop = async (e: React.DragEvent) => {
@@ -544,6 +604,51 @@ const VideoSceneQueue: React.FC<VideoSceneQueueProps> = ({
           </div>
         )}
       </div>
+
+      {/* Auto Motion Button */}
+      {scenes.length > 0 && scenes.some(s => s.referenceImage) && (
+        <div className="relative mb-2">
+          {autoMotionError && (
+            <p className="text-xs text-red-400 mb-1">{autoMotionError}</p>
+          )}
+          <button
+            onClick={() => setShowStylePicker(!showStylePicker)}
+            disabled={isAutoMotion || isGenerating}
+            className="w-full py-2.5 font-medium rounded-lg transition-all flex items-center justify-center gap-2 border border-purple-500/50 bg-purple-500/10 hover:bg-purple-500/20 text-purple-300 disabled:opacity-50"
+          >
+            {isAutoMotion ? (
+              <>
+                <div className="w-4 h-4 border-2 border-purple-400 border-t-transparent rounded-full animate-spin"></div>
+                Generating motion prompts...
+              </>
+            ) : (
+              <>
+                ✨ Auto Motion Prompts
+              </>
+            )}
+          </button>
+
+          {/* Style Preset Picker */}
+          {showStylePicker && !isAutoMotion && (
+            <div className="absolute bottom-full left-0 right-0 mb-1 bg-gray-800 border border-gray-600 rounded-lg shadow-xl z-50 max-h-64 overflow-y-auto">
+              <p className="text-xs text-gray-400 px-3 pt-2 pb-1">Pick a style:</p>
+              {MOTION_STYLE_OPTIONS.map(opt => (
+                <button
+                  key={opt.value}
+                  onClick={() => handleAutoMotion(opt.value)}
+                  className="w-full px-3 py-2 text-left hover:bg-gray-700 flex items-center gap-2 transition-colors"
+                >
+                  <span className="text-lg">{opt.icon}</span>
+                  <div>
+                    <p className="text-sm text-white font-medium">{opt.label}</p>
+                    <p className="text-xs text-gray-400">{opt.description}</p>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Generate Button */}
       {scenes.length > 0 && (

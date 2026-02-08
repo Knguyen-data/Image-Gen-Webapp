@@ -33,6 +33,7 @@ interface LeftPanelProps {
   videoSettings?: VideoSettings;
   setVideoSettings?: (settings: VideoSettings) => void;
   onVideoGenerate?: () => void;
+  geminiApiKey?: string;
 }
 
 const LeftPanel: React.FC<LeftPanelProps> = ({
@@ -58,6 +59,7 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
   videoSettings,
   setVideoSettings = (_settings: VideoSettings) => {},
   onVideoGenerate = () => {},
+  geminiApiKey = '',
 }) => {
   const [activePromptIndex, setActivePromptIndex] = useState(0);
   const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
@@ -533,6 +535,7 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
                     appMode={appMode}
                     onGenerate={onVideoGenerate}
                     isGenerating={isGenerating}
+                    geminiApiKey={geminiApiKey}
                   />
                 </div>
 
@@ -677,6 +680,7 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
                     onGenerate={onVideoGenerate}
                     isGenerating={isGenerating}
                     hideReferenceVideo
+                    geminiApiKey={geminiApiKey}
                   />
                 </div>
 

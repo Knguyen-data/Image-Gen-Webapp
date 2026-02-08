@@ -1283,6 +1283,7 @@ INSTRUCTIONS:
             videoSettings={videoSettings}
             setVideoSettings={setVideoSettings}
             onVideoGenerate={handleVideoGenerate}
+            geminiApiKey={apiKey}
           />
           <RightPanel
             runs={runs}
