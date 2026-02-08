@@ -1,4 +1,5 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
+import { logger, LogEntry } from '../services/logger';
 
 export interface ActivityJob {
   id: string;
@@ -37,12 +38,39 @@ export const useActivityQueue = () => {
 
   const addLog = useCallback((log: Omit<ActivityLog, 'timestamp'>) => {
     const newLog: ActivityLog = { ...log, timestamp: Date.now() };
-    setLogs(prev => [...prev.slice(-99), newLog]); // Keep last 100 logs
+    setLogs(prev => [...prev.slice(-199), newLog]); // Keep last 200 logs
   }, []);
 
   const clearCompletedJobs = useCallback(() => {
     setJobs(prev => prev.filter(j => j.status !== 'completed' && j.status !== 'failed'));
   }, []);
+
+  // Bridge logger -> ActivityPanel (RAF-batched)
+  const rafBuffer = useRef<LogEntry[]>([]);
+  const rafId = useRef<number>(0);
+
+  useEffect(() => {
+    const unsub = logger.subscribe((entry) => {
+      if (entry.level === 'debug') return; // skip debug (too noisy)
+      rafBuffer.current.push(entry);
+      if (!rafId.current) {
+        rafId.current = requestAnimationFrame(() => {
+          const batch = rafBuffer.current.splice(0);
+          for (const e of batch) {
+            addLog({
+              level: e.level as 'info' | 'warn' | 'error',
+              message: `[${e.context}] ${e.message}`,
+            });
+          }
+          rafId.current = 0;
+        });
+      }
+    });
+    return () => {
+      unsub();
+      if (rafId.current) cancelAnimationFrame(rafId.current);
+    };
+  }, [addLog]);
 
   const activeJobs = jobs.filter(j => j.status === 'active' || j.status === 'pending');
   const hasActiveJobs = activeJobs.length > 0;

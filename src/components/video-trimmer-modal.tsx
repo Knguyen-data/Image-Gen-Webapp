@@ -1,5 +1,4 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { detectVideoDimensions, getVideoAspectRatioCSS } from '../utils/video-dimensions';
 
 interface VideoTrimmerModalProps {
   isOpen: boolean;
@@ -22,7 +21,6 @@ const VideoTrimmerModal: React.FC<VideoTrimmerModalProps> = ({
   const [endTime, setEndTime] = useState<number>(maxDuration);
   const [currentTime, setCurrentTime] = useState<number>(0);
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
-  const [aspectRatio, setAspectRatio] = useState<string>('16/9');
   const videoRef = useRef<HTMLVideoElement>(null);
 
   // Load video when file changes
@@ -33,19 +31,6 @@ const VideoTrimmerModal: React.FC<VideoTrimmerModalProps> = ({
       return () => URL.revokeObjectURL(url);
     }
   }, [file]);
-
-  // Detect aspect ratio when video URL changes
-  useEffect(() => {
-    if (videoUrl) {
-      detectVideoDimensions(videoUrl)
-        .then(dims => {
-          setAspectRatio(getVideoAspectRatioCSS(dims));
-        })
-        .catch(err => {
-          console.warn('Failed to detect video dimensions in trimmer, using 16:9 fallback', err);
-        });
-    }
-  }, [videoUrl]);
 
   // Set initial end time when duration loads
   const handleLoadedMetadata = () => {
@@ -131,7 +116,7 @@ const VideoTrimmerModal: React.FC<VideoTrimmerModalProps> = ({
 
         {/* Video Player */}
         <div className="p-6 space-y-4">
-          <div className="relative bg-black rounded-lg overflow-hidden" style={{ aspectRatio }}>
+          <div className="relative aspect-video bg-black rounded-lg overflow-hidden">
             <video
               ref={videoRef}
               src={videoUrl}
@@ -162,7 +147,7 @@ const VideoTrimmerModal: React.FC<VideoTrimmerModalProps> = ({
             <div className="relative h-12 bg-gray-800 rounded">
               {/* Progress bar */}
               <div
-                className="absolute top-0 left-0 h-full bg-blue-600/30"
+                className="absolute top-0 left-0 h-full bg-dash-600/30"
                 style={{
                   left: `${(startTime / duration) * 100}%`,
                   width: `${((endTime - startTime) / duration) * 100}%`
@@ -197,7 +182,7 @@ const VideoTrimmerModal: React.FC<VideoTrimmerModalProps> = ({
                     step={0.1}
                     value={startTime}
                     onChange={(e) => handleStartChange(parseFloat(e.target.value))}
-                    className="flex-1 h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-500"
+                    className="flex-1 h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-dash-500"
                   />
                   <input
                     type="number"
@@ -222,7 +207,7 @@ const VideoTrimmerModal: React.FC<VideoTrimmerModalProps> = ({
                     step={0.1}
                     value={endTime}
                     onChange={(e) => handleEndChange(parseFloat(e.target.value))}
-                    className="flex-1 h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-500"
+                    className="flex-1 h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-dash-500"
                   />
                   <input
                     type="number"
@@ -265,7 +250,7 @@ const VideoTrimmerModal: React.FC<VideoTrimmerModalProps> = ({
           <button
             onClick={handleConfirm}
             disabled={!isValid}
-            className="px-6 py-2 bg-blue-600 hover:bg-blue-500 text-white font-semibold rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="px-6 py-2 bg-dash-700 hover:bg-dash-600 text-white font-semibold rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             Use This Clip
           </button>

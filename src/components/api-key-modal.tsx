@@ -132,7 +132,7 @@ const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/90 backdrop-blur-md p-4 animate-in fade-in duration-200">
-      <div className={`bg-gray-900 border ${isSpicyMode ? 'border-orange-500/30' : 'border-dash-300/30'} rounded-xl w-full max-w-md shadow-2xl relative`}>
+      <div className={`bg-gray-900 border ${isSpicyMode ? 'border-red-500/30' : 'border-dash-300/30'} rounded-xl w-full max-w-md shadow-2xl relative`}>
         <div className="p-6 space-y-4">
           {/* Tab Bar */}
           <div className="flex border-b border-gray-800 -mt-2 mb-4">
@@ -156,7 +156,7 @@ const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
               onClick={() => setActiveTab('spicy')}
               className={`flex-1 py-3 px-4 text-sm font-medium transition-colors border-b-2 ${
                 activeTab === 'spicy'
-                  ? 'text-orange-400 border-orange-500'
+                  ? 'text-red-400 border-red-500'
                   : 'text-gray-500 hover:text-gray-300 border-transparent'
               }`}
             >
@@ -171,7 +171,7 @@ const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
           </div>
 
           <div className="text-center">
-            <div className={`w-12 h-12 ${isSpicyMode ? 'bg-orange-900/50' : 'bg-dash-900/50'} rounded-full flex items-center justify-center mx-auto mb-3 ${isSpicyMode ? 'text-orange-400' : 'text-dash-300'}`}>
+            <div className={`w-12 h-12 ${isSpicyMode ? 'bg-red-900/50' : 'bg-dash-900/50'} rounded-full flex items-center justify-center mx-auto mb-3 ${isSpicyMode ? 'text-red-400' : 'text-dash-300'}`}>
               {isSpicyMode ? (
                 <span className="text-2xl">🌶️</span>
               ) : (
@@ -196,7 +196,7 @@ const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
                 errorMsg
                   ? 'border-red-500 focus:ring-red-500'
                   : isSpicyMode
-                    ? 'border-orange-700/50 focus:ring-orange-500'
+                    ? 'border-red-700/50 focus:ring-red-500'
                     : 'border-gray-700 focus:ring-dash-300'
               } rounded-lg py-3 pl-4 pr-10 text-sm text-white focus:ring-2 focus:border-transparent outline-none font-mono disabled:opacity-50 transition-colors`}
               placeholder={isSpicyMode ? "Enter Kie.ai API key..." : "Paste your Gemini API key..."}
@@ -241,11 +241,11 @@ const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
               disabled={isValidating}
               className={`flex-1 py-2 rounded-lg text-sm font-bold transition-colors disabled:opacity-70 disabled:cursor-not-allowed flex justify-center items-center gap-2 ${
                 isSpicyMode
-                  ? 'text-black bg-orange-500 hover:bg-orange-400'
+                  ? 'text-white bg-red-500 hover:bg-red-400'
                   : 'text-dash-900 bg-dash-300 hover:bg-dash-200'
               }`}
             >
-              {isValidating && <div className={`w-4 h-4 border-2 ${isSpicyMode ? 'border-black' : 'border-dash-900'} border-t-transparent rounded-full animate-spin`}></div>}
+              {isValidating && <div className={`w-4 h-4 border-2 ${isSpicyMode ? 'border-white' : 'border-dash-900'} border-t-transparent rounded-full animate-spin`}></div>}
               {isValidating ? 'Validating...' : 'Save Key'}
             </button>
           </div>
@@ -255,7 +255,7 @@ const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
               href={isSpicyMode ? "https://kie.ai" : "https://aistudio.google.com/app/apikey"}
               target="_blank"
               rel="noreferrer"
-              className={`text-xs ${isSpicyMode ? 'text-orange-400' : 'text-dash-300'} hover:underline`}
+              className={`text-xs ${isSpicyMode ? 'text-red-400' : 'text-dash-300'} hover:underline`}
             >
               Get {isSpicyMode ? 'Kie.ai' : 'Gemini'} API Key →
             </a>

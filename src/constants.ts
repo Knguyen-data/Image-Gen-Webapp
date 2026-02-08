@@ -3,18 +3,15 @@ import { AppSettings, UnifiedVideoSettings, VideoModel } from './types';
 // Reverting to the model ID user requested (Nano Banana Pro equivalent)
 export const GEMINI_MODEL_ID = 'gemini-3-pro-image-preview';
 
-export const DEFAULT_STYLE_HINT = `Brand: DashBooking
-Tone: Pastel Green, Clean, Minimalist, Tech-forward.
-Visuals: Soft gradients, rounded UI elements, eco-friendly vibe.`;
-
 export const DEFAULT_SETTINGS: AppSettings = {
   temperature: 1.0,
   outputCount: 1,
   aspectRatio: '9:16', // Default for mobile posters
   imageSize: '1K',
-  appendStyleHint: false,
-  styleHintRaw: DEFAULT_STYLE_HINT,
-  globalReferenceImages: [],
+  fixedBlockEnabled: false,
+  fixedBlockText: '',
+  fixedBlockImages: [],
+  fixedBlockPosition: 'bottom',
   safetyFilterEnabled: true, // Default: enabled (use API defaults)
   spicyMode: {
     enabled: false,
@@ -66,8 +63,6 @@ export const VIDEO_CONSTRAINTS = {
 // Video Model Labels
 export const VIDEO_MODEL_LABELS: Record<VideoModel, string> = {
   'kling-2.6': 'Kling 2.6 Motion Control',
-  'wan-2.2-move': 'Wan 2.2 Animate (Move)',
-  'wan-2.2-replace': 'Wan 2.2 Animate (Replace)',
 };
 
 // Default Unified Video Settings
@@ -76,5 +71,4 @@ export const DEFAULT_UNIFIED_VIDEO_SETTINGS: UnifiedVideoSettings = {
   referenceVideoMode: 'global',
   orientation: 'image',
   klingResolution: '720p',
-  wanResolution: '480p',
 };

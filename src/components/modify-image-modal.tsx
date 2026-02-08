@@ -113,7 +113,7 @@ const ModifyImageModal: React.FC<ModifyImageModalProps> = ({
         <div className="flex justify-between items-center p-5 border-b border-gray-800">
           <div>
             <h3 className="text-lg font-bold text-white flex items-center gap-2">
-              <svg className="w-5 h-5 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-5 h-5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
               </svg>
               Modify Image
@@ -166,7 +166,7 @@ const ModifyImageModal: React.FC<ModifyImageModalProps> = ({
                   onChange={(e) => setModifyPrompt(e.target.value)}
                   disabled={isLoading}
                   placeholder="E.g., Change the background to a sunset, add a rainbow, make it vintage style..."
-                  className="w-full h-32 bg-gray-950 border border-gray-800 rounded-lg p-3 text-sm text-gray-200 focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none resize-none disabled:opacity-50"
+                  className="w-full h-32 bg-gray-950 border border-gray-800 rounded-lg p-3 text-sm text-gray-200 focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none resize-none disabled:opacity-50"
                 />
               </div>
 
@@ -182,12 +182,12 @@ const ModifyImageModal: React.FC<ModifyImageModalProps> = ({
                     disabled={!hasGeminiKey || isLoading}
                     className={`p-3 rounded-lg border transition-all text-left ${
                       selectedModel === 'gemini'
-                        ? 'border-blue-500 bg-blue-900/20'
+                        ? 'border-dash-500 bg-dash-900/20'
                         : 'border-gray-700 bg-gray-900 hover:border-gray-600'
                     } ${!hasGeminiKey ? 'opacity-50 cursor-not-allowed' : ''}`}
                   >
                     <div className="flex items-center gap-2 mb-1">
-                      <span className="text-blue-400">🔷</span>
+                      <span className="text-dash-400">🔷</span>
                       <span className={`font-medium ${selectedModel === 'gemini' ? 'text-white' : 'text-gray-300'}`}>
                         Gemini
                       </span>
@@ -204,12 +204,12 @@ const ModifyImageModal: React.FC<ModifyImageModalProps> = ({
                     disabled={!hasKieApiKey || isLoading}
                     className={`p-3 rounded-lg border transition-all text-left ${
                       selectedModel === 'seedream'
-                        ? 'border-orange-500 bg-orange-900/20'
+                        ? 'border-red-500 bg-red-900/20'
                         : 'border-gray-700 bg-gray-900 hover:border-gray-600'
                     } ${!hasKieApiKey ? 'opacity-50 cursor-not-allowed' : ''}`}
                   >
                     <div className="flex items-center gap-2 mb-1">
-                      <span className="text-orange-400">🌶️</span>
+                      <span className="text-red-400">🌶️</span>
                       <span className={`font-medium ${selectedModel === 'seedream' ? 'text-white' : 'text-gray-300'}`}>
                         Seedream 4.5
                       </span>
@@ -256,7 +256,7 @@ const ModifyImageModal: React.FC<ModifyImageModalProps> = ({
                   onClick={() => fileInputRef.current?.click()}
                   className={`border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-all ${
                     isDragging
-                      ? 'border-purple-500 bg-purple-500/10'
+                      ? 'border-emerald-500 bg-emerald-500/10'
                       : 'border-gray-700 hover:border-gray-600 bg-gray-950'
                   } ${isLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
                 >
@@ -317,7 +317,7 @@ const ModifyImageModal: React.FC<ModifyImageModalProps> = ({
           <button
             onClick={handleSubmitClick}
             disabled={isLoading || !modifyPrompt.trim()}
-            className="px-6 py-2 rounded-lg text-sm font-bold text-white bg-purple-600 hover:bg-purple-500 transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            className="px-6 py-2 rounded-lg text-sm font-bold text-white bg-emerald-700 hover:bg-emerald-600 transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
           >
             {isLoading && (
               <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>

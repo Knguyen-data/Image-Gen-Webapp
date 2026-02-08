@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Run, GeneratedImage, AppMode, GeneratedVideo } from '../types';
 import ImageCard from './image-card';
 import VideoCard from './video-card';
+import { saveAndRevealVideo } from '../services/video-file-service';
 import JSZip from 'jszip';
 
 interface RightPanelProps {
@@ -202,6 +203,15 @@ const RightPanel: React.FC<RightPanelProps> = ({
     }
   };
 
+  const handleSaveAndRevealVideo = async (video: GeneratedVideo) => {
+    try {
+      await saveAndRevealVideo(video.url);
+    } catch (e) {
+      console.error("Save & reveal error", e);
+      alert("Failed to save and reveal video: " + (e as Error).message);
+    }
+  };
+
   if (compareMode) {
     const imagesToCompare = getSelectedImages();
     return (
@@ -384,7 +394,7 @@ const RightPanel: React.FC<RightPanelProps> = ({
       )}
 
       {/* Toolbar */}
-      <div className="h-16 border-b border-gray-800 flex items-center justify-between px-6 bg-gray-900/50 backdrop-blur-sm z-10 sticky top-0 relative">
+      <div className="h-16 border-b border-gray-800 flex items-center justify-between px-6 bg-gray-900/50 backdrop-blur-sm z-30 sticky top-0 relative">
         {/* Progress Bar */}
         {(isGenerating || isModifying) && (
           <div className="absolute top-0 left-0 right-0 h-1 bg-gray-800 overflow-hidden">
@@ -396,7 +406,7 @@ const RightPanel: React.FC<RightPanelProps> = ({
           <h2 className="font-semibold text-gray-200">
             {appMode === 'video' ? (
               <>
-                <span className="text-blue-400">Video</span> Gallery
+                <span className="text-dash-400">Video</span> Gallery
                 <span className="text-gray-500 font-normal ml-2">
                   ({allImages.length} images, {generatedVideos.length} videos)
                 </span>
@@ -414,14 +424,14 @@ const RightPanel: React.FC<RightPanelProps> = ({
           {/* Mode Toggle */}
           <div className="flex bg-gray-800 rounded-lg p-1 ml-2">
             <button
-              className={`px-3 py-1 rounded text-sm transition-all ${appMode === 'image' ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-gray-200'}`}
+              className={`px-3 py-1 rounded text-sm transition-all ${appMode === 'image' ? 'bg-dash-700 text-white' : 'text-gray-400 hover:text-gray-200'}`}
               onClick={() => setAppMode('image')}
               title="Image Mode"
             >
               🖼️
             </button>
             <button
-              className={`px-3 py-1 rounded text-sm transition-all ${appMode === 'video' ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-gray-200'}`}
+              className={`px-3 py-1 rounded text-sm transition-all ${appMode === 'video' ? 'bg-dash-700 text-white' : 'text-gray-400 hover:text-gray-200'}`}
               onClick={() => setAppMode('video')}
               title="Video Mode"
             >
@@ -457,7 +467,7 @@ const RightPanel: React.FC<RightPanelProps> = ({
           <div className="h-full flex flex-col">
             {/* IMAGES SECTION - Top 50% (for drag-drop source) */}
             <div className={`${imagesCollapsed ? 'flex-none' : 'flex-1'} border-b border-gray-800 ${imagesCollapsed ? 'overflow-hidden' : 'overflow-y-auto'} transition-all duration-200`}>
-              <div className="sticky top-0 w-full bg-gray-900/95 backdrop-blur px-6 py-3 border-b border-gray-700/50 z-10">
+              <div className="sticky top-0 w-full bg-gray-900/95 backdrop-blur px-6 py-3 border-b border-gray-700/50 z-20">
                 {/* Top row: Title + Collapse toggle + Column slider */}
                 <div className="flex items-center justify-between">
                   <button
@@ -489,7 +499,7 @@ const RightPanel: React.FC<RightPanelProps> = ({
                         max={10}
                         value={columnCount}
                         onChange={(e) => setColumnCount(parseInt(e.target.value, 10))}
-                        className="w-16 h-1 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-500"
+                        className="w-16 h-1 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-dash-500"
                         onClick={(e) => e.stopPropagation()}
                       />
                       <span className="text-xs text-gray-400 font-mono w-4 text-center">{columnCount}</span>
@@ -536,9 +546,9 @@ const RightPanel: React.FC<RightPanelProps> = ({
 
             {/* VIDEOS SECTION - Bottom 50% (results) */}
             <div className="flex-1 overflow-y-auto">
-              <div className="sticky top-0 bg-gray-900/95 backdrop-blur px-6 py-3 border-b border-gray-700/50 z-10">
+              <div className="sticky top-0 bg-gray-900/95 backdrop-blur px-6 py-3 border-b border-gray-700/50 z-20">
                 <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-semibold text-blue-400">
+                  <h3 className="text-sm font-semibold text-dash-400">
                     🎬 Videos <span className="text-gray-500 font-normal">({generatedVideos.length})</span>
                   </h3>
 
@@ -552,7 +562,7 @@ const RightPanel: React.FC<RightPanelProps> = ({
                         max={8}
                         value={videoColumnCount}
                         onChange={(e) => setVideoColumnCount(parseInt(e.target.value, 10))}
-                        className="w-16 h-1 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-500"
+                        className="w-16 h-1 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-dash-500"
                       />
                       <span className="text-xs text-gray-400 font-mono w-4 text-center">{videoColumnCount}</span>
                     </div>
@@ -582,6 +592,7 @@ const RightPanel: React.FC<RightPanelProps> = ({
                       onRetry={() => onRetryVideo(video)}
                       onDelete={() => onDeleteVideo(video.id)}
                       onOpen={() => setLightboxVideo(video)}
+                      onSaveAndReveal={() => handleSaveAndRevealVideo(video)}
                     />
                   ))}
                 </div>

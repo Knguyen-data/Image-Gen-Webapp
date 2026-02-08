@@ -2,8 +2,9 @@ export type AspectRatio = '1:1' | '16:9' | '9:16' | '4:3' | '3:4' | '4:5';
 export type ImageSize = '1K' | '2K' | '4K'; // Gemini 3 Pro supports up to 4K
 
 export type AppMode = 'image' | 'video';
+export type FixedBlockPosition = 'top' | 'bottom';
 
-export type VideoModel = 'kling-2.6' | 'wan-2.2-move' | 'wan-2.2-replace';
+export type VideoModel = 'kling-2.6';
 
 export interface ReferenceImage {
   id: string;
@@ -35,9 +36,10 @@ export interface AppSettings {
   outputCount: number; // 1-8
   aspectRatio: AspectRatio;
   imageSize: ImageSize;
-  appendStyleHint: boolean;
-  styleHintRaw: string;
-  globalReferenceImages: ReferenceImage[];
+  fixedBlockEnabled: boolean;
+  fixedBlockText: string;
+  fixedBlockImages: ReferenceImage[];
+  fixedBlockPosition: FixedBlockPosition;
   safetyFilterEnabled: boolean; // Safety filter (true = enabled, false = BLOCK_NONE)
   // Spicy Mode (Seedream 4.5 Edit)
   spicyMode: SpicyModeSettings;
@@ -61,7 +63,7 @@ export interface Run {
   name: string;
   createdAt: number;
   promptRaw: string;
-  styleHintUsed: boolean;
+  fixedBlockUsed: boolean;
   finalPrompt: string;
   settingsSnapshot: AppSettings;
   images: GeneratedImage[];
@@ -131,17 +133,7 @@ export interface GeneratedVideo {
   error?: string;
 }
 
-// Animate Mode Types (Wan 2.2 Animate)
-export type AnimateSubMode = 'move' | 'replace';
-export type AnimateResolution = '480p' | '580p' | '720p';
-
-/** @deprecated Use UnifiedVideoSettings instead */
-export interface AnimateSettings {
-  subMode: AnimateSubMode;
-  resolution: AnimateResolution;
-}
-
-// Unified Video Settings (merges Kling 2.6 + Wan 2.2)
+// Unified Video Settings (Kling 2.6)
 export interface UnifiedVideoSettings {
   model: VideoModel;
   // Kling-specific
@@ -149,6 +141,4 @@ export interface UnifiedVideoSettings {
   globalReferenceVideo?: ReferenceVideo;
   orientation: 'image' | 'video';
   klingResolution: '720p' | '1080p';
-  // Wan-specific
-  wanResolution: AnimateResolution; // '480p' | '580p' | '720p'
 }

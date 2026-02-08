@@ -5,13 +5,16 @@
 
 type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 
-interface LogEntry {
+export interface LogEntry {
   timestamp: string;
   level: LogLevel;
   context: string;
   message: string;
   data?: unknown;
 }
+
+export type LogListener = (entry: LogEntry) => void;
+const listeners: LogListener[] = [];
 
 // Log level priority for filtering
 const LOG_LEVEL_PRIORITY: Record<LogLevel, number> = {
@@ -62,6 +65,11 @@ const log = (level: LogLevel, context: string, message: string, data?: unknown):
   };
 
   addToHistory(entry);
+
+  // Notify subscribers
+  for (const listener of listeners) {
+    try { listener(entry); } catch { /* swallow listener errors */ }
+  }
 
   const formattedMessage = formatLogEntry(entry);
   const style = getLogStyle(level);
@@ -144,7 +152,16 @@ export const logger = {
 
   timeEnd: (context: string, label: string) => {
     console.timeEnd(`[${context}] ${label}`);
-  }
+  },
+
+  // Subscribe to log entries
+  subscribe: (fn: LogListener): (() => void) => {
+    listeners.push(fn);
+    return () => {
+      const idx = listeners.indexOf(fn);
+      if (idx >= 0) listeners.splice(idx, 1);
+    };
+  },
 };
 
 // Make logger available globally for debugging

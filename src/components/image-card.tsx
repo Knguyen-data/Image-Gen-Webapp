@@ -61,7 +61,7 @@ const ImageCard: React.FC<ImageCardProps> = ({ image, selected, onToggleSelect, 
           <div className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-br from-gray-800 via-gray-900 to-gray-800">
             <div className="absolute inset-0 backdrop-blur-xl bg-white/5" />
             <div className="relative z-10 flex flex-col items-center">
-              <div className="w-10 h-10 border-2 border-blue-500/30 border-t-blue-500 rounded-full animate-spin mb-3" />
+              <div className="w-10 h-10 border-2 border-dash-500/30 border-t-dash-500 rounded-full animate-spin mb-3" />
               <span className="text-xs text-gray-400 max-w-[80%] text-center truncate px-2">
                 {image.promptUsed?.slice(0, 30)}{image.promptUsed?.length > 30 ? '...' : ''}
               </span>
@@ -99,7 +99,7 @@ const ImageCard: React.FC<ImageCardProps> = ({ image, selected, onToggleSelect, 
                 <>
                   <button
                     onClick={(e) => { e.stopPropagation(); onRetry(); }}
-                    className="p-2 bg-indigo-600/80 hover:bg-indigo-500/80 rounded-full text-white backdrop-blur-sm"
+                    className="p-2 bg-emerald-600/80 hover:bg-emerald-500/80 rounded-full text-white backdrop-blur-sm"
                     title="Retry / Regenerate"
                   >
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
@@ -107,7 +107,7 @@ const ImageCard: React.FC<ImageCardProps> = ({ image, selected, onToggleSelect, 
                   {onModify && (
                     <button
                       onClick={(e) => { e.stopPropagation(); onModify(); }}
-                      className="p-2 bg-purple-600/80 hover:bg-purple-500/80 rounded-full text-white backdrop-blur-sm"
+                      className="p-2 bg-emerald-700/80 hover:bg-emerald-600/80 rounded-full text-white backdrop-blur-sm"
                       title="Modify Image"
                     >
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -164,8 +164,8 @@ const ImageCard: React.FC<ImageCardProps> = ({ image, selected, onToggleSelect, 
         {image.generatedBy && (
           <span className={`text-[9px] px-1.5 py-0.5 rounded font-medium ${
             image.generatedBy === 'gemini'
-              ? 'bg-blue-900/50 text-blue-300'
-              : 'bg-orange-900/50 text-orange-300'
+              ? 'bg-dash-900/50 text-dash-300'
+              : 'bg-red-900/50 text-red-300'
           }`}>
             {image.generatedBy === 'gemini' ? 'Gemini' : '🌶️'}
           </span>

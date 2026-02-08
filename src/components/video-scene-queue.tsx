@@ -1,8 +1,8 @@
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useRef, useState } from 'react';
 import { VideoScene, VideoSettings, ReferenceImage, ReferenceVideo } from '../types';
 import { validateVideoFile } from '../services/kling-motion-control-service';
 import { VIDEO_CONSTRAINTS } from '../constants';
-import { detectVideoDimensions, getVideoAspectRatioCSS, getVideoDuration } from '../utils/video-dimensions';
+import { getVideoDuration } from '../utils/video-dimensions';
 
 interface VideoSceneQueueProps {
   scenes: VideoScene[];
@@ -30,46 +30,6 @@ const VideoSceneQueue: React.FC<VideoSceneQueueProps> = ({
   const [perSceneVideoDragOver, setPerSceneVideoDragOver] = useState<string | null>(null);
   const globalVideoRef = useRef<HTMLInputElement>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
-
-  // Aspect ratio state for dynamic video containers
-  const [globalVideoAspectRatio, setGlobalVideoAspectRatio] = useState<string>('16/9');
-  const [sceneVideoAspectRatios, setSceneVideoAspectRatios] = useState<Record<string, string>>({});
-
-  // Detect aspect ratio for global reference video
-  useEffect(() => {
-    if (videoSettings.globalReferenceVideo?.previewUrl) {
-      detectVideoDimensions(videoSettings.globalReferenceVideo.previewUrl)
-        .then(dims => {
-          setGlobalVideoAspectRatio(getVideoAspectRatioCSS(dims));
-        })
-        .catch(err => {
-          console.warn('Failed to detect global video dimensions, using 16:9 fallback', err);
-        });
-    } else {
-      setGlobalVideoAspectRatio('16/9');
-    }
-  }, [videoSettings.globalReferenceVideo]);
-
-  // Detect aspect ratio for per-scene videos
-  useEffect(() => {
-    const aspectRatios: Record<string, string> = {};
-
-    Promise.all(
-      scenes
-        .filter(scene => scene.referenceVideo?.previewUrl)
-        .map(async (scene) => {
-          try {
-            const dims = await detectVideoDimensions(scene.referenceVideo!.previewUrl);
-            aspectRatios[scene.id] = getVideoAspectRatioCSS(dims);
-          } catch (err) {
-            console.warn(`Failed to detect video dimensions for scene ${scene.id}, using 16:9 fallback`, err);
-            aspectRatios[scene.id] = '16/9';
-          }
-        })
-    ).then(() => {
-      setSceneVideoAspectRatios(aspectRatios);
-    });
-  }, [scenes]);
 
   // Handle drop of video file onto global video zone
   const handleGlobalVideoDrop = async (e: React.DragEvent) => {
@@ -336,7 +296,7 @@ const VideoSceneQueue: React.FC<VideoSceneQueueProps> = ({
             onClick={() => setVideoSettings({ ...videoSettings, referenceVideoMode: 'global' })}
             className={`flex-1 px-3 py-2 text-xs rounded-md transition-all ${
               videoSettings.referenceVideoMode === 'global'
-                ? 'bg-blue-600 text-white font-medium'
+                ? 'bg-dash-700 text-white font-medium'
                 : 'text-gray-400 hover:text-white'
             }`}
           >
@@ -346,7 +306,7 @@ const VideoSceneQueue: React.FC<VideoSceneQueueProps> = ({
             onClick={() => setVideoSettings({ ...videoSettings, referenceVideoMode: 'per-scene' })}
             className={`flex-1 px-3 py-2 text-xs rounded-md transition-all ${
               videoSettings.referenceVideoMode === 'per-scene'
-                ? 'bg-blue-600 text-white font-medium'
+                ? 'bg-dash-700 text-white font-medium'
                 : 'text-gray-400 hover:text-white'
             }`}
           >
@@ -363,7 +323,7 @@ const VideoSceneQueue: React.FC<VideoSceneQueueProps> = ({
           </label>
           {videoSettings.globalReferenceVideo ? (
             <div className="space-y-2">
-              <div className="relative bg-gray-950 rounded overflow-hidden" style={{ aspectRatio: globalVideoAspectRatio }}>
+              <div className="relative aspect-video bg-gray-950 rounded overflow-hidden">
                 <video
                   src={videoSettings.globalReferenceVideo.previewUrl}
                   className="w-full h-full object-contain"
@@ -390,8 +350,8 @@ const VideoSceneQueue: React.FC<VideoSceneQueueProps> = ({
               onDrop={handleGlobalVideoDrop}
               onDragOver={handleGlobalVideoDragOver}
               onDragLeave={handleGlobalVideoDragLeave}
-              className={`block w-full py-3 border border-dashed rounded-lg hover:border-blue-500 hover:bg-gray-700/50 cursor-pointer text-center text-sm text-gray-400 hover:text-blue-300 transition-all ${
-                globalVideoDragOver ? 'border-blue-500 bg-blue-500/10' : 'border-gray-600'
+              className={`block w-full py-3 border border-dashed rounded-lg hover:border-dash-500 hover:bg-gray-700/50 cursor-pointer text-center text-sm text-gray-400 hover:text-dash-300 transition-all ${
+                globalVideoDragOver ? 'border-dash-500 bg-dash-500/10' : 'border-gray-600'
               }`}
             >
               <label className="cursor-pointer block w-full h-full">
@@ -424,7 +384,7 @@ const VideoSceneQueue: React.FC<VideoSceneQueueProps> = ({
             onDragLeave={() => setDragOverIndex(null)}
             className={`border-2 border-dashed rounded-lg p-8 text-center transition-all ${
               dragOverIndex === 0
-                ? 'border-blue-500 bg-blue-500/10'
+                ? 'border-dash-500 bg-dash-500/10'
                 : 'border-gray-700 bg-gray-800/30'
             }`}
           >
@@ -474,13 +434,13 @@ const VideoSceneQueue: React.FC<VideoSceneQueueProps> = ({
                     onClick={() => toggleSceneUsePrompt(scene.id)}
                     className={`flex items-center gap-1.5 px-2 py-1 rounded text-xs transition-all ${
                       scene.usePrompt
-                        ? 'bg-blue-900/30 text-blue-300 border border-blue-500/40'
+                        ? 'bg-dash-900/30 text-dash-300 border border-dash-500/40'
                         : 'bg-gray-800 text-gray-500 border border-gray-700'
                     }`}
                   >
                     <div className={`w-3 h-3 rounded border transition-all ${
                       scene.usePrompt
-                        ? 'bg-blue-500 border-blue-500'
+                        ? 'bg-dash-500 border-dash-500'
                         : 'bg-transparent border-gray-600'
                     }`}>
                       {scene.usePrompt && (
@@ -494,7 +454,7 @@ const VideoSceneQueue: React.FC<VideoSceneQueueProps> = ({
                 </div>
                 {scene.usePrompt && (
                   <textarea
-                    className="w-full bg-gray-950 border border-gray-700 rounded p-2 text-xs text-gray-200 outline-none focus:border-blue-500 resize-none font-mono"
+                    className="w-full bg-gray-950 border border-gray-700 rounded p-2 text-xs text-gray-200 outline-none focus:border-dash-500 resize-none font-mono"
                     rows={2}
                     placeholder={`Describe motion for scene ${index + 1}...`}
                     value={scene.prompt || ''}
@@ -508,7 +468,7 @@ const VideoSceneQueue: React.FC<VideoSceneQueueProps> = ({
                 <div className="space-y-1">
                   {scene.referenceVideo ? (
                     <div className="space-y-1">
-                      <div className="relative bg-gray-950 rounded overflow-hidden" style={{ aspectRatio: sceneVideoAspectRatios[scene.id] || '16/9' }}>
+                      <div className="relative aspect-video bg-gray-950 rounded overflow-hidden">
                         <video
                           src={scene.referenceVideo.previewUrl}
                           className="w-full h-full object-contain"
@@ -535,8 +495,8 @@ const VideoSceneQueue: React.FC<VideoSceneQueueProps> = ({
                       onDrop={(e) => handlePerSceneVideoDrop(e, scene.id)}
                       onDragOver={(e) => handlePerSceneVideoDragOver(e, scene.id)}
                       onDragLeave={handlePerSceneVideoDragLeave}
-                      className={`block w-full py-2 border border-dashed rounded hover:border-blue-500 hover:bg-gray-700/50 cursor-pointer text-center text-xs text-gray-400 hover:text-blue-300 transition-all ${
-                        perSceneVideoDragOver === scene.id ? 'border-blue-500 bg-blue-500/10' : 'border-gray-700'
+                      className={`block w-full py-2 border border-dashed rounded hover:border-dash-500 hover:bg-gray-700/50 cursor-pointer text-center text-xs text-gray-400 hover:text-dash-300 transition-all ${
+                        perSceneVideoDragOver === scene.id ? 'border-dash-500 bg-dash-500/10' : 'border-gray-700'
                       }`}
                     >
                       <label className="cursor-pointer block w-full h-full">
@@ -568,7 +528,7 @@ const VideoSceneQueue: React.FC<VideoSceneQueueProps> = ({
             onDragLeave={() => setDragOverIndex(null)}
             className={`border-2 border-dashed rounded-lg p-4 text-center transition-all ${
               dragOverIndex === scenes.length
-                ? 'border-blue-500 bg-blue-500/10'
+                ? 'border-dash-500 bg-dash-500/10'
                 : 'border-gray-700 bg-gray-800/10'
             }`}
           >
@@ -585,7 +545,7 @@ const VideoSceneQueue: React.FC<VideoSceneQueueProps> = ({
           className={`w-full py-3 font-semibold rounded-lg transition-all flex items-center justify-center gap-2 ${
             isGenerating
               ? 'bg-gray-700 text-gray-400 cursor-not-allowed'
-              : 'bg-blue-600 hover:bg-blue-500 text-white'
+              : 'bg-dash-700 hover:bg-dash-600 text-white'
           }`}
         >
           {isGenerating ? (

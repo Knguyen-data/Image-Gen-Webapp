@@ -3,7 +3,7 @@ import LeftPanel from './components/left-panel';
 import RightPanel from './components/right-panel';
 import ApiKeyModal from './components/api-key-modal';
 import ModifyImageModal from './components/modify-image-modal';
-import { AppSettings, Run, GeneratedImage, PromptItem, ReferenceImage, AppMode, VideoScene, VideoSettings, GeneratedVideo, AnimateSettings, VideoModel } from './types';
+import { AppSettings, Run, GeneratedImage, PromptItem, ReferenceImage, AppMode, VideoScene, VideoSettings, GeneratedVideo, VideoModel } from './types';
 import { DEFAULT_SETTINGS } from './constants';
 import { generateImage, modifyImage } from './services/gemini-service';
 import { getAllRunsFromDB, saveRunToDB, deleteRunFromDB } from './services/db';
@@ -14,7 +14,6 @@ import { useSeedreamCredits } from './hooks/use-seedream-credits';
 import { generateWithSeedream, mapAspectRatio } from './services/seedream-service';
 import { generateWithSeedreamTxt2Img } from './services/seedream-txt2img-service';
 import { generateMotionVideo } from './services/kling-motion-control-service';
-import { generateAnimateVideo } from './services/wan-animate-service';
 import { logger } from './services/logger';
 import { useActivityQueue } from './hooks/use-activity-queue';
 import ActivityPanel from './components/activity-panel';
@@ -40,15 +39,6 @@ const App: React.FC = () => {
     resolution: '720p'
   });
   const [generatedVideos, setGeneratedVideos] = useState<GeneratedVideo[]>([]);
-
-  // Animate Mode State
-  const [animateSettings, setAnimateSettings] = useState<AnimateSettings>({
-    subMode: 'move',
-    resolution: '480p',
-  });
-  const [animateCharacterImage, setAnimateCharacterImage] = useState<ReferenceImage | null>(null);
-  const [animateVideoFile, setAnimateVideoFile] = useState<File | null>(null);
-  const [animateVideoPreviewUrl, setAnimateVideoPreviewUrl] = useState<string | null>(null);
 
   // State: Data
   const [runs, setRuns] = useState<Run[]>([]);
@@ -111,13 +101,13 @@ const App: React.FC = () => {
           setIsKeyModalOpen(true);
         }
 
-        // Load Settings (exclude globalReferenceImages to avoid localStorage quota issues)
+        // Load Settings (exclude image arrays to avoid localStorage quota issues)
         const savedSettings = localStorage.getItem('raw_studio_settings');
         if (savedSettings) {
           try {
             const parsed = JSON.parse(savedSettings);
-            // Exclude globalReferenceImages from loaded settings to prevent quota issues
-            const { globalReferenceImages, ...settingsWithoutImages } = parsed;
+            // Exclude image arrays from loaded settings to prevent quota issues
+            const { globalReferenceImages, fixedBlockImages, ...settingsWithoutImages } = parsed;
             setSettings(prev => ({
               ...prev,
               ...settingsWithoutImages
@@ -132,10 +122,11 @@ const App: React.FC = () => {
         setRuns(dbRuns);
         logger.info('App', `Loaded ${dbRuns.length} runs from database`);
 
-        // Load generated videos from IndexedDB
+        // Load generated videos from IndexedDB (skip failed ones)
         const savedVideos = await getAllGeneratedVideosFromDB();
-        setGeneratedVideos(savedVideos);
-        logger.info('App', `Loaded ${savedVideos.length} generated videos from database`);
+        const validVideos = savedVideos.filter(v => v.status === 'success');
+        setGeneratedVideos(validVideos);
+        logger.info('App', `Loaded ${validVideos.length} generated videos from database (filtered ${savedVideos.length - validVideos.length} failed)`);
       } catch (e) {
         logger.error('App', 'Failed to load data', e);
       } finally {
@@ -145,9 +136,9 @@ const App: React.FC = () => {
     loadData();
   }, []);
 
-  // Save Settings to LocalStorage (exclude globalReferenceImages to avoid quota exceeded)
+  // Save Settings to LocalStorage (exclude image arrays to avoid quota exceeded)
   useEffect(() => {
-    const { globalReferenceImages, ...settingsToSave } = settings;
+    const { fixedBlockImages, ...settingsToSave } = settings;
     try {
       localStorage.setItem('raw_studio_settings', JSON.stringify(settingsToSave));
     } catch (e) {
@@ -262,7 +253,7 @@ const App: React.FC = () => {
           name: `Retry: ${image.id.slice(0, 4)}`,
           createdAt: Date.now(),
           promptRaw: image.promptUsed,
-          styleHintUsed: image.settingsSnapshot.appendStyleHint,
+          fixedBlockUsed: image.settingsSnapshot.fixedBlockEnabled ?? false,
           finalPrompt: image.promptUsed,
           settingsSnapshot: image.settingsSnapshot,
           images: [result]
@@ -367,7 +358,7 @@ const App: React.FC = () => {
           name: `Modified: ${new Date().toLocaleTimeString()}`,
           createdAt: Date.now(),
           promptRaw: prompt,
-          styleHintUsed: false,
+          fixedBlockUsed: false,
           finalPrompt: prompt,
           settingsSnapshot: modifyingImage.settingsSnapshot,
           images: [result]
@@ -417,12 +408,14 @@ const App: React.FC = () => {
       return;
     }
 
+    // Fixed block images count toward refs when enabled
+    const fixedBlockRefs = settings.fixedBlockEnabled ? (settings.fixedBlockImages || []) : [];
+
     // Spicy Edit Mode requires at least one reference image
-    const globalRefs = settings.globalReferenceImages || [];
     const isSpicyEditMode = isSpicyMode && settings.spicyMode?.subMode === 'edit';
     if (isSpicyEditMode) {
       for (const item of validItems) {
-        if (item.referenceImages.length + globalRefs.length === 0) {
+        if (item.referenceImages.length + fixedBlockRefs.length === 0) {
           logger.warn('App', 'Spicy Edit Mode requires reference image', { prompt: item.text.slice(0, 30) });
           alert(`Spicy Edit Mode requires at least one reference image per prompt. Add an image to "${item.text.slice(0, 30)}..." or switch to Generate mode.`);
           return;
@@ -431,8 +424,8 @@ const App: React.FC = () => {
     }
 
     for (const item of validItems) {
-      if (item.referenceImages.length + globalRefs.length > 7) {
-        logger.warn('App', 'Too many reference images', { count: item.referenceImages.length + globalRefs.length });
+      if (item.referenceImages.length + fixedBlockRefs.length > 7) {
+        logger.warn('App', 'Too many reference images', { count: item.referenceImages.length + fixedBlockRefs.length });
         alert(`Error: Prompt "${item.text.slice(0, 20)}..." exceeds 7 reference images limit.`);
         return;
       }
@@ -441,7 +434,7 @@ const App: React.FC = () => {
     logger.info('App', `Generating ${validItems.length} prompts`, {
       mode: isSpicyMode ? 'spicy' : 'gemini',
       outputCount: settings.outputCount,
-      globalRefs: globalRefs.length
+      fixedBlockRefs: fixedBlockRefs.length
     });
 
     setIsGenerating(true);
@@ -459,18 +452,18 @@ const App: React.FC = () => {
 
     // Construct summary
     const summaryPrompt = validItems.map(p => p.text).join(' || ');
-    const hasRefs = validItems.some(p => p.referenceImages.length > 0) || globalRefs.length > 0;
+    const hasRefs = validItems.some(p => p.referenceImages.length > 0) || fixedBlockRefs.length > 0;
     const modeLabel = isSpicyMode ? '[🌶️]' : '';
     const finalPromptSummary = validItems.length > 1
       ? `${modeLabel}${validItems.length} Prompts. First: ${validItems[0].text.slice(0, 50)}...`
-      : `${modeLabel}${validItems[0].text}` + (settings.appendStyleHint ? ` (+Style)` : '') + (hasRefs ? ` (+Images)` : '');
+      : `${modeLabel}${validItems[0].text}` + (settings.fixedBlockEnabled ? ` (+Fixed)` : '') + (hasRefs ? ` (+Images)` : '');
 
     const newRun: Run = {
       id: newRunId,
       name: `Run #${runs.length + 1}${isSpicyMode ? ' 🌶️' : ''}`,
       createdAt: Date.now(),
       promptRaw: summaryPrompt,
-      styleHintUsed: settings.appendStyleHint,
+      fixedBlockUsed: settings.fixedBlockEnabled,
       finalPrompt: finalPromptSummary,
       settingsSnapshot: { ...settings },
       images: []
@@ -481,12 +474,31 @@ const App: React.FC = () => {
 
     // Build Task Queue
     const taskQueue: QueueTask[] = [];
+    const fixedBlockImages = settings.fixedBlockImages || [];
     validItems.forEach(item => {
       let finalPrompt = item.text.trim();
-      if (settings.appendStyleHint && settings.styleHintRaw.trim()) {
-        finalPrompt += `\n\nSTYLE HINT:\n${settings.styleHintRaw.trim()}`;
+
+      // Apply fixed block text based on position
+      if (settings.fixedBlockEnabled && settings.fixedBlockText.trim()) {
+        const blockText = settings.fixedBlockText.trim();
+        if (settings.fixedBlockPosition === 'top') {
+          finalPrompt = `${blockText}\n\n${finalPrompt}`;
+        } else {
+          finalPrompt += `\n\n${blockText}`;
+        }
       }
-      const allRefs = [...globalRefs, ...item.referenceImages];
+
+      // Combine refs: fixed block images go at top or bottom based on position
+      let allRefs: ReferenceImage[];
+      if (settings.fixedBlockEnabled && fixedBlockImages.length > 0) {
+        if (settings.fixedBlockPosition === 'top') {
+          allRefs = [...fixedBlockImages, ...item.referenceImages];
+        } else {
+          allRefs = [...item.referenceImages, ...fixedBlockImages];
+        }
+      } else {
+        allRefs = [...item.referenceImages];
+      }
 
       for (let i = 0; i < countPerPrompt; i++) {
         taskQueue.push({
@@ -790,84 +802,6 @@ const App: React.FC = () => {
       return;
     }
 
-    // Wan 2.2 models use animate flow
-    if (videoModel === 'wan-2.2-move' || videoModel === 'wan-2.2-replace') {
-      if (!animateCharacterImage || !animateVideoFile) {
-        alert('Please upload both a character image and a reference video.');
-        return;
-      }
-
-      const wanSubMode = videoModel === 'wan-2.2-move' ? 'move' : 'replace';
-      logger.info('App', `Starting animate generation (${wanSubMode})`);
-      setIsGenerating(true);
-
-      // Create placeholder GeneratedVideo for instant visual feedback
-      const videoId = `wan-${Date.now()}`;
-      const placeholder: GeneratedVideo = {
-        id: videoId,
-        sceneId: videoId,
-        url: '',
-        duration: 0,
-        prompt: `Animate ${wanSubMode} (${animateSettings.resolution})`,
-        createdAt: Date.now(),
-        status: 'generating',
-      };
-      setGeneratedVideos(prev => [placeholder, ...prev]);
-
-      const activityJobId = addJob({
-        type: 'video',
-        status: 'active',
-        prompt: `Animate ${wanSubMode} (${animateSettings.resolution})`,
-      });
-      addLog({ level: 'info', message: `Starting animate ${wanSubMode}`, jobId: activityJobId });
-
-      try {
-        const result = await generateAnimateVideo(
-          kieApiKey,
-          animateCharacterImage.base64,
-          animateCharacterImage.mimeType,
-          animateVideoFile,
-          wanSubMode,
-          animateSettings.resolution,
-          (stage, detail) => setLoadingStatus(`🎭 ${detail || stage}`)
-        );
-
-        if (result.success && result.videoUrl) {
-          const successVideo: GeneratedVideo = {
-            ...placeholder,
-            url: result.videoUrl,
-            status: 'success',
-          };
-          setGeneratedVideos(prev => prev.map(v =>
-            v.id === videoId ? successVideo : v
-          ));
-          // Persist to IndexedDB
-          saveGeneratedVideoToDB(successVideo).catch(e =>
-            logger.warn('App', 'Failed to persist Wan video to IndexedDB', e)
-          );
-          updateJob(activityJobId, { status: 'completed' });
-          addLog({ level: 'info', message: 'Animate video generated', jobId: activityJobId });
-          setLoadingStatus('🎭 Animation complete!');
-        } else {
-          // Remove placeholder on failure
-          setGeneratedVideos(prev => prev.filter(v => v.id !== videoId));
-          updateJob(activityJobId, { status: 'failed', error: result.error });
-          addLog({ level: 'error', message: `Animate failed: ${result.error}`, jobId: activityJobId });
-          setLoadingStatus(`🎭 Animation failed: ${result.error}`);
-        }
-      } catch (error: any) {
-        logger.error('App', 'Animate generation error', { error });
-        setGeneratedVideos(prev => prev.filter(v => v.id !== videoId));
-        updateJob(activityJobId, { status: 'failed', error: error.message });
-        setLoadingStatus(`🎭 Animation failed: ${error.message}`);
-      } finally {
-        setIsGenerating(false);
-        refreshCredits();
-        setTimeout(() => setLoadingStatus(''), 5000);
-      }
-      return;
-    }
-
     // Kling 2.6 flow (original video generation)
     if (videoScenes.length === 0) {
       alert('Add at least one scene to generate videos');
@@ -894,79 +828,100 @@ const App: React.FC = () => {
 
     const results: GeneratedVideo[] = [];
 
-    for (let i = 0; i < videoScenes.length; i++) {
-      const scene = videoScenes[i];
-      setLoadingStatus(`🎬 Generating video ${i + 1}/${videoScenes.length}...`);
+    try {
+      for (let i = 0; i < videoScenes.length; i++) {
+        const scene = videoScenes[i];
+        setLoadingStatus(`🎬 Generating video ${i + 1}/${videoScenes.length}...`);
 
-      try {
-        const video = await generateMotionVideo(
-          kieApiKey,
-          scene,
-          videoSettings.globalReferenceVideo,
-          videoSettings,
-          (stage, detail) => setLoadingStatus(`🎬 Scene ${i + 1}: ${detail || stage}`)
-        );
-        results.push(video);
-
-        // Add to gallery immediately
-        setGeneratedVideos(prev => [...prev, video]);
-
-        if (video.status === 'success') {
-          logger.info('App', `Scene ${i + 1} completed successfully`);
-          // Save successful video to IndexedDB for persistence
-          saveGeneratedVideoToDB(video).catch(e =>
-            logger.warn('App', 'Failed to persist video to IndexedDB', e)
-          );
-        } else {
-          logger.warn('App', `Scene ${i + 1} failed`, { error: video.error });
-        }
-      } catch (error: any) {
-        logger.error('App', `Scene ${i + 1} generation error`, { error });
-        // Create failed video entry
-        const failedVideo: GeneratedVideo = {
-          id: `video-${Date.now()}-${i}`,
+        // Create placeholder for instant visual feedback
+        const placeholderId = `video-${Date.now()}-${i}`;
+        const placeholder: GeneratedVideo = {
+          id: placeholderId,
           sceneId: scene.id,
           url: '',
           duration: 0,
           prompt: scene.prompt,
           createdAt: Date.now(),
-          status: 'failed',
-          error: error.message
+          status: 'generating',
         };
-        results.push(failedVideo);
-        setGeneratedVideos(prev => [...prev, failedVideo]);
+        setGeneratedVideos(prev => [placeholder, ...prev]);
+
+        try {
+          const video = await generateMotionVideo(
+            kieApiKey,
+            scene,
+            videoSettings.globalReferenceVideo,
+            videoSettings,
+            (stage, detail) => setLoadingStatus(`🎬 Scene ${i + 1}: ${detail || stage}`)
+          );
+          results.push(video);
+
+          // Replace placeholder with result
+          setGeneratedVideos(prev => prev.map(v =>
+            v.id === placeholderId ? { ...video, id: placeholderId } : v
+          ));
+
+          if (video.status === 'success') {
+            logger.info('App', `Scene ${i + 1} completed successfully`);
+            // Save successful video to IndexedDB for persistence
+            saveGeneratedVideoToDB({ ...video, id: placeholderId }).catch(e =>
+              logger.warn('App', 'Failed to persist video to IndexedDB', e)
+            );
+          } else {
+            logger.warn('App', `Scene ${i + 1} failed`, { error: video.error });
+            // Auto-remove failed video after 8 seconds
+            setTimeout(() => {
+              setGeneratedVideos(prev => prev.filter(v => v.id !== placeholderId));
+            }, 8000);
+          }
+        } catch (error: any) {
+          logger.error('App', `Scene ${i + 1} generation error`, { error });
+          // Update placeholder to failed
+          setGeneratedVideos(prev => prev.map(v =>
+            v.id === placeholderId ? { ...v, status: 'failed' as const, error: error.message } : v
+          ));
+          const failedVideo: GeneratedVideo = {
+            id: placeholderId,
+            sceneId: scene.id,
+            url: '',
+            duration: 0,
+            prompt: scene.prompt,
+            createdAt: Date.now(),
+            status: 'failed',
+            error: error.message
+          };
+          results.push(failedVideo);
+          // Auto-remove failed video after 8 seconds
+          setTimeout(() => {
+            setGeneratedVideos(prev => prev.filter(v => v.id !== placeholderId));
+          }, 8000);
+        }
       }
+
+      const successCount = results.filter(v => v.status === 'success').length;
+      const failCount = results.filter(v => v.status === 'failed').length;
+
+      setLoadingStatus(
+        successCount > 0
+          ? `🎬 Done! ${successCount} success, ${failCount} failed`
+          : '🎬 All videos failed'
+      );
+
+      logger.info('App', 'Video generation complete', { success: successCount, failed: failCount });
+
+      // Update job status
+      if (failCount === videoScenes.length) {
+        updateJob(jobId, { status: 'failed', error: 'All videos failed' });
+        addLog({ level: 'error', message: 'All videos failed', jobId });
+      } else {
+        updateJob(jobId, { status: 'completed' });
+        addLog({ level: 'info', message: `Videos complete: ${successCount} success, ${failCount} failed`, jobId });
+      }
+    } finally {
+      setIsGenerating(false);
+      refreshCredits();
+      setTimeout(() => setLoadingStatus(''), 3000);
     }
-
-    const successCount = results.filter(v => v.status === 'success').length;
-    const failCount = results.filter(v => v.status === 'failed').length;
-
-    setLoadingStatus(
-      successCount > 0
-        ? `🎬 Done! ${successCount} success, ${failCount} failed`
-        : '🎬 All videos failed'
-    );
-
-    logger.info('App', 'Video generation complete', { success: successCount, failed: failCount });
-
-    // Update job status
-    if (failCount === videoScenes.length) {
-      updateJob(jobId, { status: 'failed', error: 'All videos failed' });
-      addLog({ level: 'error', message: 'All videos failed', jobId });
-    } else {
-      updateJob(jobId, { status: 'completed' });
-      addLog({ level: 'info', message: `Videos complete: ${successCount} success, ${failCount} failed`, jobId });
-    }
-
-    setIsGenerating(false);
-    refreshCredits();
-    setTimeout(() => setLoadingStatus(''), 3000);
-  };
-
-  const setAnimateReferenceVideo = (file: File | null, previewUrl: string | null) => {
-    if (animateVideoPreviewUrl) URL.revokeObjectURL(animateVideoPreviewUrl);
-    setAnimateVideoFile(file);
-    setAnimateVideoPreviewUrl(previewUrl);
   };
 
   return (
@@ -1033,15 +988,6 @@ const App: React.FC = () => {
             videoSettings={videoSettings}
             setVideoSettings={setVideoSettings}
             onVideoGenerate={handleVideoGenerate}
-            // Animate Mode props
-            animateSettings={animateSettings}
-            setAnimateSettings={setAnimateSettings}
-            animateCharacterImage={animateCharacterImage}
-            setAnimateCharacterImage={setAnimateCharacterImage}
-            animateVideoFile={animateVideoFile}
-            animateVideoPreviewUrl={animateVideoPreviewUrl}
-            setAnimateReferenceVideo={setAnimateReferenceVideo}
-            onAnimateGenerate={handleVideoGenerate}
           />
           <RightPanel
             runs={runs}
