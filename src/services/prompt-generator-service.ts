@@ -22,7 +22,8 @@ export type PromptGeneratorMode = 'storyboard' | 'photoset';
 // ---------------------------------------------------------------------------
 
 const AGENT_URL_KEY = 'raw_studio_agent_url';
-const DEFAULT_AGENT_URL = import.meta.env.VITE_AGENT_URL || 'http://localhost:8001';
+const DEFAULT_AGENT_URL = import.meta.env.VITE_AGENT_URL
+  || (import.meta.env.PROD ? 'https://backend-production-b64a.up.railway.app' : 'http://localhost:8001');
 
 export const getAgentUrl = (): string =>
   localStorage.getItem(AGENT_URL_KEY) || DEFAULT_AGENT_URL;
