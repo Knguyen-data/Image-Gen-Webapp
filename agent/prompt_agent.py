@@ -34,29 +34,33 @@ CAMERA_ANGLES = [
 
 CHARACTER_LOCK = """
 STEP 1 — REFERENCE IMAGE ANALYSIS (do this FIRST, before generating anything)
-Extract and LOCK these from the reference image. Every prompt must use these EXACT details:
+Study the reference image carefully. Extract and LOCK these details — every prompt must copy the EXACT same character.
 
-CHARACTER SPEC (copy exactly from image — do NOT generalize or change):
-- Ethnicity & skin tone: [extract from image]
+CHARACTER SPEC (describe naturally — no robotic or non-human terms):
+- Ethnicity & skin tone: describe naturally (e.g. "warm tan skin", "fair skin with warm undertone" — NEVER say "porcelain", "alabaster", "flawless", "doll-like", or any non-human metaphor)
 - Face: exact facial features, eye color/shape, lip shape, brow shape
 - Hair: exact color, length, texture, style, bangs (yes/no, type)
-- Body: build (slim/athletic/curvy/petite), proportions, height impression
+- Body: build (slim/athletic/curvy/petite), proportions
 - Outfit: EXACT garment description — type, fabric, fit, color, texture, neckline, sleeves
 - Accessories: jewelry, shoes, bags, belts — only what's visible
-- Hands/nails: visible details
 
 ENVIRONMENT SPEC (copy exactly — do NOT invent):
-- Location type: [extract from image]
-- Architecture/surfaces: walls, floor, ceiling materials
+- Location type, architecture, surfaces, materials
 - Props/objects: only what's actually visible
-- Depth/layout: spatial arrangement
 - Light sources: what's creating the light (windows, lamps, fluorescent, natural)
+- Color grading/temperature: warm, cool, neutral — match the reference
+
+LIGHTING & COLOR CONSISTENCY:
+- Use the SAME lighting color temperature and direction as the reference image
+- Match the overall color grading (warm tones stay warm, cool stays cool)
+- Light source types must be consistent (don't add studio lights if the reference has natural light)
 
 ⚠️ ABSOLUTE RULES:
-1. Every prompt MUST describe the character using the EXACT spec above. Repeat the character description in each prompt.
-2. Every prompt MUST be set in the EXACT same environment. No new locations, weather, or objects.
-3. NEVER add elements not in the reference: no wind, rain, fog, smoke, particles, extra people, new furniture, or outdoor elements for indoor scenes.
+1. COPY EXACT CHARACTER from the reference image. Describe the same person with the same features in every prompt.
+2. Use the SAME environment, lighting color, and color grading as the reference.
+3. NEVER add elements not in the reference: no wind, rain, fog, smoke, particles, extra people, new furniture.
 4. NEVER change: hair color/length/style, outfit, body type, skin tone, accessories.
+5. NEVER use non-human descriptors: no "porcelain", "alabaster", "doll-like", "ethereal", "otherworldly", "pixel-identical", "flawless". Describe skin and features like a human photographer would.
 """
 
 # ---------------------------------------------------------------------------
@@ -66,12 +70,18 @@ ENVIRONMENT SPEC (copy exactly — do NOT invent):
 PROMPT_FORMAT = """
 PROMPT TEXT STRUCTURE (each prompt's "text" field must follow this order):
 1. [ShotType, CameraAngle] tag
-2. Character description (from locked spec — REPEAT every time)
-3. Pose and expression
+2. "Same character as reference —" then character description (reinforces consistency)
+3. Pose and expression (natural, human language)
 4. Composition technique used
-5. Lighting description
+5. Lighting description (matching reference color temperature)
 6. Lens and depth of field
-7. Environment/background details (from locked spec)
+7. Environment/background details (from reference)
+
+LANGUAGE RULES:
+- Write like a professional photographer directing a shoot, NOT like an AI
+- NEVER use: "porcelain", "alabaster", "ethereal", "otherworldly", "doll-like", "flawless", "pixel-identical", "anime", "cartoonish"
+- Use natural descriptions: "fair skin", "smooth complexion", "warm skin tone", "clear skin"
+- Keep descriptions grounded and realistic
 
 AVAILABLE SHOT TYPES: {shot_types}
 AVAILABLE CAMERA ANGLES: {camera_angles}
@@ -82,15 +92,15 @@ OUTPUT FORMAT — STRICTLY follow this:
 Return ONLY a valid JSON array. NO markdown, NO code fences, NO explanation.
 
 Each object MUST have ALL 7 fields:
-- "text": the full prompt (structured as above)
+- "text": the full prompt (structured as above, starts with "Same character as reference —")
 - "shotType": exact match from shot types list
 - "cameraAngle": exact match from camera angles list
 - "expression": the facial expression
 - "pose": the body pose
-- "negativePrompt": MANDATORY — things to AVOID (always include: deformed hands, extra fingers, blurry face, wrong outfit, changed hair, different location, distorted proportions, plus scene-specific items)
+- "negativePrompt": MANDATORY — always include: deformed hands, extra fingers, blurry face, wrong outfit, changed hair, different location, distorted proportions, cartoonish, anime, plus scene-specific items
 
 EXAMPLE:
-[{{"text": "[Close-up, Low Angle 15°] A young East Asian woman with jet-black waist-length hair and blunt bangs, light brown eyes, porcelain skin. She wears a cream silk mock-neck bodysuit with visible fabric sheen. Chin slightly lowered, looking up through dark lashes with quiet intensity. Rule of thirds — face at upper-right intersection. Rembrandt lighting casts a triangle shadow on her left cheek. Shot at 85mm f/1.8, shallow depth of field dissolves the underground parking garage into cool fluorescent bokeh behind her.", "shotType": "Close-up", "expression": "quiet intensity, eyes looking up through lashes", "pose": "chin lowered, shoulders slightly angled", "cameraAngle": "Low Angle 15°", "negativePrompt": "deformed hands, extra fingers, blurry face, changed outfit color, different hair length, outdoor setting, added jewelry, distorted body proportions, extra people"}}]
+[{{"text": "[Close-up, Low Angle 15°] Same character as reference — a young East Asian woman with jet-black waist-length wavy hair and blunt bangs, light brown eyes, fair skin with warm undertone. She wears a cream silk mock-neck bodysuit with visible fabric sheen. Chin slightly lowered, looking up through dark lashes with quiet intensity. Rule of thirds — face at upper-right intersection. Rembrandt lighting from upper left casts a triangle shadow on her left cheek, matching the warm fluorescent tones of the reference. Shot at 85mm f/1.8, shallow depth of field dissolves the corridor behind her into soft warm bokeh.", "shotType": "Close-up", "expression": "quiet intensity, eyes looking up through lashes", "pose": "chin lowered, shoulders slightly angled", "cameraAngle": "Low Angle 15°", "negativePrompt": "deformed hands, extra fingers, blurry face, changed outfit, different hair style or color, altered eye color, different location, distorted proportions, cartoonish, anime, harsh lighting"}}]
 """
 
 STORYBOARD_INSTRUCTION = """You are an elite cinematographer directing a visual micro-narrative.
