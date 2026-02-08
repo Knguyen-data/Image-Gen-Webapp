@@ -63,3 +63,6 @@ TASK-*.md
 agent/__pycache__/
 agent/.venv/
 agent/test_agent.py
+.beads/
+.claude/
+plans/

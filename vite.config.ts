@@ -10,6 +10,9 @@ export default defineConfig(({ mode }) => {
       server: {
         port: 3000,
         host: '127.0.0.1',
+        watch: {
+          ignored: ['**/agent/**', '**/.beads/**', '**/node_modules/**'],
+        },
         proxy: {
           '/api/freepik': {
             target: 'https://api.freepik.com',
