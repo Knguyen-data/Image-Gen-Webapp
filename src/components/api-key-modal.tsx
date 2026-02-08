@@ -64,7 +64,7 @@ const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
 
   const validateGeminiKey = async (key: string): Promise<void> => {
     const genAI = new GoogleGenerativeAI(key);
-    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-lite-preview-02-05" });
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
     const nonce = Date.now().toString();
     const result = await model.generateContent(`Return the word "pong" - ${nonce}`);
     if (!result || !result.response) {

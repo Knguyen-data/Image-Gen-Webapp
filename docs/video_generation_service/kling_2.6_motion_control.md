@@ -1,222 +1,296 @@
-# Motion Control API Documentation
+# Kling 2.6 Motion Control — Dual Provider Service
 
-> Generate content using the Motion Control model
+> Motion transfer: apply dance/motion from a reference video to a character image.
+> **Primary provider: Freepik** → **Fallback: Kie.ai** → **On retry: user chooses provider**
 
-## Overview
+## Provider Comparison
 
-This document describes how to use the Motion Control model for content generation. The process consists of two steps:
-1. Create a generation task
-2. Query task status and results
-
-## Authentication
-
-All API requests require a Bearer Token in the request header:
-
-```
-Authorization: Bearer YOUR_API_KEY
-```
-
-Get API Key:
-1. Visit [API Key Management Page](https://kie.ai/api-key) to get your API Key
-2. Add to request header: `Authorization: Bearer YOUR_API_KEY`
+| Feature | Freepik | Kie.ai |
+|---------|---------|--------|
+| Auth Header | `x-freepik-api-key: KEY` | `Authorization: Bearer KEY` |
+| Create Endpoint | `POST https://api.freepik.com/v1/ai/video/kling-v2-6-motion-control-pro` | `POST https://api.kie.ai/api/v1/jobs/createTask` |
+| Poll Endpoint | `GET https://api.freepik.com/v1/ai/image-to-video/kling-v2-6/{task-id}` | `GET https://api.kie.ai/api/v1/jobs/recordInfo?taskId={taskId}` |
+| Request Format | Flat body (`image_url`, `video_url`, `prompt`, etc.) | Nested (`model` + `input` object) |
+| Model Param | Implicit (endpoint determines model) | `"model": "kling-2.6/motion-control"` |
+| Standard Tier | `kling-v2-6-motion-control-std` endpoint | `"mode": "720p"` in input |
+| Pro Tier | `kling-v2-6-motion-control-pro` endpoint | `"mode": "1080p"` in input |
+| Status States | `CREATED`, `IN_PROGRESS`, `COMPLETED`, `FAILED` | `waiting`, `queuing`, `generating`, `success`, `fail` |
+| Result Field | `data.generated[]` (array of URLs) | `data.resultJson` → parse JSON → `resultUrls[]` |
+| Webhook | `webhook_url` in body | `callBackUrl` in body |
+| Free Credits | $5 signup credit | Pay-as-you-go |
 
 ---
 
-## 1. Create Generation Task
+## Shared Parameters (both providers)
 
-### API Information
-- **URL**: `POST https://api.kie.ai/api/v1/jobs/createTask`
-- **Content-Type**: `application/json`
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| image_url / input_urls | string/array | Yes | — | Character/reference image URL. Min 300x300, max 10MB. JPG/JPEG/PNG/WEBP |
+| video_url / video_urls | string/array | Yes | — | Motion reference video URL. 3-30s. MP4/MOV/WEBM |
+| prompt | string | No | — | Text guidance for motion transfer. Max 2500 chars |
+| character_orientation | enum | No | `video` | `video` (match video orientation, max 30s) or `image` (match image orientation, max 10s) |
+| cfg_scale | float | No | 0.5 | Prompt adherence. 0 (creative) to 1 (strict) |
 
-### Request Parameters
+---
 
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| model | string | Yes | Model name, format: `kling-2.6/motion-control` |
-| input | object | Yes | Input parameters object |
-| callBackUrl | string | No | Callback URL for task completion notifications. If provided, the system will send POST requests to this URL when the task completes (success or fail). If not provided, no callback notifications will be sent. Example: `"https://your-domain.com/api/callback"` |
+## 1. Freepik API (Primary)
 
-### Model Parameter
+### Auth
+```
+x-freepik-api-key: YOUR_FREEPIK_API_KEY
+```
+Get key at: https://www.freepik.com/developers/dashboard/api-key
 
-The `model` parameter specifies which AI model to use for content generation.
+### Create Task
 
-| Property | Value | Description |
-|----------|-------|-------------|
-| **Format** | `kling-2.6/motion-control` | The exact model identifier for this API |
-| **Type** | string | Must be passed as a string value |
-| **Required** | Yes | This parameter is mandatory for all requests |
-
-> **Note**: The model parameter must match exactly as shown above. Different models have different capabilities and parameter requirements.
-
-### Callback URL Parameter
-
-The `callBackUrl` parameter allows you to receive automatic notifications when your task completes.
-
-| Property | Value | Description |
-|----------|-------|-------------|
-| **Purpose** | Task completion notification | Receive real-time updates when your task finishes |
-| **Method** | POST request | The system sends POST requests to your callback URL |
-| **Timing** | When task completes | Notifications sent for both success and failure states |
-| **Content** | Query Task API response | Callback content structure is identical to the Query Task API response |
-| **Parameters** | Complete request data | The `param` field contains the complete Create Task request parameters, not just the input section |
-| **Optional** | Yes | If not provided, no callback notifications will be sent |
-
-**Important Notes:**
-- The callback content structure is identical to the Query Task API response
-- The `param` field contains the complete Create Task request parameters, not just the input section  
-- If `callBackUrl` is not provided, no callback notifications will be sent
-
-### input Object Parameters
-
-#### prompt
-- **Type**: `string`
-- **Required**: No
-- **Description**: A text description of the desired output. Maximum length is 2500 characters.
-- **Max Length**: 2500 characters
-- **Default Value**: `"The cartoon character is dancing."`
-
-#### input_urls
-- **Type**: `array`
-- **Required**: Yes
-- **Description**: Please provide the URL of the uploaded file,Reference image. The characters, backgrounds, and other elements in the generated video are based on the reference image. Supports .jpg/.jpeg/.png, max 10MB, size needs to be greater than 300px, aspect ratio 2:5 to 5:2.
-- **Max File Size**: 10MB
-- **Accepted File Types**: image/jpeg, image/png, image/jpg
-- **Multiple Files**: Yes
-- **Default Value**: `["https://static.aiquickdraw.com/tools/example/1767694885407_pObJoMcy.png"]`
-
-#### video_urls
-- **Type**: `array`
-- **Required**: Yes
-- **Description**: Please provide the URL of the uploaded file,Reference video. The character actions in the generated video are consistent with the reference video. Supports .mp4/.mov, max 100MB, 3-30 seconds duration depending on character_orientation.
-- **Max File Size**: 100MB
-- **Accepted File Types**: video/mp4, video/quicktime, video/x-matroska
-- **Multiple Files**: Yes
-- **Default Value**: `["https://static.aiquickdraw.com/tools/example/1767525918769_QyvTNib2.mp4"]`
-
-#### character_orientation
-- **Type**: `string`
-- **Required**: Yes
-- **Description**: Generate the orientation of the characters in the video. 'image': same orientation as the person in the picture (max 10s video). 'video': consistent with the orientation of the characters in the video (max 30s video).
-- **Options**:
-  - `image`: Image
-  - `video`: Video
-- **Default Value**: `"video"`
-
-#### mode
-- **Type**: `string`
-- **Required**: Yes
-- **Description**: Output resolution mode. Use 'std' for 720p or 'pro' for 1080p.
-- **Options**:
-  - `720p`: 720p
-  - `1080p`: 1080p
-- **Default Value**: `"720p"`
-
-### Request Example
-
-```json
-{
-  "model": "kling-2.6/motion-control",
-  "input": {
-    "prompt": "The cartoon character is dancing.",
-    "input_urls": ["https://static.aiquickdraw.com/tools/example/1767694885407_pObJoMcy.png"],
-    "video_urls": ["https://static.aiquickdraw.com/tools/example/1767525918769_QyvTNib2.mp4"],
+**Pro (1080p):**
+```bash
+curl -X POST https://api.freepik.com/v1/ai/video/kling-v2-6-motion-control-pro \
+  -H "Content-Type: application/json" \
+  -H "x-freepik-api-key: YOUR_KEY" \
+  -d '{
+    "image_url": "https://example.com/character.png",
+    "video_url": "https://example.com/dance.mp4",
+    "prompt": "The character is dancing elegantly",
     "character_orientation": "video",
-    "mode": "720p"
-  }
-}
+    "cfg_scale": 0.5
+  }'
 ```
-### Response Example
 
+**Standard (720p):**
+```bash
+curl -X POST https://api.freepik.com/v1/ai/video/kling-v2-6-motion-control-std \
+  -H "Content-Type: application/json" \
+  -H "x-freepik-api-key: YOUR_KEY" \
+  -d '{ ... same body ... }'
+```
+
+### Response
 ```json
 {
-  "code": 200,
-  "msg": "success",
   "data": {
-    "taskId": "281e5b0*********************f39b9"
+    "task_id": "046b6c7f-0b8a-43b9-b35d-6489e6daee91",
+    "status": "CREATED"
   }
 }
 ```
 
-### Response Parameters
+### Poll Task Status
+```bash
+GET https://api.freepik.com/v1/ai/image-to-video/kling-v2-6/{task-id}
+```
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| code | integer | Response status code, 200 indicates success |
-| msg | string | Response message |
-| data.taskId | string | Task ID for querying task status |
+### Poll Response
+```json
+{
+  "data": {
+    "task_id": "046b6c7f-...",
+    "status": "COMPLETED",
+    "generated": [
+      "https://ai-statics.freepik.com/output_video.mp4"
+    ]
+  }
+}
+```
+
+### Freepik Status Values
+| Status | Action |
+|--------|--------|
+| `CREATED` | Keep polling |
+| `IN_PROGRESS` | Keep polling |
+| `COMPLETED` | Download from `generated[]` |
+| `FAILED` | Trigger fallback to Kie.ai |
 
 ---
 
-## 2. Query Task Status
+## 2. Kie.ai API (Fallback)
 
-### API Information
-- **URL**: `GET https://api.kie.ai/api/v1/jobs/recordInfo`
-- **Parameter**: `taskId` (passed via URL parameter)
-
-### Request Example
+### Auth
 ```
-GET https://api.kie.ai/api/v1/jobs/recordInfo?taskId=281e5b0*********************f39b9
+Authorization: Bearer YOUR_KIEAI_API_KEY
 ```
+Key stored at: `~/.config/kieai/credentials.json`
 
-### Response Example
-
-```json
-{
-  "code": 200,
-  "msg": "success",
-  "data": {
-    "taskId": "281e5b0*********************f39b9",
+### Create Task
+```bash
+curl -X POST https://api.kie.ai/api/v1/jobs/createTask \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_KEY" \
+  -d '{
     "model": "kling-2.6/motion-control",
-    "state": "waiting",
-    "param": "{\"model\":\"kling-2.6/motion-control\",\"input\":{\"prompt\":\"The cartoon character is dancing.\",\"input_urls\":[\"https://static.aiquickdraw.com/tools/example/1767694885407_pObJoMcy.png\"],\"video_urls\":[\"https://static.aiquickdraw.com/tools/example/1767525918769_QyvTNib2.mp4\"],\"character_orientation\":\"video\",\"mode\":\"720p\"}}",
-    "resultJson": "{\"resultUrls\":[\"https://static.aiquickdraw.com/tools/example/1767525938144_1MAbktBM.mp4\"]}",
-    "failCode": null,
-    "failMsg": null,
-    "costTime": null,
-    "completeTime": null,
-    "createTime": 1757584164490
+    "input": {
+      "prompt": "The character is dancing elegantly",
+      "input_urls": ["https://example.com/character.png"],
+      "video_urls": ["https://example.com/dance.mp4"],
+      "character_orientation": "video",
+      "mode": "1080p"
+    }
+  }'
+```
+
+### Response
+```json
+{
+  "code": 200,
+  "msg": "success",
+  "data": { "taskId": "281e5b0...f39b9" }
+}
+```
+
+### Poll Task Status
+```bash
+GET https://api.kie.ai/api/v1/jobs/recordInfo?taskId={taskId}
+```
+
+### Poll Response
+```json
+{
+  "code": 200,
+  "data": {
+    "taskId": "281e5b0...f39b9",
+    "model": "kling-2.6/motion-control",
+    "state": "success",
+    "resultJson": "{\"resultUrls\":[\"https://...output.mp4\"]}"
   }
 }
 ```
 
-### Response Parameters
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| code | integer | Response status code, 200 indicates success |
-| msg | string | Response message |
-| data.taskId | string | Task ID |
-| data.model | string | Model name used |
-| data.state | string | Task status: `waiting`(waiting),  `success`(success), `fail`(fail) |
-| data.param | string | Task parameters (JSON string) |
-| data.resultJson | string | Task result (JSON string, available when task is success). Structure depends on outputMediaType: `{resultUrls: []}` for image/media/video, `{resultObject: {}}` for text |
-| data.failCode | string | Failure code (available when task fails) |
-| data.failMsg | string | Failure message (available when task fails) |
-| data.costTime | integer | Task duration in milliseconds (available when task is success) |
-| data.completeTime | integer | Completion timestamp (available when task is success) |
-| data.createTime | integer | Creation timestamp |
+### Kie.ai Status Values
+| State | Action |
+|-------|--------|
+| `waiting` | Keep polling |
+| `queuing` | Keep polling |
+| `generating` | Keep polling |
+| `success` | Parse `resultJson` → `resultUrls[]` |
+| `fail` | Check `failMsg`, report error |
 
 ---
 
-## Usage Flow
+## 3. Failover Strategy
 
-1. **Create Task**: Call `POST https://api.kie.ai/api/v1/jobs/createTask` to create a generation task
-2. **Get Task ID**: Extract `taskId` from the response
-3. **Wait for Results**: 
-   - If you provided a `callBackUrl`, wait for the callback notification
-   - If no `callBackUrl`, poll status by calling `GET https://api.kie.ai/api/v1/jobs/recordInfo`
-4. **Get Results**: When `state` is `success`, extract generation results from `resultJson`
+```
+User Request
+    │
+    ▼
+┌─────────────────┐
+│  Try Freepik     │ ← Primary
+│  (Pro endpoint)  │
+└────────┬────────┘
+         │
+    ┌────▼────┐
+    │ Success? │
+    └────┬────┘
+     Yes │    No
+         │     │
+    ┌────▼┐   ┌▼──────────────┐
+    │ Done │   │  Try Kie.ai   │ ← Auto-fallback
+    └──────┘   │  (same params)│
+               └───────┬──────┘
+                       │
+                  ┌────▼────┐
+                  │ Success? │
+                  └────┬────┘
+               Yes │    No
+                   │     │
+              ┌────▼┐   ┌▼──────────────────┐
+              │ Done │   │ Show error +       │
+              └──────┘   │ "Retry with..."    │
+                         │ [Freepik] [Kie.ai] │ ← User chooses
+                         └────────────────────┘
+```
 
-## Error Codes
+### Parameter Translation (Freepik → Kie.ai)
 
-| Status Code | Description |
-|-------------|-------------|
-| 200 | Request successful |
-| 400 | Invalid request parameters |
-| 401 | Authentication failed, please check API Key |
-| 402 | Insufficient account balance |
-| 404 | Resource not found |
-| 422 | Parameter validation failed |
-| 429 | Request rate limit exceeded |
-| 500 | Internal server error |
+```typescript
+function freepikToKieai(freepikBody: FreepikRequest): KieaiRequest {
+  return {
+    model: "kling-2.6/motion-control",
+    input: {
+      prompt: freepikBody.prompt || "",
+      input_urls: [freepikBody.image_url],
+      video_urls: [freepikBody.video_url],
+      character_orientation: freepikBody.character_orientation || "video",
+      // Freepik Pro → 1080p, Freepik Std → 720p
+      mode: freepikBody._tier === "pro" ? "1080p" : "720p",
+    },
+    callBackUrl: freepikBody.webhook_url,
+  };
+}
+```
 
+### Result Normalization
+
+```typescript
+interface NormalizedResult {
+  provider: "freepik" | "kieai";
+  taskId: string;
+  status: "pending" | "processing" | "completed" | "failed";
+  videoUrls: string[];
+  error?: string;
+}
+
+// Freepik → Normalized
+function normalizeFreepik(resp): NormalizedResult {
+  const statusMap = { CREATED: "pending", IN_PROGRESS: "processing", COMPLETED: "completed", FAILED: "failed" };
+  return {
+    provider: "freepik",
+    taskId: resp.data.task_id,
+    status: statusMap[resp.data.status],
+    videoUrls: resp.data.generated || [],
+  };
+}
+
+// Kie.ai → Normalized
+function normalizeKieai(resp): NormalizedResult {
+  const statusMap = { waiting: "pending", queuing: "pending", generating: "processing", success: "completed", fail: "failed" };
+  const result = resp.data.state === "success" ? JSON.parse(resp.data.resultJson) : {};
+  return {
+    provider: "kieai",
+    taskId: resp.data.taskId,
+    status: statusMap[resp.data.state],
+    videoUrls: result.resultUrls || [],
+    error: resp.data.failMsg || undefined,
+  };
+}
+```
+
+---
+
+## 4. Error Codes
+
+### Freepik
+| Code | Description |
+|------|-------------|
+| 200 | OK |
+| 401 | Invalid API key |
+| 422 | Validation error |
+| 429 | Rate limited |
+| 503 | Service unavailable (retry with backoff) |
+
+### Kie.ai
+| Code | Description |
+|------|-------------|
+| 200 | OK |
+| 401 | Invalid API key |
+| 402 | Insufficient credits |
+| 404 | Task not found |
+| 422 | Validation error |
+| 429 | Rate limited |
+| 500 | Server error |
+
+---
+
+## 5. Input Requirements Summary
+
+| Constraint | Value |
+|------------|-------|
+| Image min resolution | 300×300 px |
+| Image max size | 10 MB |
+| Image formats | JPG, JPEG, PNG, WEBP |
+| Video duration | 3–30 seconds |
+| Video max size | 100 MB (Kie.ai) |
+| Video formats | MP4, MOV, WEBM, M4V |
+| Prompt max length | 2500 characters |
+| CFG scale range | 0.0–1.0 |
+| character_orientation=video | Max output 30s |
+| character_orientation=image | Max output 10s |

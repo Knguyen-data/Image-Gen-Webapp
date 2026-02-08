@@ -196,6 +196,62 @@ const App: React.FC = () => {
     setLoadingStatus(`Retrying with ${model}...`);
     abortControllerRef.current = new AbortController();
 
+    // Find the original run to get reference images
+    const originalRun = runs.find(run =>
+      run.images.some(img => img.id === image.id)
+    );
+
+    // Build reference images: original refs from the prompt card + the generated image for analysis
+    const retryRefs: ReferenceImage[] = [];
+    let refCount = 0;
+
+    // 1. Find original reference images from the prompt that generated this image
+    if (originalRun) {
+      // Check if there are prompt cards with reference images
+      const promptCard = prompts.find(p => p.text === originalRun.promptRaw || p.text === originalRun.finalPrompt);
+      if (promptCard?.referenceImages?.length) {
+        promptCard.referenceImages.forEach((ref, i) => {
+          refCount++;
+          retryRefs.push({ ...ref, id: crypto.randomUUID(), label: `[ORIGINAL REFERENCE #${refCount}]` });
+        });
+      }
+      // Also check fixed block references
+      if (originalRun.fixedBlockUsed && settings.fixedBlockImages?.length) {
+        settings.fixedBlockImages.forEach(fb => {
+          refCount++;
+          retryRefs.push({
+            id: crypto.randomUUID(),
+            base64: fb.base64,
+            mimeType: fb.mimeType,
+            label: `[ORIGINAL REFERENCE #${refCount}]`,
+          });
+        });
+      }
+    }
+
+    // 2. Add the generated image itself as a reference so the model can analyze and improve
+    if (image.base64) {
+      retryRefs.push({
+        id: crypto.randomUUID(),
+        base64: image.base64,
+        mimeType: image.mimeType,
+        label: `[FAILED GENERATED IMAGE — DO NOT REPRODUCE THIS]`,
+      });
+    }
+
+    // 3. Build retry prompt with analysis instructions
+    const retryPrompt = `RETRY GENERATION — Analyze and improve.
+
+You previously attempted to generate an image from the prompt below but the result was unsatisfactory.
+
+ORIGINAL PROMPT: ${image.promptUsed}
+
+INSTRUCTIONS:
+- The images labeled [ORIGINAL REFERENCE] are the source/character references — match their appearance, features, and style.
+- The image labeled [FAILED GENERATED IMAGE] is your previous failed attempt — analyze what went wrong (wrong pose, bad face, wrong angle, artifacts, etc.) and fix those issues.
+- Generate a NEW, IMPROVED image that follows the original prompt more accurately.
+- Do NOT reproduce the failed image. Improve upon it.`;
+
     try {
       let result: GeneratedImage;
 
@@ -206,8 +262,8 @@ const App: React.FC = () => {
           return;
         }
         const genResult = await generateImage({
-          prompt: image.promptUsed,
-          referenceImages: [],
+          prompt: retryPrompt,
+          referenceImages: retryRefs,
           settings: image.settingsSnapshot,
           apiKey: apiKey,
           signal: abortControllerRef.current.signal
@@ -269,10 +325,6 @@ const App: React.FC = () => {
         };
       }
 
-      // Find the original run containing this image
-      const originalRun = runs.find(run =>
-        run.images.some(img => img.id === image.id)
-      );
 
       if (originalRun) {
         // Append to existing run
@@ -638,18 +690,76 @@ const App: React.FC = () => {
               return generatedImage;
             }
           } else {
-            // Use Gemini service
-            const geminiResult = await withRateLimitRetry(
-              () => generateImage({
-                prompt: task.prompt,
-                referenceImages: task.refs,
-                settings: task.settings,
-                apiKey: effectiveApiKey,
-                signal: abortControllerRef.current?.signal
-              }),
-              { maxRetries: 3, baseDelayMs: 2000, maxDelayMs: 30000 }
-            );
-            return { ...geminiResult, generatedBy: 'gemini' };
+            // Use Gemini service — with Seedream fallback on no-image response
+            try {
+              const geminiResult = await withRateLimitRetry(
+                () => generateImage({
+                  prompt: task.prompt,
+                  referenceImages: task.refs,
+                  settings: task.settings,
+                  apiKey: effectiveApiKey,
+                  signal: abortControllerRef.current?.signal
+                }),
+                { maxRetries: 3, baseDelayMs: 2000, maxDelayMs: 30000 }
+              );
+              return { ...geminiResult, generatedBy: 'gemini' };
+            } catch (geminiError: any) {
+              // Fallback to Seedream if Gemini returned no image
+              const isNoImage = geminiError.message?.includes('No image in response') ||
+                geminiError.message?.includes('returned text instead of image');
+              if (!isNoImage) throw geminiError;
+
+              logger.info('App', 'Gemini returned no image, falling back to Seedream', {
+                promptPreview: task.prompt.slice(0, 50),
+              });
+              setLoadingStatus('🔄 Gemini failed, retrying with Seedream...');
+
+              const kieApiKey = localStorage.getItem('raw_studio_kie_api_key') || '';
+              if (!kieApiKey) throw new Error('Gemini returned no image and no Kie.ai API key set for Seedream fallback.');
+
+              const seedreamSettings = {
+                aspectRatio: mapAspectRatio(task.settings.aspectRatio || '1:1'),
+                quality: 'high' as const,
+              };
+
+              // If we have reference images, use seedream-edit
+              if (task.refs && task.refs.length > 0 && task.refs[0].base64) {
+                const result = await generateWithSeedream(
+                  kieApiKey,
+                  task.prompt,
+                  task.refs[0].base64,
+                  task.refs[0].mimeType || 'image/jpeg',
+                  seedreamSettings,
+                );
+                const generatedImage: GeneratedImage = {
+                  id: crypto.randomUUID(),
+                  base64: result.base64,
+                  mimeType: result.mimeType,
+                  createdAt: Date.now(),
+                  promptUsed: task.prompt,
+                  settingsSnapshot: task.settings,
+                  generatedBy: 'seedream-edit'
+                };
+                return generatedImage;
+              } else {
+                // No reference image — use txt2img
+                const result = await generateWithSeedreamTxt2Img(
+                  kieApiKey,
+                  task.prompt,
+                  seedreamSettings,
+                );
+                const generatedImage: GeneratedImage = {
+                  id: crypto.randomUUID(),
+                  base64: result.base64,
+                  mimeType: result.mimeType,
+                  createdAt: Date.now(),
+                  promptUsed: task.prompt,
+                  settingsSnapshot: task.settings,
+                  generatedBy: 'seedream-txt2img'
+                };
+                return generatedImage;
+              }
+            }
           }
         },
         {

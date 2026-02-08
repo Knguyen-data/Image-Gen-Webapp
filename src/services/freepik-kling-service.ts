@@ -8,7 +8,11 @@
 import { KlingProAspectRatio, KlingProDuration } from '../types';
 import { logger } from './logger';
 
-const BASE_URL = '/api/freepik/v1/ai';
+const FREEPIK_PROXY_URL = import.meta.env.DEV
+  ? '/api/freepik'
+  : 'https://freepik-proxy.tnguyen633.workers.dev';
+
+const BASE_URL = `${FREEPIK_PROXY_URL}/v1/ai`;
 const MAX_POLL_ATTEMPTS = 120; // 10 min at 5s intervals
 const POLL_INTERVAL_MS = 5000;
 

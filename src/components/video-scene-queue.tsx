@@ -423,11 +423,15 @@ const VideoSceneQueue: React.FC<VideoSceneQueueProps> = ({
 
               {/* Reference Image */}
               <div className="relative aspect-video bg-gray-950 rounded overflow-hidden">
-                <img
-                  src={scene.referenceImage.previewUrl || `data:${scene.referenceImage.mimeType};base64,${scene.referenceImage.base64}`}
-                  alt={`Scene ${index + 1}`}
-                  className="w-full h-full object-contain"
-                />
+                {(scene.referenceImage.previewUrl || scene.referenceImage.base64) ? (
+                  <img
+                    src={scene.referenceImage.previewUrl || `data:${scene.referenceImage.mimeType};base64,${scene.referenceImage.base64}`}
+                    alt={`Scene ${index + 1}`}
+                    className="w-full h-full object-contain"
+                  />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center text-gray-500 text-xs">No image</div>
+                )}
               </div>
 
               {/* Prompt Toggle and Input */}

@@ -56,3 +56,10 @@ nul
 # Generated video files (local dev)
 generated-videos/
 .mcp.json
+
+# Miscellaneous
+TASK-*.md
+*.mp4
+agent/__pycache__/
+agent/.venv/
+agent/test_agent.py

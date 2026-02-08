@@ -163,6 +163,9 @@ export const generateImage = async (
 
     if (req.referenceImages && req.referenceImages.length > 0) {
       req.referenceImages.forEach(img => {
+        if (img.label) {
+          parts.push({ text: img.label });
+        }
         parts.push({
           inlineData: {
             mimeType: img.mimeType,

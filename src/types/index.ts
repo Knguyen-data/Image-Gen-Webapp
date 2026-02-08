@@ -12,6 +12,7 @@ export interface ReferenceImage {
   base64: string;
   mimeType: string;
   previewUrl?: string; // For UI display only
+  label?: string; // Optional label for the model (e.g., "Original Reference", "Failed Attempt #1")
 }
 
 export interface PromptItem {

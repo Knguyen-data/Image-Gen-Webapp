@@ -3,7 +3,6 @@ import { Run, GeneratedImage, AppMode, GeneratedVideo } from '../types';
 import ImageCard from './image-card';
 import VideoCard from './video-card';
 import { saveAndRevealVideo } from '../services/video-file-service';
-import { base64ToBlob, createObjectUrl, revokeObjectUrl, revokeAllObjectUrls } from '../services/image-blob-manager';
 import JSZip from 'jszip';
 
 interface RightPanelProps {
@@ -42,7 +41,6 @@ const RightPanel: React.FC<RightPanelProps> = ({
   const [compareMode, setCompareMode] = useState(false);
   const [lightboxImage, setLightboxImage] = useState<GeneratedImage | null>(null);
   const [lightboxVideo, setLightboxVideo] = useState<GeneratedVideo | null>(null);
-  const [lightboxObjectUrl, setLightboxObjectUrl] = useState<string | null>(null);
   const [lightboxAspectRatio, setLightboxAspectRatio] = useState<string>('4/3'); // Default aspect ratio
   const [downloadingRunId, setDownloadingRunId] = useState<string | null>(null);
 
@@ -91,6 +89,11 @@ const RightPanel: React.FC<RightPanelProps> = ({
       return;
     }
 
+    if (!lightboxImage.base64) {
+      setLightboxAspectRatio('4/3');
+      return;
+    }
+
     const img = new Image();
     img.onload = () => {
       const aspectRatio = `${img.naturalWidth}/${img.naturalHeight}`;
@@ -98,25 +101,6 @@ const RightPanel: React.FC<RightPanelProps> = ({
     };
     img.src = `data:${lightboxImage.mimeType};base64,${lightboxImage.base64}`;
   }, [lightboxImage]);
-
-  // Create Object URL for lightbox to avoid inline base64 in DOM
-  useEffect(() => {
-    if (lightboxImage?.base64) {
-      const blob = base64ToBlob(lightboxImage.base64, lightboxImage.mimeType);
-      const url = createObjectUrl(blob);
-      setLightboxObjectUrl(url);
-      return () => {
-        revokeObjectUrl(url);
-        setLightboxObjectUrl(null);
-      };
-    }
-    setLightboxObjectUrl(null);
-  }, [lightboxImage]);
-
-  // Cleanup all Object URLs on unmount
-  useEffect(() => {
-    return () => revokeAllObjectUrls();
-  }, []);
 
   // Flatten all images for easy lookup (must be before keyboard handler useEffect)
   const allImages = runs.flatMap(r => r.images.map(img => ({ ...img, runId: r.id })));
@@ -252,13 +236,17 @@ const RightPanel: React.FC<RightPanelProps> = ({
             }`}>
             {imagesToCompare.map(img => (
               <div key={img.id} className="relative w-full h-full min-h-[400px] border border-gray-800 rounded-lg overflow-hidden bg-gray-950 flex items-center justify-center">
-                <img
-                  src={`data:${img.mimeType};base64,${img.base64}`}
-                  className="max-w-full max-h-full object-contain"
-                  alt="comparison"
-                />
+                {img.base64 ? (
+                  <img
+                    src={`data:${img.mimeType};base64,${img.base64}`}
+                    className="max-w-full max-h-full object-contain"
+                    alt="comparison"
+                  />
+                ) : (
+                  <span className="text-gray-500 text-sm">Image data unavailable</span>
+                )}
                 <div className="absolute bottom-0 left-0 right-0 bg-black/70 p-2 text-xs font-mono text-gray-300">
-                  {img.settingsSnapshot.aspectRatio} | T:{img.settingsSnapshot.temperature} | Size:{img.settingsSnapshot.imageSize}
+                  {img.settingsSnapshot?.aspectRatio || '1:1'} | T:{img.settingsSnapshot?.temperature || '1'} | Size:{img.settingsSnapshot?.imageSize || 'auto'}
                 </div>
               </div>
             ))}
@@ -321,11 +309,13 @@ const RightPanel: React.FC<RightPanelProps> = ({
             </div>
           </div>
           <div className="flex-1 flex items-center justify-center overflow-hidden" onClick={(e) => e.stopPropagation()}>
-            <img
-              src={lightboxObjectUrl || ''}
-              className="max-w-full max-h-full object-contain shadow-2xl"
-              alt="Full view"
-            />
+            {lightboxImage.base64 && (
+              <img
+                src={`data:${lightboxImage.mimeType};base64,${lightboxImage.base64}`}
+                className="max-w-full max-h-full object-contain shadow-2xl"
+                alt="Full view"
+              />
+            )}
           </div>
           <div className="mt-4 p-4 bg-gray-900 rounded-lg max-h-32 overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <p className="text-xs text-gray-400 font-mono mb-1">PROMPT USED:</p>
