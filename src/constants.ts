@@ -63,6 +63,7 @@ export const VIDEO_CONSTRAINTS = {
 // Video Model Labels
 export const VIDEO_MODEL_LABELS: Record<VideoModel, string> = {
   'kling-2.6': 'Kling 2.6 Motion Control',
+  'kling-2.6-pro': 'Kling 2.6 Pro — Image to Video',
 };
 
 // Default Unified Video Settings
@@ -71,4 +72,10 @@ export const DEFAULT_UNIFIED_VIDEO_SETTINGS: UnifiedVideoSettings = {
   referenceVideoMode: 'global',
   orientation: 'image',
   klingResolution: '720p',
+  klingProvider: 'freepik',
+  klingProDuration: '5',
+  klingProAspectRatio: 'widescreen_16_9',
+  klingCfgScale: 0.5,
+  klingProNegativePrompt: '',
+  klingProGenerateAudio: false,
 };

@@ -13,6 +13,7 @@ interface VideoSceneQueueProps {
   appMode: 'image' | 'video';
   onGenerate: () => void;
   isGenerating: boolean;
+  hideReferenceVideo?: boolean;
 }
 
 const VideoSceneQueue: React.FC<VideoSceneQueueProps> = ({
@@ -23,7 +24,8 @@ const VideoSceneQueue: React.FC<VideoSceneQueueProps> = ({
   onOpenVideoTrimmer,
   appMode,
   onGenerate,
-  isGenerating
+  isGenerating,
+  hideReferenceVideo = false
 }) => {
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   const [globalVideoDragOver, setGlobalVideoDragOver] = useState(false);
@@ -286,7 +288,8 @@ const VideoSceneQueue: React.FC<VideoSceneQueueProps> = ({
 
   return (
     <div className="space-y-4">
-      {/* Video Reference Mode Toggle */}
+      {/* Video Reference Mode Toggle — hidden for Pro I2V */}
+      {!hideReferenceVideo && (
       <div className="space-y-2">
         <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
           Reference Video Mode
@@ -314,9 +317,10 @@ const VideoSceneQueue: React.FC<VideoSceneQueueProps> = ({
           </button>
         </div>
       </div>
+      )}
 
-      {/* Global Reference Video */}
-      {videoSettings.referenceVideoMode === 'global' && (
+      {/* Global Reference Video — hidden for Pro I2V */}
+      {!hideReferenceVideo && videoSettings.referenceVideoMode === 'global' && (
         <div className="space-y-2 bg-gray-800/50 p-3 rounded-lg border border-gray-700">
           <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
             Global Reference Video
@@ -463,8 +467,8 @@ const VideoSceneQueue: React.FC<VideoSceneQueueProps> = ({
                 )}
               </div>
 
-              {/* Per-Scene Video Upload (if per-scene mode) */}
-              {videoSettings.referenceVideoMode === 'per-scene' && (
+              {/* Per-Scene Video Upload (if per-scene mode, hidden for Pro I2V) */}
+              {!hideReferenceVideo && videoSettings.referenceVideoMode === 'per-scene' && (
                 <div className="space-y-1">
                   {scene.referenceVideo ? (
                     <div className="space-y-1">
@@ -541,12 +545,7 @@ const VideoSceneQueue: React.FC<VideoSceneQueueProps> = ({
       {scenes.length > 0 && (
         <button
           onClick={onGenerate}
-          disabled={isGenerating}
-          className={`w-full py-3 font-semibold rounded-lg transition-all flex items-center justify-center gap-2 ${
-            isGenerating
-              ? 'bg-gray-700 text-gray-400 cursor-not-allowed'
-              : 'bg-dash-700 hover:bg-dash-600 text-white'
-          }`}
+          className="w-full py-3 font-semibold rounded-lg transition-all flex items-center justify-center gap-2 bg-dash-700 hover:bg-dash-600 text-white"
         >
           {isGenerating ? (
             <>

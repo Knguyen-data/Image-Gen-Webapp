@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { AppSettings, PromptItem, ReferenceImage, ImageSize, SeedreamQuality, AppMode, VideoScene, VideoSettings, VideoModel } from '../types';
+import { AppSettings, PromptItem, ReferenceImage, ImageSize, SeedreamQuality, AppMode, VideoScene, VideoSettings, VideoModel, KlingProDuration, KlingProAspectRatio } from '../types';
 import { ASPECT_RATIO_LABELS, IMAGE_SIZE_LABELS, SEEDREAM_QUALITY_LABELS, DEFAULT_SETTINGS } from '../constants';
 import BulkInputModal from './bulk-input-modal';
 import VideoSceneQueue from './video-scene-queue';
@@ -262,7 +262,7 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
   // Header subtitle text
   const getSubtitleText = () => {
     if (isVideoMode) {
-      return 'Kling 2.6 Motion Control';
+      return selectedVideoModel === 'kling-2.6-pro' ? 'Kling 2.6 Pro — Image to Video' : 'Kling 2.6 Motion Control';
     }
     if (safeSettings.spicyMode?.enabled) {
       return `Seedream 4.5 ${safeSettings.spicyMode.subMode === 'edit' ? 'Edit' : 'Txt2Img'}`;
@@ -309,7 +309,7 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
                   ...safeSettings,
                   spicyMode: { ...safeSettings.spicyMode, enabled: !safeSettings.spicyMode?.enabled }
                 })}
-                disabled={isGenerating}
+
                 className={`p-2 rounded-lg border transition-all flex items-center gap-1.5 ${
                   safeSettings.spicyMode?.enabled
                     ? 'bg-red-900/30 text-red-400 border-red-500/50 ring-1 ring-red-500/30'
@@ -376,7 +376,7 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
                       ...safeSettings,
                       spicyMode: { ...safeSettings.spicyMode, subMode: 'edit' }
                     })}
-                    disabled={isGenerating}
+    
                     className={`px-3 py-1 text-xs rounded-md transition-all ${
                       safeSettings.spicyMode.subMode === 'edit'
                         ? 'bg-red-500 text-white font-medium'
@@ -391,7 +391,7 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
                       ...safeSettings,
                       spicyMode: { ...safeSettings.spicyMode, subMode: 'generate' }
                     })}
-                    disabled={isGenerating}
+    
                     className={`px-3 py-1 text-xs rounded-md transition-all ${
                       safeSettings.spicyMode.subMode === 'generate'
                         ? 'bg-red-500 text-white font-medium'
@@ -421,15 +421,16 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
               <div className="flex gap-1 bg-gray-800 rounded-lg p-1">
                 {([
                   { value: 'kling-2.6' as VideoModel, label: 'Kling 2.6', desc: 'Motion Control', color: 'dash' },
+                  { value: 'kling-2.6-pro' as VideoModel, label: 'Kling 2.6 Pro', desc: 'Image to Video', color: 'amber' },
                 ]).map(opt => (
                   <button
                     key={opt.value}
                     onClick={() => handleModelSelect(opt.value)}
-                    disabled={isGenerating}
+    
                     className={`flex-1 py-2 px-2 rounded-md text-xs font-medium transition-all ${
                       selectedVideoModel === opt.value
-                        ? opt.color === 'dash'
-                          ? 'bg-dash-700 text-white ring-1 ring-dash-400'
+                        ? opt.color === 'amber'
+                          ? 'bg-amber-700 text-white ring-1 ring-amber-400'
                           : 'bg-dash-700 text-white ring-1 ring-dash-400'
                         : 'text-gray-400 hover:text-white hover:bg-gray-700/50'
                     }`}
@@ -472,7 +473,7 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
                     <div className="flex gap-2">
                       <button
                         onClick={() => setVideoSettings({ ...videoSettings, orientation: 'image' })}
-                        disabled={isGenerating}
+        
                         className={`flex-1 py-2 px-3 rounded-lg text-xs font-medium transition-all ${
                           videoSettings.orientation === 'image'
                             ? 'bg-dash-700 text-white ring-1 ring-dash-400'
@@ -484,7 +485,7 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
                       </button>
                       <button
                         onClick={() => setVideoSettings({ ...videoSettings, orientation: 'video' })}
-                        disabled={isGenerating}
+        
                         className={`flex-1 py-2 px-3 rounded-lg text-xs font-medium transition-all ${
                           videoSettings.orientation === 'video'
                             ? 'bg-dash-700 text-white ring-1 ring-dash-400'
@@ -503,7 +504,7 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
                     <div className="flex gap-2">
                       <button
                         onClick={() => setVideoSettings({ ...videoSettings, resolution: '720p' })}
-                        disabled={isGenerating}
+
                         className={`flex-1 py-2 rounded-lg text-xs font-medium transition-all ${
                           videoSettings.resolution === '720p'
                             ? 'bg-dash-700 text-white ring-1 ring-dash-400'
@@ -514,7 +515,7 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
                       </button>
                       <button
                         onClick={() => setVideoSettings({ ...videoSettings, resolution: '1080p' })}
-                        disabled={isGenerating}
+
                         className={`flex-1 py-2 rounded-lg text-xs font-medium transition-all ${
                           videoSettings.resolution === '1080p'
                             ? 'bg-dash-700 text-white ring-1 ring-dash-400'
@@ -526,6 +527,51 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
                     </div>
                   </div>
 
+                  {/* Provider Control */}
+                  <div className="space-y-2">
+                    <span className="text-xs text-gray-500">Provider</span>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setVideoSettings({ ...videoSettings, klingProvider: 'freepik' })}
+                        className={`flex-1 py-2 rounded-lg text-xs font-medium transition-all ${
+                          (videoSettings.klingProvider || 'freepik') === 'freepik'
+                            ? 'bg-indigo-600 text-white ring-1 ring-indigo-400'
+                            : 'bg-gray-800 text-gray-400 hover:bg-gray-700 border border-gray-700'
+                        }`}
+                      >
+                        Freepik
+                      </button>
+                      <button
+                        onClick={() => setVideoSettings({ ...videoSettings, klingProvider: 'kieai' })}
+                        className={`flex-1 py-2 rounded-lg text-xs font-medium transition-all ${
+                          videoSettings.klingProvider === 'kieai'
+                            ? 'bg-purple-600 text-white ring-1 ring-purple-400'
+                            : 'bg-gray-800 text-gray-400 hover:bg-gray-700 border border-gray-700'
+                        }`}
+                      >
+                        Kie.ai
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* CFG Scale Slider (Motion Control) */}
+                  <div className="space-y-2">
+                    <div className="flex justify-between">
+                      <span className="text-xs text-gray-500">CFG Scale</span>
+                      <span className="text-xs text-dash-300 font-mono">{(videoSettings.klingCfgScale ?? 0.5).toFixed(2)}</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0"
+                      max="1"
+                      step="0.05"
+                      className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-dash-300"
+                      value={videoSettings.klingCfgScale ?? 0.5}
+                      onChange={(e) => setVideoSettings({ ...videoSettings, klingCfgScale: parseFloat(e.target.value) })}
+                    />
+                    <p className="text-[10px] text-gray-600">Higher = stronger prompt adherence, lower = more creative</p>
+                  </div>
+
                   {/* Kling Info Box */}
                   <div className="p-3 bg-dash-900/20 border border-dash-500/30 rounded-lg text-xs text-dash-300">
                     <p className="font-medium mb-1">Kling 2.6 Motion Control</p>
@@ -533,6 +579,137 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
                       {videoSettings.orientation === 'image'
                         ? 'Video-to-Video: Up to 10 seconds per scene'
                         : 'Video-to-Video: Up to 30 seconds per scene'}
+                    </p>
+                  </div>
+                </div>
+              </>
+            )}
+
+            {/* ----- KLING 2.6 PRO I2V CONTENT ----- */}
+            {selectedVideoModel === 'kling-2.6-pro' && videoSettings && (
+              <>
+                {/* Scene Queue (images + prompts only, no reference video) */}
+                <div className="px-6 py-4 border-b border-gray-800">
+                  <VideoSceneQueue
+                    scenes={videoScenes}
+                    setScenes={setVideoScenes}
+                    videoSettings={videoSettings}
+                    setVideoSettings={setVideoSettings}
+                    onOpenVideoTrimmer={handleOpenVideoTrimmer}
+                    appMode={appMode}
+                    onGenerate={onVideoGenerate}
+                    isGenerating={isGenerating}
+                    hideReferenceVideo
+                  />
+                </div>
+
+                {/* Pro I2V Settings */}
+                <div className="px-6 py-4 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                      Pro I2V Settings
+                    </label>
+                  </div>
+
+                  {/* Duration Control */}
+                  <div className="space-y-2">
+                    <span className="text-xs text-gray-500">Duration</span>
+                    <div className="flex gap-2">
+                      {(['5', '10'] as KlingProDuration[]).map(dur => (
+                        <button
+                          key={dur}
+                          onClick={() => setVideoSettings({ ...videoSettings, klingProDuration: dur } as any)}
+                          className={`flex-1 py-2 rounded-lg text-xs font-medium transition-all ${
+                            ((videoSettings as any).klingProDuration || '5') === dur
+                              ? 'bg-amber-700 text-white ring-1 ring-amber-400'
+                              : 'bg-gray-800 text-gray-400 hover:bg-gray-700 border border-gray-700'
+                          }`}
+                        >
+                          {dur}s
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Aspect Ratio Control */}
+                  <div className="space-y-2">
+                    <span className="text-xs text-gray-500">Aspect Ratio</span>
+                    <div className="flex gap-2">
+                      {([
+                        { value: 'widescreen_16_9' as KlingProAspectRatio, label: '16:9' },
+                        { value: 'square_1_1' as KlingProAspectRatio, label: '1:1' },
+                        { value: 'social_story_9_16' as KlingProAspectRatio, label: '9:16' },
+                      ]).map(opt => (
+                        <button
+                          key={opt.value}
+                          onClick={() => setVideoSettings({ ...videoSettings, klingProAspectRatio: opt.value } as any)}
+                          className={`flex-1 py-2 rounded-lg text-xs font-medium transition-all ${
+                            ((videoSettings as any).klingProAspectRatio || 'widescreen_16_9') === opt.value
+                              ? 'bg-amber-700 text-white ring-1 ring-amber-400'
+                              : 'bg-gray-800 text-gray-400 hover:bg-gray-700 border border-gray-700'
+                          }`}
+                        >
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* CFG Scale Slider */}
+                  <div className="space-y-2">
+                    <div className="flex justify-between">
+                      <span className="text-xs text-gray-500">CFG Scale</span>
+                      <span className="text-xs text-amber-400 font-mono">{((videoSettings as any).klingCfgScale ?? 0.5).toFixed(2)}</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0"
+                      max="1"
+                      step="0.05"
+                      className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-amber-400"
+                      value={(videoSettings as any).klingCfgScale ?? 0.5}
+                      onChange={(e) => setVideoSettings({ ...videoSettings, klingCfgScale: parseFloat(e.target.value) } as any)}
+                    />
+                    <p className="text-[10px] text-gray-600">Higher = stronger prompt adherence, lower = more creative</p>
+                  </div>
+
+                  {/* Negative Prompt */}
+                  <div className="space-y-2">
+                    <span className="text-xs text-gray-500">Negative Prompt</span>
+                    <textarea
+                      className="w-full bg-gray-950 border border-gray-700 rounded-lg p-2 text-xs text-gray-300 font-mono resize-y min-h-[40px]"
+                      rows={2}
+                      value={(videoSettings as any).klingProNegativePrompt || ''}
+                      onChange={(e) => setVideoSettings({ ...videoSettings, klingProNegativePrompt: e.target.value } as any)}
+                      placeholder="Things to avoid (e.g. blurry, shaky, watermark)..."
+                    />
+                  </div>
+
+                  {/* Generate Audio Toggle */}
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <span className="text-xs text-gray-500 block">Generate Audio</span>
+                      <span className="text-[10px] text-gray-600">AI-generated sound for the video</span>
+                    </div>
+                    <button
+                      onClick={() => setVideoSettings({ ...videoSettings, klingProGenerateAudio: !(videoSettings as any).klingProGenerateAudio } as any)}
+                      className={`w-10 h-5 rounded-full relative transition-colors ${
+                        (videoSettings as any).klingProGenerateAudio
+                          ? 'bg-amber-700 ring-1 ring-amber-400'
+                          : 'bg-gray-700'
+                      }`}
+                    >
+                      <div className={`absolute top-1 w-3 h-3 rounded-full bg-white transition-transform ${
+                        (videoSettings as any).klingProGenerateAudio ? 'left-6' : 'left-1'
+                      }`} />
+                    </button>
+                  </div>
+
+                  {/* Pro Info Box */}
+                  <div className="p-3 bg-amber-900/20 border border-amber-500/30 rounded-lg text-xs text-amber-300">
+                    <p className="font-medium mb-1">Kling 2.6 Pro — Image to Video</p>
+                    <p className="text-amber-400/80">
+                      Animate any image with AI-driven motion. No reference video needed.
                     </p>
                   </div>
                 </div>
@@ -633,7 +810,7 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
                           value={pItem.text}
                           onChange={(e) => updatePromptText(index, e.target.value)}
                           onFocus={() => setActivePromptIndex(index)}
-                          disabled={isGenerating}
+          
                         />
 
                         {/* Local Image Strip */}
@@ -673,7 +850,7 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
 
               <button
                 onClick={addPrompt}
-                disabled={isGenerating}
+
                 className="w-full py-2 border border-dashed border-gray-700 hover:border-dash-300/50 hover:bg-gray-800/50 text-gray-400 hover:text-dash-200 rounded-lg text-xs font-medium transition-all flex items-center justify-center gap-2 group"
               >
                 <svg className="w-4 h-4 group-hover:scale-110 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" /></svg>
@@ -809,7 +986,7 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
                 className="w-full bg-gray-950 border border-gray-700 rounded p-2 text-sm text-gray-200"
                 value={safeSettings.aspectRatio}
                 onChange={(e) => setSettings({ ...safeSettings, aspectRatio: e.target.value as any })}
-                disabled={isGenerating}
+
               >
                 {Object.entries(ASPECT_RATIO_LABELS).map(([key, label]) => (
                   <option key={key} value={key}>{label}</option>
@@ -830,7 +1007,7 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
                     ...safeSettings,
                     spicyMode: { ...safeSettings.spicyMode, quality: e.target.value as SeedreamQuality }
                   })}
-                  disabled={isGenerating}
+  
                 >
                   {Object.entries(SEEDREAM_QUALITY_LABELS).map(([key, label]) => (
                     <option key={key} value={key}>{label}</option>
@@ -841,7 +1018,7 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
                   className="w-full bg-gray-950 border border-gray-700 rounded p-2 text-sm text-gray-200"
                   value={safeSettings.imageSize}
                   onChange={(e) => setSettings({ ...safeSettings, imageSize: e.target.value as ImageSize })}
-                  disabled={isGenerating}
+  
                 >
                   {Object.entries(IMAGE_SIZE_LABELS).map(([key, label]) => (
                     <option key={key} value={key}>{label}</option>
@@ -865,7 +1042,7 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
                   className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-dash-300"
                   value={safeSettings.temperature || 1}
                   onChange={(e) => setSettings({ ...safeSettings, temperature: parseFloat(e.target.value) })}
-                  disabled={isGenerating}
+  
                 />
               </div>
             )}
@@ -889,7 +1066,7 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
                   let val = parseInt(e.target.value);
                   setSettings({ ...safeSettings, outputCount: val })
                 }}
-                disabled={isGenerating}
+
               />
             </div>
 
@@ -905,7 +1082,7 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
                   </div>
                   <button
                     onClick={() => setSettings({ ...safeSettings, safetyFilterEnabled: !safeSettings.safetyFilterEnabled })}
-                    disabled={isGenerating}
+    
                     className={`w-10 h-5 rounded-full relative transition-colors ${
                       safeSettings.safetyFilterEnabled
                         ? 'bg-green-900 ring-1 ring-green-400'

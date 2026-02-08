@@ -3,7 +3,7 @@ import LeftPanel from './components/left-panel';
 import RightPanel from './components/right-panel';
 import ApiKeyModal from './components/api-key-modal';
 import ModifyImageModal from './components/modify-image-modal';
-import { AppSettings, Run, GeneratedImage, PromptItem, ReferenceImage, AppMode, VideoScene, VideoSettings, GeneratedVideo, VideoModel } from './types';
+import { AppSettings, Run, GeneratedImage, PromptItem, ReferenceImage, AppMode, VideoScene, VideoSettings, GeneratedVideo, VideoModel, KlingProDuration, KlingProAspectRatio } from './types';
 import { DEFAULT_SETTINGS } from './constants';
 import { generateImage, modifyImage } from './services/gemini-service';
 import { getAllRunsFromDB, saveRunToDB, deleteRunFromDB } from './services/db';
@@ -11,10 +11,12 @@ import { getAllGeneratedVideosFromDB, saveGeneratedVideoToDB, deleteGeneratedVid
 import { processBatchQueue, QueueTask, calculateOptimalBatchSize, BATCH_DELAYS } from './services/batch-queue';
 import { withRateLimitRetry } from './services/rate-limiter';
 import { useSeedreamCredits } from './hooks/use-seedream-credits';
-import { generateWithSeedream, mapAspectRatio } from './services/seedream-service';
+import { generateWithSeedream, mapAspectRatio, uploadImageBase64 } from './services/seedream-service';
 import { generateWithSeedreamTxt2Img } from './services/seedream-txt2img-service';
 import { generateMotionVideo } from './services/kling-motion-control-service';
+import { createFreepikProI2VTask, pollFreepikProI2VTask } from './services/freepik-kling-service';
 import { logger } from './services/logger';
+import { generateThumbnail, base64ToBlob, blobToBase64 } from './services/image-blob-manager';
 import { useActivityQueue } from './hooks/use-activity-queue';
 import ActivityPanel from './components/activity-panel';
 
@@ -26,8 +28,9 @@ const App: React.FC = () => {
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
   const [apiKey, setApiKey] = useState('');
   const [kieApiKey, setKieApiKey] = useState('');
+  const [freepikApiKey, setFreepikApiKey] = useState('');
   const [isKeyModalOpen, setIsKeyModalOpen] = useState(false);
-  const [keyModalMode, setKeyModalMode] = useState<'gemini' | 'spicy'>('gemini');
+  const [keyModalMode, setKeyModalMode] = useState<'gemini' | 'spicy' | 'freepik'>('gemini');
 
   // Video Mode State
   const [appMode, setAppMode] = useState<AppMode>('image');
@@ -36,7 +39,13 @@ const App: React.FC = () => {
   const [videoSettings, setVideoSettings] = useState<VideoSettings>({
     referenceVideoMode: 'global',
     orientation: 'image',
-    resolution: '720p'
+    resolution: '720p',
+    klingProvider: 'freepik',
+    klingProDuration: '5',
+    klingProAspectRatio: 'widescreen_16_9',
+    klingCfgScale: 0.5,
+    klingProNegativePrompt: '',
+    klingProGenerateAudio: false,
   });
   const [generatedVideos, setGeneratedVideos] = useState<GeneratedVideo[]>([]);
 
@@ -78,6 +87,7 @@ const App: React.FC = () => {
 
   // Initial Load
   useEffect(() => {
+    navigator.storage?.persist?.();
     const loadData = async () => {
       logger.info('App', 'Loading application data');
       try {
@@ -92,6 +102,12 @@ const App: React.FC = () => {
         if (savedKieKey) {
           setKieApiKey(savedKieKey);
           logger.debug('App', 'Loaded Kie.ai API key from storage');
+        }
+
+        const savedFreepikKey = localStorage.getItem('freepik_api_key');
+        if (savedFreepikKey) {
+          setFreepikApiKey(savedFreepikKey);
+          logger.debug('App', 'Loaded Freepik API key from storage');
         }
 
         // Prompt for Gemini key if missing
@@ -122,6 +138,29 @@ const App: React.FC = () => {
         setRuns(dbRuns);
         logger.info('App', `Loaded ${dbRuns.length} runs from database`);
 
+        // Migrate old images: generate thumbnails in background
+        const migrateOldThumbnails = async (loadedRuns: Run[]) => {
+          for (const run of loadedRuns) {
+            let updated = false;
+            for (const img of run.images) {
+              if (img.base64 && !img.thumbnailBase64) {
+                try {
+                  const blob = base64ToBlob(img.base64, img.mimeType);
+                  const thumbBlob = await generateThumbnail(blob, 400);
+                  img.thumbnailBase64 = await blobToBase64(thumbBlob);
+                  img.thumbnailMimeType = 'image/jpeg';
+                  updated = true;
+                } catch { /* skip */ }
+              }
+            }
+            if (updated) {
+              saveRunToDB(run).catch(() => {});
+            }
+          }
+          setRuns([...loadedRuns]);
+        };
+        migrateOldThumbnails(dbRuns).catch(() => {});
+
         // Load generated videos from IndexedDB (skip failed ones)
         const savedVideos = await getAllGeneratedVideosFromDB();
         const validVideos = savedVideos.filter(v => v.status === 'success');
@@ -148,7 +187,7 @@ const App: React.FC = () => {
 
   // --- RETRY LOGIC ---
   const handleRetry = async (image: GeneratedImage) => {
-    if (isGenerating) return;
+    // Allow concurrent retries - no isGenerating guard
 
     const model = image.generatedBy || 'gemini'; // Default to gemini for legacy
 
@@ -622,23 +661,40 @@ const App: React.FC = () => {
             setLoadingStatus(`${prefix}Batch ${batchNum}/${totalBatches}: ${completed}/${total} images`);
           },
           onResult: (result, task) => {
-            // Replace placeholder with real image
-            setRuns(prev => prev.map(r => {
-              if (r.id === newRunId) {
-                const updatedImages = r.images.map(img =>
-                  img.id === task.id
-                    ? { ...result, id: task.id, status: 'success' as const }
-                    : img
-                );
-                const updated = { ...r, images: updatedImages };
-                // Save to DB incrementally (fire-and-forget)
-                saveRunToDB(updated).catch(err =>
-                  console.error('Failed to save run to DB:', err)
-                );
-                return updated;
+            // Generate thumbnail in background, then update state
+            const generateThumb = async () => {
+              let thumbnailBase64: string | undefined;
+              let thumbnailMimeType: string | undefined;
+              try {
+                if (result.base64) {
+                  const blob = base64ToBlob(result.base64, result.mimeType);
+                  const thumbBlob = await generateThumbnail(blob, 400);
+                  thumbnailBase64 = await blobToBase64(thumbBlob);
+                  thumbnailMimeType = 'image/jpeg';
+                }
+              } catch {
+                // Thumbnail generation failed, not critical
               }
-              return r;
-            }));
+              return { thumbnailBase64, thumbnailMimeType };
+            };
+
+            generateThumb().then(({ thumbnailBase64, thumbnailMimeType }) => {
+              setRuns(prev => prev.map(r => {
+                if (r.id === newRunId) {
+                  const updatedImages = r.images.map(img =>
+                    img.id === task.id
+                      ? { ...result, id: task.id, status: 'success' as const, thumbnailBase64, thumbnailMimeType }
+                      : img
+                  );
+                  const updated = { ...r, images: updatedImages };
+                  saveRunToDB(updated).catch(err =>
+                    console.error('Failed to save run to DB:', err)
+                  );
+                  return updated;
+                }
+                return r;
+              }));
+            });
           },
           onError: (error, task) => {
             logger.error('App', `Task failed in ${isSpicyMode ? 'Spicy' : 'Gemini'} mode`, {
@@ -741,6 +797,84 @@ const App: React.FC = () => {
     }
   };
 
+  /**
+   * Pro I2V generation: upload image via Kie.ai → Freepik Pro I2V → poll
+   */
+  const generateProI2V = async (
+    scene: VideoScene,
+    sceneIndex: number,
+    totalScenes: number
+  ): Promise<GeneratedVideo> => {
+    const startTime = Date.now();
+    const duration = (videoSettings as any).klingProDuration as KlingProDuration || '5';
+    const aspectRatio = (videoSettings as any).klingProAspectRatio as KlingProAspectRatio || 'widescreen_16_9';
+    const cfgScale = (videoSettings as any).klingCfgScale ?? 0.5;
+    const negativePrompt = (videoSettings as any).klingProNegativePrompt || '';
+    const generateAudio = (videoSettings as any).klingProGenerateAudio || false;
+
+    try {
+      // Upload image (use Kie.ai if available, else send base64 directly)
+      setLoadingStatus(`Scene ${sceneIndex + 1}/${totalScenes}: Uploading image...`);
+      let imageRef: string;
+      if (kieApiKey) {
+        imageRef = await uploadImageBase64(kieApiKey, scene.referenceImage.base64, scene.referenceImage.mimeType);
+      } else {
+        // Freepik accepts base64 directly
+        imageRef = `data:${scene.referenceImage.mimeType};base64,${scene.referenceImage.base64}`;
+      }
+
+      // Create task
+      setLoadingStatus(`Scene ${sceneIndex + 1}/${totalScenes}: Creating Pro I2V task...`);
+      const taskId = await createFreepikProI2VTask(
+        freepikApiKey, imageRef, scene.prompt, duration, aspectRatio,
+        cfgScale, negativePrompt, generateAudio
+      );
+
+      // Poll
+      setLoadingStatus(`Scene ${sceneIndex + 1}/${totalScenes}: Generating...`);
+      const result = await pollFreepikProI2VTask(freepikApiKey, taskId, (status, attempt) => {
+        setLoadingStatus(`Scene ${sceneIndex + 1}/${totalScenes}: ${status} (${attempt + 1}/120)`);
+      });
+
+      if (result.success && result.videoUrl) {
+        logger.info('App', 'Pro I2V complete', { sceneId: scene.id, durationMs: Date.now() - startTime });
+        return {
+          id: `video-${Date.now()}`,
+          sceneId: scene.id,
+          url: result.videoUrl,
+          duration: parseInt(duration),
+          prompt: scene.prompt,
+          createdAt: Date.now(),
+          status: 'success',
+          provider: 'freepik',
+        };
+      }
+
+      return {
+        id: `video-${Date.now()}`,
+        sceneId: scene.id,
+        url: '',
+        duration: 0,
+        prompt: scene.prompt,
+        createdAt: Date.now(),
+        status: 'failed',
+        error: result.error || 'Pro I2V generation failed',
+      };
+    } catch (error) {
+      logger.error('App', 'Pro I2V failed', { error, sceneId: scene.id });
+      return {
+        id: `video-${Date.now()}`,
+        sceneId: scene.id,
+        url: '',
+        duration: 0,
+        prompt: scene.prompt,
+        createdAt: Date.now(),
+        status: 'failed',
+        error: error instanceof Error ? error.message : 'Unknown error',
+      };
+    }
+  };
+
   const handleRetryVideo = async (video: GeneratedVideo) => {
     // Find the scene for this video
     const scene = videoScenes.find(s => s.id === video.sceneId);
@@ -763,10 +897,11 @@ const App: React.FC = () => {
     try {
       const result = await generateMotionVideo(
         kieApiKey,
+        freepikApiKey,
         scene,
         videoSettings.globalReferenceVideo,
         videoSettings,
-        (stage, detail) => setLoadingStatus(`🎬 Retry: ${detail || stage}`)
+        (stage, detail) => setLoadingStatus(`Retry: ${detail || stage}`)
       );
 
       if (result.status === 'success') {
@@ -795,45 +930,50 @@ const App: React.FC = () => {
   };
 
   const handleVideoGenerate = async () => {
-    if (!kieApiKey) {
-      logger.warn('App', 'No Kie.ai API key for video generation');
-      setKeyModalMode('spicy');
-      setIsKeyModalOpen(true);
-      return;
+    // Pro I2V only needs Freepik key; Motion Control needs Kie.ai key
+    if (videoModel === 'kling-2.6-pro') {
+      if (!freepikApiKey) {
+        setKeyModalMode('freepik');
+        setIsKeyModalOpen(true);
+        return;
+      }
+    } else {
+      if (!kieApiKey) {
+        logger.warn('App', 'No Kie.ai API key for video generation');
+        setKeyModalMode('spicy');
+        setIsKeyModalOpen(true);
+        return;
+      }
     }
 
-    // Kling 2.6 flow (original video generation)
     if (videoScenes.length === 0) {
       alert('Add at least one scene to generate videos');
       return;
     }
 
-    // Validate that all scenes have prompts
-    const scenesWithoutPrompts = videoScenes.filter(s => !s.prompt.trim());
-    if (scenesWithoutPrompts.length > 0) {
-      alert('All scenes must have motion prompts');
+    const scenesNeedingPrompts = videoScenes.filter(s => s.usePrompt && !s.prompt.trim());
+    if (scenesNeedingPrompts.length > 0) {
+      alert('Scenes with motion prompt enabled must have a prompt');
       return;
     }
 
-    logger.info('App', `Starting video generation for ${videoScenes.length} scene(s)`);
+    logger.info('App', `Starting ${videoModel} generation for ${videoScenes.length} scene(s)`);
     setIsGenerating(true);
 
-    // Add job to activity queue
     const jobId = addJob({
       type: 'video',
       status: 'active',
-      prompt: videoScenes[0].prompt.slice(0, 50) + (videoScenes.length > 1 ? ` (+${videoScenes.length - 1} more)` : '')
+      prompt: (videoScenes[0].prompt || 'Motion video').slice(0, 50) + (videoScenes.length > 1 ? ` (+${videoScenes.length - 1} more)` : '')
     });
-    addLog({ level: 'info', message: `Starting ${videoScenes.length} video${videoScenes.length > 1 ? 's' : ''}`, jobId });
+    addLog({ level: 'info', message: `Starting ${videoScenes.length} video${videoScenes.length > 1 ? 's' : ''} (${videoModel})`, jobId });
 
     const results: GeneratedVideo[] = [];
 
     try {
       for (let i = 0; i < videoScenes.length; i++) {
         const scene = videoScenes[i];
-        setLoadingStatus(`🎬 Generating video ${i + 1}/${videoScenes.length}...`);
+        setLoadingStatus(`Generating video ${i + 1}/${videoScenes.length}...`);
 
-        // Create placeholder for instant visual feedback
         const placeholderId = `video-${Date.now()}-${i}`;
         const placeholder: GeneratedVideo = {
           id: placeholderId,
@@ -847,36 +987,41 @@ const App: React.FC = () => {
         setGeneratedVideos(prev => [placeholder, ...prev]);
 
         try {
-          const video = await generateMotionVideo(
-            kieApiKey,
-            scene,
-            videoSettings.globalReferenceVideo,
-            videoSettings,
-            (stage, detail) => setLoadingStatus(`🎬 Scene ${i + 1}: ${detail || stage}`)
-          );
-          results.push(video);
+          let video: GeneratedVideo;
 
-          // Replace placeholder with result
+          if (videoModel === 'kling-2.6-pro') {
+            // --- Pro I2V flow: upload image → Freepik Pro endpoint ---
+            video = await generateProI2V(scene, i, videoScenes.length);
+          } else {
+            // --- Motion Control flow ---
+            video = await generateMotionVideo(
+              kieApiKey,
+              freepikApiKey,
+              scene,
+              videoSettings.globalReferenceVideo,
+              videoSettings,
+              (stage, detail) => setLoadingStatus(`Scene ${i + 1}: ${detail || stage}`)
+            );
+          }
+
+          results.push(video);
           setGeneratedVideos(prev => prev.map(v =>
             v.id === placeholderId ? { ...video, id: placeholderId } : v
           ));
 
           if (video.status === 'success') {
             logger.info('App', `Scene ${i + 1} completed successfully`);
-            // Save successful video to IndexedDB for persistence
             saveGeneratedVideoToDB({ ...video, id: placeholderId }).catch(e =>
               logger.warn('App', 'Failed to persist video to IndexedDB', e)
             );
           } else {
             logger.warn('App', `Scene ${i + 1} failed`, { error: video.error });
-            // Auto-remove failed video after 8 seconds
             setTimeout(() => {
               setGeneratedVideos(prev => prev.filter(v => v.id !== placeholderId));
             }, 8000);
           }
         } catch (error: any) {
           logger.error('App', `Scene ${i + 1} generation error`, { error });
-          // Update placeholder to failed
           setGeneratedVideos(prev => prev.map(v =>
             v.id === placeholderId ? { ...v, status: 'failed' as const, error: error.message } : v
           ));
@@ -891,7 +1036,6 @@ const App: React.FC = () => {
             error: error.message
           };
           results.push(failedVideo);
-          // Auto-remove failed video after 8 seconds
           setTimeout(() => {
             setGeneratedVideos(prev => prev.filter(v => v.id !== placeholderId));
           }, 8000);
@@ -934,6 +1078,8 @@ const App: React.FC = () => {
         mode={keyModalMode}
         kieApiKey={kieApiKey}
         setKieApiKey={setKieApiKey}
+        freepikApiKey={freepikApiKey}
+        setFreepikApiKey={setFreepikApiKey}
       />
 
       <ModifyImageModal

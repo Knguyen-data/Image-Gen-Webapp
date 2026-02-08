@@ -4,7 +4,8 @@ export type ImageSize = '1K' | '2K' | '4K'; // Gemini 3 Pro supports up to 4K
 export type AppMode = 'image' | 'video';
 export type FixedBlockPosition = 'top' | 'bottom';
 
-export type VideoModel = 'kling-2.6';
+export type VideoModel = 'kling-2.6' | 'kling-2.6-pro';
+export type KlingProvider = 'freepik' | 'kieai';
 
 export interface ReferenceImage {
   id: string;
@@ -49,6 +50,8 @@ export interface GeneratedImage {
   id: string;
   base64: string;
   mimeType: string;
+  thumbnailBase64?: string;
+  thumbnailMimeType?: string;
   seed?: number;
   createdAt: number;
   promptUsed: string;
@@ -119,6 +122,12 @@ export interface VideoSettings {
   globalReferenceVideo?: ReferenceVideo;
   orientation: 'image' | 'video';
   resolution: '720p' | '1080p';
+  klingProvider?: KlingProvider;
+  klingProDuration?: KlingProDuration;
+  klingProAspectRatio?: KlingProAspectRatio;
+  klingCfgScale?: number;
+  klingProNegativePrompt?: string;
+  klingProGenerateAudio?: boolean;
 }
 
 export interface GeneratedVideo {
@@ -131,14 +140,27 @@ export interface GeneratedVideo {
   createdAt: number;
   status: 'pending' | 'generating' | 'success' | 'failed';
   error?: string;
+  provider?: KlingProvider;
 }
+
+export type KlingProAspectRatio = 'widescreen_16_9' | 'social_story_9_16' | 'square_1_1';
+export type KlingProDuration = '5' | '10';
 
 // Unified Video Settings (Kling 2.6)
 export interface UnifiedVideoSettings {
   model: VideoModel;
-  // Kling-specific
+  // Kling Motion Control
   referenceVideoMode: VideoRefMode;
   globalReferenceVideo?: ReferenceVideo;
   orientation: 'image' | 'video';
   klingResolution: '720p' | '1080p';
+  klingProvider: KlingProvider;
+  // Kling Pro I2V
+  klingProDuration: KlingProDuration;
+  klingProAspectRatio: KlingProAspectRatio;
+  // Shared Kling settings
+  klingCfgScale: number; // 0-1, controls prompt adherence (default 0.5)
+  // Pro I2V only
+  klingProNegativePrompt: string;
+  klingProGenerateAudio: boolean;
 }

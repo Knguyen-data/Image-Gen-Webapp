@@ -3,6 +3,7 @@ import { Run, GeneratedImage, AppMode, GeneratedVideo } from '../types';
 import ImageCard from './image-card';
 import VideoCard from './video-card';
 import { saveAndRevealVideo } from '../services/video-file-service';
+import { base64ToBlob, createObjectUrl, revokeObjectUrl, revokeAllObjectUrls } from '../services/image-blob-manager';
 import JSZip from 'jszip';
 
 interface RightPanelProps {
@@ -41,6 +42,7 @@ const RightPanel: React.FC<RightPanelProps> = ({
   const [compareMode, setCompareMode] = useState(false);
   const [lightboxImage, setLightboxImage] = useState<GeneratedImage | null>(null);
   const [lightboxVideo, setLightboxVideo] = useState<GeneratedVideo | null>(null);
+  const [lightboxObjectUrl, setLightboxObjectUrl] = useState<string | null>(null);
   const [lightboxAspectRatio, setLightboxAspectRatio] = useState<string>('4/3'); // Default aspect ratio
   const [downloadingRunId, setDownloadingRunId] = useState<string | null>(null);
 
@@ -96,6 +98,25 @@ const RightPanel: React.FC<RightPanelProps> = ({
     };
     img.src = `data:${lightboxImage.mimeType};base64,${lightboxImage.base64}`;
   }, [lightboxImage]);
+
+  // Create Object URL for lightbox to avoid inline base64 in DOM
+  useEffect(() => {
+    if (lightboxImage?.base64) {
+      const blob = base64ToBlob(lightboxImage.base64, lightboxImage.mimeType);
+      const url = createObjectUrl(blob);
+      setLightboxObjectUrl(url);
+      return () => {
+        revokeObjectUrl(url);
+        setLightboxObjectUrl(null);
+      };
+    }
+    setLightboxObjectUrl(null);
+  }, [lightboxImage]);
+
+  // Cleanup all Object URLs on unmount
+  useEffect(() => {
+    return () => revokeAllObjectUrls();
+  }, []);
 
   // Flatten all images for easy lookup (must be before keyboard handler useEffect)
   const allImages = runs.flatMap(r => r.images.map(img => ({ ...img, runId: r.id })));
@@ -301,7 +322,7 @@ const RightPanel: React.FC<RightPanelProps> = ({
           </div>
           <div className="flex-1 flex items-center justify-center overflow-hidden" onClick={(e) => e.stopPropagation()}>
             <img
-              src={`data:${lightboxImage.mimeType};base64,${lightboxImage.base64}`}
+              src={lightboxObjectUrl || ''}
               className="max-w-full max-h-full object-contain shadow-2xl"
               alt="Full view"
             />
@@ -589,7 +610,6 @@ const RightPanel: React.FC<RightPanelProps> = ({
                       key={video.id}
                       video={video}
                       onDownload={() => handleDownloadVideo(video)}
-                      onRetry={() => onRetryVideo(video)}
                       onDelete={() => onDeleteVideo(video.id)}
                       onOpen={() => setLightboxVideo(video)}
                       onSaveAndReveal={() => handleSaveAndRevealVideo(video)}

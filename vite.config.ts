@@ -8,13 +8,17 @@ export default defineConfig(({ mode }) => {
     return {
       server: {
         port: 3000,
-        host: '0.0.0.0',
+        host: '127.0.0.1',
+        proxy: {
+          '/api/freepik': {
+            target: 'https://api.freepik.com',
+            changeOrigin: true,
+            rewrite: (path) => path.replace(/^\/api\/freepik/, ''),
+          },
+        },
       },
       plugins: [react(), fileSystemPlugin()],
-      define: {
-        'process.env.API_KEY': JSON.stringify(env.GEMINI_API_KEY),
-        'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY)
-      },
+      define: {},
       resolve: {
         alias: {
           '@': path.resolve(__dirname, './src'),

@@ -12,8 +12,8 @@ const CREATE_TASK_URL = 'https://api.kie.ai/api/v1/jobs/createTask';
 const QUERY_TASK_URL = 'https://api.kie.ai/api/v1/jobs/recordInfo';
 
 const MODEL_ID = 'seedream/4.5-edit';
-const MAX_POLL_ATTEMPTS = 60;
-const INITIAL_POLL_INTERVAL_MS = 1000;
+const MAX_POLL_ATTEMPTS = 60; // ~5 min at 5s intervals per image
+const INITIAL_POLL_INTERVAL_MS = 5000;
 
 /**
  * Upload base64 image to Kie.ai and get URL
@@ -175,7 +175,6 @@ export const pollForResult = async (
   maxAttempts: number = MAX_POLL_ATTEMPTS
 ): Promise<SeedreamTask> => {
   let attempt = 0;
-  let interval = INITIAL_POLL_INTERVAL_MS;
 
   while (attempt < maxAttempts) {
     const task = await queryTask(apiKey, taskId);
@@ -190,9 +189,8 @@ export const pollForResult = async (
       throw new Error(`Generation failed: ${task.failMsg || 'Unknown error'}`);
     }
 
-    // Exponential backoff: 1s, 2s, 4s, 8s... capped at 10s
-    await new Promise(resolve => setTimeout(resolve, interval));
-    interval = Math.min(interval * 2, 10000);
+    // Fixed 5s interval for predictable poll timing
+    await new Promise(resolve => setTimeout(resolve, INITIAL_POLL_INTERVAL_MS));
     attempt++;
   }
 

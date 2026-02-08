@@ -1,25 +1,19 @@
 import React from 'react';
-import { GeneratedVideo } from '../types';
+import { GeneratedVideo, KlingProvider } from '../types';
 
 interface VideoCardProps {
   video: GeneratedVideo;
   onDownload: () => void;
-  onRetry: () => void;
   onDelete: () => void;
   onOpen?: () => void;
   onSaveAndReveal?: () => void;
 }
 
-const VideoCard: React.FC<VideoCardProps> = ({ video, onDownload, onRetry, onDelete, onOpen, onSaveAndReveal }) => {
+const VideoCard: React.FC<VideoCardProps> = ({ video, onDownload, onDelete, onOpen, onSaveAndReveal }) => {
   const formatDuration = (seconds: number): string => {
     const mins = Math.floor(seconds / 60);
     const secs = Math.floor(seconds % 60);
     return `${mins}:${secs.toString().padStart(2, '0')}`;
-  };
-
-  const copyPrompt = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    navigator.clipboard.writeText(video.prompt);
   };
 
   return (
@@ -70,6 +64,12 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onDownload, onRetry, onDel
             <span className="absolute bottom-2 right-2 bg-black/70 px-2 py-0.5 rounded text-xs text-white font-mono backdrop-blur-sm group-hover:opacity-0 transition-opacity z-10">
               {formatDuration(video.duration)}
             </span>
+            {/* Provider badge */}
+            {video.provider && (
+              <span className={`absolute bottom-1 left-1 text-[10px] px-1.5 py-0.5 rounded font-medium text-white z-10 ${video.provider === 'freepik' ? 'bg-indigo-500/80' : 'bg-purple-500/80'}`}>
+                {video.provider === 'freepik' ? 'Freepik' : 'Kie.ai'}
+              </span>
+            )}
           </>
         )}
 
@@ -87,12 +87,12 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onDownload, onRetry, onDel
             </div>
             <div className="flex gap-2 justify-end">
               <button
-                onClick={(e) => { e.stopPropagation(); onRetry(); }}
-                className="p-2 bg-emerald-600/80 hover:bg-emerald-500/80 rounded-full text-white backdrop-blur-sm"
-                title="Retry / Regenerate"
+                onClick={(e) => { e.stopPropagation(); onDownload(); }}
+                className="p-2 bg-gray-800/80 hover:bg-white/20 rounded-full text-white backdrop-blur-sm"
+                title="Download Video"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                 </svg>
               </button>
               {onSaveAndReveal && (
@@ -106,24 +106,6 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onDownload, onRetry, onDel
                   </svg>
                 </button>
               )}
-              <button
-                onClick={(e) => { e.stopPropagation(); onDownload(); }}
-                className="p-2 bg-gray-800/80 hover:bg-white/20 rounded-full text-white backdrop-blur-sm"
-                title="Download Video"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                </svg>
-              </button>
-              <button
-                onClick={copyPrompt}
-                className="p-2 bg-gray-800/80 hover:bg-white/20 rounded-full text-white backdrop-blur-sm"
-                title="Copy Prompt"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                </svg>
-              </button>
               <button
                 onClick={(e) => { e.stopPropagation(); onDelete(); }}
                 className="p-2 bg-red-900/80 hover:bg-red-600/80 rounded-full text-red-200 hover:text-white backdrop-blur-sm"

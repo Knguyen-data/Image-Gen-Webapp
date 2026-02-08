@@ -83,7 +83,9 @@ const ImageCard: React.FC<ImageCardProps> = ({ image, selected, onToggleSelect, 
         {/* Actual image (only show when base64 exists and not generating/failed) */}
         {!isGenerating && !isFailed && (
           <img
-            src={`data:${image.mimeType};base64,${image.base64}`}
+            src={image.thumbnailBase64
+              ? `data:${image.thumbnailMimeType || 'image/jpeg'};base64,${image.thumbnailBase64}`
+              : `data:${image.mimeType};base64,${image.base64}`}
             alt="Generated Output"
             className="w-full h-full object-cover"
             loading="lazy"

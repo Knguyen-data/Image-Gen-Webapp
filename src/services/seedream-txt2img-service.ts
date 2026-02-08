@@ -10,7 +10,7 @@ import { logger } from './logger';
 
 const CREATE_TASK_URL = 'https://api.kie.ai/api/v1/jobs/createTask';
 const MODEL_ID = 'seedream/4.5-text-to-image';
-const MAX_POLL_ATTEMPTS = 60;
+const MAX_POLL_ATTEMPTS = 12; // ~1 min at 5s intervals per image
 
 /**
  * Create text-to-image task with Seedream 4.5
