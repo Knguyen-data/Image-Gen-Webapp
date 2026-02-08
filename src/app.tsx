@@ -913,7 +913,8 @@ INSTRUCTIONS:
   const generateProI2V = async (
     scene: VideoScene,
     sceneIndex: number,
-    totalScenes: number
+    totalScenes: number,
+    onProgress?: (detail: string) => void
   ): Promise<GeneratedVideo> => {
     const startTime = Date.now();
     const duration = (videoSettings as any).klingProDuration as KlingProDuration || '5';
@@ -924,7 +925,7 @@ INSTRUCTIONS:
 
     try {
       // Upload image (use Kie.ai if available, else send base64 directly)
-      setLoadingStatus(`Scene ${sceneIndex + 1}/${totalScenes}: Uploading image...`);
+      onProgress?.('Uploading image...');
       let imageRef: string;
       if (kieApiKey) {
         imageRef = await uploadImageBase64(kieApiKey, scene.referenceImage.base64, scene.referenceImage.mimeType);
@@ -934,16 +935,16 @@ INSTRUCTIONS:
       }
 
       // Create task
-      setLoadingStatus(`Scene ${sceneIndex + 1}/${totalScenes}: Creating Pro I2V task...`);
+      onProgress?.('Creating Pro I2V task...');
       const taskId = await createFreepikProI2VTask(
         freepikApiKey, imageRef, scene.prompt, duration, aspectRatio,
         cfgScale, negativePrompt, generateAudio
       );
 
       // Poll
-      setLoadingStatus(`Scene ${sceneIndex + 1}/${totalScenes}: Generating...`);
+      onProgress?.('Generating...');
       const result = await pollFreepikProI2VTask(freepikApiKey, taskId, (status, attempt) => {
-        setLoadingStatus(`Scene ${sceneIndex + 1}/${totalScenes}: ${status} (${attempt + 1}/120)`);
+        onProgress?.(`${status} (${attempt + 1}/120)`);
       });
 
       if (result.success && result.videoUrl) {
@@ -1077,80 +1078,118 @@ INSTRUCTIONS:
     });
     addLog({ level: 'info', message: `Starting ${videoScenes.length} video${videoScenes.length > 1 ? 's' : ''} (${videoModel})`, jobId });
 
-    const results: GeneratedVideo[] = [];
+    // --------------- Parallel generation ---------------
+    // Fire all scenes concurrently. Stagger task creation by 500ms to
+    // respect Freepik rate-limit (10 req/s avg over 2 min) while polling
+    // all tasks in parallel.
 
-    try {
-      for (let i = 0; i < videoScenes.length; i++) {
-        const scene = videoScenes[i];
-        setLoadingStatus(`Generating video ${i + 1}/${videoScenes.length}...`);
+    const placeholderIds: string[] = [];
 
-        const placeholderId = `video-${Date.now()}-${i}`;
-        const placeholder: GeneratedVideo = {
+    // Create placeholders for ALL scenes up-front so the UI shows them all
+    for (let i = 0; i < videoScenes.length; i++) {
+      const scene = videoScenes[i];
+      const placeholderId = `video-${Date.now()}-${i}`;
+      placeholderIds.push(placeholderId);
+      const placeholder: GeneratedVideo = {
+        id: placeholderId,
+        sceneId: scene.id,
+        url: '',
+        duration: 0,
+        prompt: scene.prompt,
+        createdAt: Date.now(),
+        status: 'generating',
+      };
+      setGeneratedVideos(prev => [placeholder, ...prev]);
+    }
+
+    setLoadingStatus(`Generating ${videoScenes.length} videos in parallel...`);
+
+    // Track per-scene status for the combined status line
+    const sceneStatuses: string[] = videoScenes.map((_, i) => `Scene ${i + 1}: queued`);
+    const updateCombinedStatus = () => {
+      setLoadingStatus(sceneStatuses.join(' · '));
+    };
+
+    // Build one promise per scene
+    const scenePromises = videoScenes.map(async (scene, i) => {
+      const placeholderId = placeholderIds[i];
+
+      // Stagger task creation: 500ms between each to avoid rate-limit bursts
+      if (i > 0) {
+        await new Promise(r => setTimeout(r, i * 500));
+      }
+
+      try {
+        let video: GeneratedVideo;
+
+        sceneStatuses[i] = `Scene ${i + 1}: creating...`;
+        updateCombinedStatus();
+
+        if (videoModel === 'kling-2.6-pro') {
+          video = await generateProI2V(scene, i, videoScenes.length, (detail) => {
+            sceneStatuses[i] = `Scene ${i + 1}: ${detail}`;
+            updateCombinedStatus();
+          });
+        } else {
+          video = await generateMotionVideo(
+            kieApiKey,
+            freepikApiKey,
+            scene,
+            videoSettings.globalReferenceVideo,
+            videoSettings,
+            (stage, detail) => {
+              sceneStatuses[i] = `Scene ${i + 1}: ${detail || stage}`;
+              updateCombinedStatus();
+            }
+          );
+        }
+
+        setGeneratedVideos(prev => prev.map(v =>
+          v.id === placeholderId ? { ...video, id: placeholderId } : v
+        ));
+
+        if (video.status === 'success') {
+          sceneStatuses[i] = `Scene ${i + 1}: ✅`;
+          logger.info('App', `Scene ${i + 1} completed successfully`);
+          saveGeneratedVideoToDB({ ...video, id: placeholderId }).catch(e =>
+            logger.warn('App', 'Failed to persist video to IndexedDB', e)
+          );
+        } else {
+          sceneStatuses[i] = `Scene ${i + 1}: ❌`;
+          logger.warn('App', `Scene ${i + 1} failed`, { error: video.error });
+          setTimeout(() => {
+            setGeneratedVideos(prev => prev.filter(v => v.id !== placeholderId));
+          }, 8000);
+        }
+        updateCombinedStatus();
+        return video;
+      } catch (error: any) {
+        sceneStatuses[i] = `Scene ${i + 1}: ❌`;
+        updateCombinedStatus();
+        logger.error('App', `Scene ${i + 1} generation error`, { error });
+        setGeneratedVideos(prev => prev.map(v =>
+          v.id === placeholderId ? { ...v, status: 'failed' as const, error: error.message } : v
+        ));
+        const failedVideo: GeneratedVideo = {
           id: placeholderId,
           sceneId: scene.id,
           url: '',
           duration: 0,
           prompt: scene.prompt,
           createdAt: Date.now(),
-          status: 'generating',
+          status: 'failed',
+          error: error.message
         };
-        setGeneratedVideos(prev => [placeholder, ...prev]);
-
-        try {
-          let video: GeneratedVideo;
-
-          if (videoModel === 'kling-2.6-pro') {
-            // --- Pro I2V flow: upload image → Freepik Pro endpoint ---
-            video = await generateProI2V(scene, i, videoScenes.length);
-          } else {
-            // --- Motion Control flow ---
-            video = await generateMotionVideo(
-              kieApiKey,
-              freepikApiKey,
-              scene,
-              videoSettings.globalReferenceVideo,
-              videoSettings,
-              (stage, detail) => setLoadingStatus(`Scene ${i + 1}: ${detail || stage}`)
-            );
-          }
-
-          results.push(video);
-          setGeneratedVideos(prev => prev.map(v =>
-            v.id === placeholderId ? { ...video, id: placeholderId } : v
-          ));
-
-          if (video.status === 'success') {
-            logger.info('App', `Scene ${i + 1} completed successfully`);
-            saveGeneratedVideoToDB({ ...video, id: placeholderId }).catch(e =>
-              logger.warn('App', 'Failed to persist video to IndexedDB', e)
-            );
-          } else {
-            logger.warn('App', `Scene ${i + 1} failed`, { error: video.error });
-            setTimeout(() => {
-              setGeneratedVideos(prev => prev.filter(v => v.id !== placeholderId));
-            }, 8000);
-          }
-        } catch (error: any) {
-          logger.error('App', `Scene ${i + 1} generation error`, { error });
-          setGeneratedVideos(prev => prev.map(v =>
-            v.id === placeholderId ? { ...v, status: 'failed' as const, error: error.message } : v
-          ));
-          const failedVideo: GeneratedVideo = {
-            id: placeholderId,
-            sceneId: scene.id,
-            url: '',
-            duration: 0,
-            prompt: scene.prompt,
-            createdAt: Date.now(),
-            status: 'failed',
-            error: error.message
-          };
-          results.push(failedVideo);
-          setTimeout(() => {
-            setGeneratedVideos(prev => prev.filter(v => v.id !== placeholderId));
-          }, 8000);
-        }
+        setTimeout(() => {
+          setGeneratedVideos(prev => prev.filter(v => v.id !== placeholderId));
+        }, 8000);
+        return failedVideo;
       }
+    });
+
+    try {
+      // Await all scenes in parallel
+      const results = await Promise.all(scenePromises);
 
       const successCount = results.filter(v => v.status === 'success').length;
       const failCount = results.filter(v => v.status === 'failed').length;
