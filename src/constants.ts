@@ -17,6 +17,10 @@ export const DEFAULT_SETTINGS: AppSettings = {
     enabled: false,
     quality: 'basic',
     subMode: 'edit'
+  },
+  amtSettings: {
+    outputFps: 30,
+    recursiveInterpolationPasses: 2,
   }
 };
 
@@ -64,6 +68,9 @@ export const VIDEO_CONSTRAINTS = {
 export const VIDEO_MODEL_LABELS: Record<VideoModel, string> = {
   'kling-2.6': 'Kling 2.6 Motion Control',
   'kling-2.6-pro': 'Kling 2.6 Pro — Image to Video',
+  'kling-3': 'Kling 3 — MultiShot',
+  'kling-3-omni': 'Kling 3 Omni — Multimodal',
+  'veo-3.1': 'Veo 3.1 — Google AI Video',
 };
 
 // Default Unified Video Settings

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { logger } from '../services/logger';
 
-type KeyMode = 'gemini' | 'spicy' | 'freepik';
+type KeyMode = 'gemini' | 'spicy' | 'freepik' | 'fal';
 
 interface ApiKeyModalProps {
   isOpen: boolean;
@@ -16,6 +16,9 @@ interface ApiKeyModalProps {
   // Freepik support
   freepikApiKey?: string;
   setFreepikApiKey?: (key: string) => void;
+  // FAL support
+  falApiKey?: string;
+  setFalApiKey?: (key: string) => void;
 }
 
 const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
@@ -27,11 +30,16 @@ const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
   kieApiKey = '',
   setKieApiKey,
   freepikApiKey = '',
-  setFreepikApiKey
+  setFreepikApiKey,
+  falApiKey = '',
+  setFalApiKey,
 }) => {
   const [activeTab, setActiveTab] = useState<KeyMode>(mode);
   const [inputVal, setInputVal] = useState(
-    mode === 'spicy' ? kieApiKey : mode === 'freepik' ? freepikApiKey : apiKey
+    mode === 'spicy' ? kieApiKey : 
+    mode === 'freepik' ? freepikApiKey : 
+    mode === 'fal' ? falApiKey : 
+    apiKey
   );
   const [isVisible, setIsVisible] = useState(false);
   const [isValidating, setIsValidating] = useState(false);
@@ -39,6 +47,7 @@ const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
 
   const isSpicyMode = activeTab === 'spicy';
   const isFreepikMode = activeTab === 'freepik';
+  const isFalMode = activeTab === 'fal';
 
   // Initialize activeTab from mode prop when modal opens
   useEffect(() => {
@@ -49,9 +58,14 @@ const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
 
   // Sync inputVal when tab changes
   useEffect(() => {
-    setInputVal(isSpicyMode ? kieApiKey : isFreepikMode ? freepikApiKey : apiKey);
+    setInputVal(
+      isSpicyMode ? kieApiKey : 
+      isFreepikMode ? freepikApiKey : 
+      isFalMode ? falApiKey :
+      apiKey
+    );
     setErrorMsg('');
-  }, [activeTab, apiKey, kieApiKey, freepikApiKey, isSpicyMode, isFreepikMode]);
+  }, [activeTab, apiKey, kieApiKey, freepikApiKey, falApiKey, isSpicyMode, isFreepikMode, isFalMode]);
 
   if (!isOpen) return null;
 
@@ -86,11 +100,17 @@ const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
   };
 
   const validateFreepikApiKey = async (key: string): Promise<void> => {
-    // Freepik API doesn't support CORS for browser-side validation.
-    // Just check key format — actual validation happens on first use.
     if (!key.startsWith('FPSX')) {
       throw new Error('Freepik keys start with "FPSX"');
     }
+  };
+
+  const validateFalApiKey = async (key: string): Promise<void> => {
+    // FAL keys are UUIDs with dashes or alphanumeric strings
+    if (key.length < 20) {
+      throw new Error('FAL API key appears too short');
+    }
+    // Could add actual validation by calling FAL API here
   };
 
   const handleSave = async () => {
@@ -104,7 +124,13 @@ const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
     setErrorMsg('');
 
     try {
-      if (isFreepikMode) {
+      if (isFalMode) {
+        logger.info('ApiKeyModal', 'Validating FAL API key');
+        await validateFalApiKey(key);
+        setFalApiKey?.(key);
+        localStorage.setItem('fal_api_key', key);
+        logger.info('ApiKeyModal', 'FAL API key saved');
+      } else if (isFreepikMode) {
         logger.info('ApiKeyModal', 'Validating Freepik API key');
         await validateFreepikApiKey(key);
         setFreepikApiKey?.(key);
@@ -128,8 +154,7 @@ const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
       logger.error('ApiKeyModal', 'Validation failed', error);
       let msg = error.message || "Unknown error";
 
-      // Handle 404 as success for Gemini (valid key, model not found)
-      if (!isSpicyMode && !isFreepikMode && (msg.includes("404") || msg.includes("not found"))) {
+      if (!isSpicyMode && !isFreepikMode && !isFalMode && (msg.includes("404") || msg.includes("not found"))) {
         logger.warn('ApiKeyModal', 'Model 404d but treating key as valid');
         setApiKey(key);
         localStorage.setItem('raw_studio_api_key', key);
@@ -137,12 +162,11 @@ const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
         return;
       }
 
-      // User-friendly error messages
       if (msg.includes("400")) msg = "Invalid API Key (400)";
       if (msg.includes("401")) msg = "Unauthorized (401). Invalid key.";
       if (msg.includes("403")) msg = "Permission Denied (403)";
 
-      if (!isSpicyMode && !isFreepikMode && !key.startsWith("AIza")) {
+      if (!isSpicyMode && !isFreepikMode && !isFalMode && !key.startsWith("AIza")) {
         msg += " (Hint: Gemini keys start with 'AIza')";
       }
 
@@ -154,7 +178,12 @@ const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/90 backdrop-blur-md p-4 animate-in fade-in duration-200">
-      <div className={`bg-gray-900 border ${isSpicyMode ? 'border-red-500/30' : isFreepikMode ? 'border-cyan-500/30' : 'border-dash-300/30'} rounded-xl w-full max-w-md shadow-2xl relative`}>
+      <div className={`bg-gray-900 border ${
+        isSpicyMode ? 'border-red-500/30' : 
+        isFalMode ? 'border-purple-500/30' :
+        isFreepikMode ? 'border-cyan-500/30' : 
+        'border-dash-300/30'
+      } rounded-xl w-full max-w-md shadow-2xl relative`}>
         <div className="p-6 space-y-4">
           {/* Tab Bar */}
           <div className="flex border-b border-gray-800 -mt-2 mb-4">
@@ -170,6 +199,22 @@ const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" /></svg>
                 Gemini
                 {apiKey && activeTab !== 'gemini' && (
+                  <span className="w-2 h-2 bg-green-500 rounded-full"></span>
+                )}
+              </span>
+            </button>
+            <button
+              onClick={() => setActiveTab('fal')}
+              className={`flex-1 py-3 px-4 text-sm font-medium transition-colors border-b-2 ${
+                activeTab === 'fal'
+                  ? 'text-purple-400 border-purple-500'
+                  : 'text-gray-500 hover:text-gray-300 border-transparent'
+              }`}
+            >
+              <span className="flex items-center justify-center gap-2">
+                <span className="text-base">⚡</span>
+                FAL
+                {falApiKey && activeTab !== 'fal' && (
                   <span className="w-2 h-2 bg-green-500 rounded-full"></span>
                 )}
               </span>
@@ -209,9 +254,21 @@ const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
           </div>
 
           <div className="text-center">
-            <div className={`w-12 h-12 ${isSpicyMode ? 'bg-red-900/50' : isFreepikMode ? 'bg-cyan-900/50' : 'bg-dash-900/50'} rounded-full flex items-center justify-center mx-auto mb-3 ${isSpicyMode ? 'text-red-400' : isFreepikMode ? 'text-cyan-400' : 'text-dash-300'}`}>
+            <div className={`w-12 h-12 ${
+              isSpicyMode ? 'bg-red-900/50' : 
+              isFreepikMode ? 'bg-cyan-900/50' : 
+              isFalMode ? 'bg-purple-900/50' :
+              'bg-dash-900/50'
+            } rounded-full flex items-center justify-center mx-auto mb-3 ${
+              isSpicyMode ? 'text-red-400' : 
+              isFreepikMode ? 'text-cyan-400' : 
+              isFalMode ? 'text-purple-400' :
+              'text-dash-300'
+            }`}>
               {isSpicyMode ? (
                 <span className="text-2xl">🌶️</span>
+              ) : isFalMode ? (
+                <span className="text-2xl">⚡</span>
               ) : isFreepikMode ? (
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
               ) : (
@@ -219,14 +276,19 @@ const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
               )}
             </div>
             <h3 className="text-xl font-bold text-white">
-              {isSpicyMode ? 'Kie.ai API Key' : isFreepikMode ? 'Freepik API Key' : 'Gemini API Key'}
+              {isSpicyMode ? 'Kie.ai API Key' : 
+               isFalMode ? 'FAL API Key' :
+               isFreepikMode ? 'Freepik API Key' : 
+               'Gemini API Key'}
             </h3>
             <p className="text-sm text-gray-400 mt-2">
               {isSpicyMode
                 ? 'Required for Spicy Mode (Seedream 4.5 Edit)'
-                : isFreepikMode
-                  ? 'Required for Freepik image generation'
-                  : 'Required for Gemini image generation'
+                : isFalMode
+                  ? 'Required for AMT video interpolation'
+                  : isFreepikMode
+                    ? 'Required for Freepik image generation'
+                    : 'Required for Gemini image generation'
               }
             </p>
           </div>
@@ -239,11 +301,18 @@ const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
                   ? 'border-red-500 focus:ring-red-500'
                   : isSpicyMode
                     ? 'border-red-700/50 focus:ring-red-500'
-                    : isFreepikMode
-                      ? 'border-cyan-700/50 focus:ring-cyan-500'
-                      : 'border-gray-700 focus:ring-dash-300'
+                    : isFalMode
+                      ? 'border-purple-700/50 focus:ring-purple-500'
+                      : isFreepikMode
+                        ? 'border-cyan-700/50 focus:ring-cyan-500'
+                        : 'border-gray-700 focus:ring-dash-300'
               } rounded-lg py-3 pl-4 pr-10 text-sm text-white focus:ring-2 focus:border-transparent outline-none font-mono disabled:opacity-50 transition-colors`}
-              placeholder={isSpicyMode ? "Enter Kie.ai API key..." : isFreepikMode ? "Enter Freepik API key..." : "Paste your Gemini API key..."}
+              placeholder={
+                isSpicyMode ? "Enter Kie.ai API key..." : 
+                isFalMode ? "Enter FAL API key..." :
+                isFreepikMode ? "Enter Freepik API key..." : 
+                "Paste your Gemini API key..."
+              }
               value={inputVal}
               onChange={(e) => {
                 setInputVal(e.target.value);
@@ -286,24 +355,38 @@ const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
               className={`flex-1 py-2 rounded-lg text-sm font-bold transition-colors disabled:opacity-70 disabled:cursor-not-allowed flex justify-center items-center gap-2 ${
                 isSpicyMode
                   ? 'text-white bg-red-500 hover:bg-red-400'
-                  : isFreepikMode
-                    ? 'text-white bg-cyan-600 hover:bg-cyan-500'
-                    : 'text-dash-900 bg-dash-300 hover:bg-dash-200'
+                  : isFalMode
+                    ? 'text-white bg-purple-600 hover:bg-purple-500'
+                    : isFreepikMode
+                      ? 'text-white bg-cyan-600 hover:bg-cyan-500'
+                      : 'text-dash-900 bg-dash-300 hover:bg-dash-200'
               }`}
             >
-              {isValidating && <div className={`w-4 h-4 border-2 ${isSpicyMode ? 'border-white' : isFreepikMode ? 'border-white' : 'border-dash-900'} border-t-transparent rounded-full animate-spin`}></div>}
+              {isValidating && <div className={`w-4 h-4 border-2 ${
+                isSpicyMode || isFalMode || isFreepikMode ? 'border-white' : 'border-dash-900'
+              } border-t-transparent rounded-full animate-spin`}></div>}
               {isValidating ? 'Validating...' : 'Save Key'}
             </button>
           </div>
 
           <div className="text-center">
             <a
-              href={isSpicyMode ? "https://kie.ai" : isFreepikMode ? "https://www.freepik.com/developers/dashboard/api-key" : "https://aistudio.google.com/app/apikey"}
+              href={
+                isSpicyMode ? "https://kie.ai" : 
+                isFalMode ? "https://fal.ai/dashboard/keys" :
+                isFreepikMode ? "https://www.freepik.com/developers/dashboard/api-key" : 
+                "https://aistudio.google.com/app/apikey"
+              }
               target="_blank"
               rel="noreferrer"
-              className={`text-xs ${isSpicyMode ? 'text-red-400' : isFreepikMode ? 'text-cyan-400' : 'text-dash-300'} hover:underline`}
+              className={`text-xs ${
+                isSpicyMode ? 'text-red-400' : 
+                isFalMode ? 'text-purple-400' :
+                isFreepikMode ? 'text-cyan-400' : 
+                'text-dash-300'
+              } hover:underline`}
             >
-              Get {isSpicyMode ? 'Kie.ai' : isFreepikMode ? 'Freepik' : 'Gemini'} API Key →
+              Get {isSpicyMode ? 'Kie.ai' : isFalMode ? 'FAL' : isFreepikMode ? 'Freepik' : 'Gemini'} API Key →
             </a>
           </div>
         </div>

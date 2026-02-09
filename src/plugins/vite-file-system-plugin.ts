@@ -101,6 +101,48 @@ export function fileSystemPlugin(): Plugin {
           res.end(JSON.stringify({ error: err.message }));
         }
       });
+
+      // GET /api/serve-video/:filename - serve generated videos
+      server.middlewares.use('/api/serve-video', async (req: IncomingMessage, res: ServerResponse) => {
+        if (req.method !== 'GET') {
+          res.statusCode = 405;
+          res.end(JSON.stringify({ error: 'Method not allowed' }));
+          return;
+        }
+
+        try {
+          const filename = (req.url || '').replace(/^\//, '').split('?')[0];
+          if (!filename) {
+            res.statusCode = 400;
+            res.end(JSON.stringify({ error: 'Filename required' }));
+            return;
+          }
+
+          const filepath = path.join(SAVE_DIR, filename);
+          const resolved = path.resolve(filepath);
+          if (!resolved.startsWith(path.resolve(SAVE_DIR))) {
+            res.statusCode = 403;
+            res.end(JSON.stringify({ error: 'Path traversal rejected' }));
+            return;
+          }
+
+          if (!fs.existsSync(resolved)) {
+            res.statusCode = 404;
+            res.end(JSON.stringify({ error: 'File not found' }));
+            return;
+          }
+
+          const stat = fs.statSync(resolved);
+          res.setHeader('Content-Type', 'video/mp4');
+          res.setHeader('Content-Length', stat.size);
+          res.setHeader('Cache-Control', 'public, max-age=86400');
+          res.statusCode = 200;
+          fs.createReadStream(resolved).pipe(res);
+        } catch (err: any) {
+          res.statusCode = 500;
+          res.end(JSON.stringify({ error: err.message }));
+        }
+      });
     }
   };
 }

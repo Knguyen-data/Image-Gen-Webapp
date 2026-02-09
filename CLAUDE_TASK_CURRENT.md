@@ -1,165 +1,112 @@
-# Task: @ Mention Autocomplete + Aspect Ratio Preview Frames
+# CRITICAL: Fix Kling 3 Omni Freepik Integration — No Successful Calls Yet
 
-## Project: C:\Users\ikiuc\Documents\Image Gen Webapp
+## Situation
+We have NEVER received a successful video from Freepik Kling 3 Omni. Every call results in `FAILED` status within seconds. The payload we send may not match what Freepik expects. You must audit every field against the official docs and fix all discrepancies.
 
-Read these files first:
-1. `src/components/kling3-omni-panel.tsx` — Kling 3 Omni panel (main target)
-2. `src/components/left-panel.tsx` — Kling 3 panel (lines ~950-1000, prompt textareas)
+## Your Approach
+1. Use sub-agents (`Task`) to parallelize work
+2. Read ALL docs in `docs/video_generation_service/Freepik Kling 3 and Kling 3 Omni/` — there are 13 files covering T2V, I2V, V2V, polling, listing for both Pro and Standard tiers
+3. Compare docs STRICTLY against our service code in `src/services/freepik-kling-service.ts` and caller in `src/app.tsx`
+4. Fix every discrepancy
 
-## Feature 1: @ Mention Autocomplete in Prompt Textareas
+## Files to Read (MANDATORY)
+- `docs/video_generation_service/Freepik Kling 3 and Kling 3 Omni/Kling 3 Omni Pro - Generate video from text or image.md.txt` — T2V/I2V Pro endpoint
+- `docs/video_generation_service/Freepik Kling 3 and Kling 3 Omni/Kling 3 Omni Standard - Generate video from text or image.txt` — T2V/I2V Standard endpoint
+- `docs/video_generation_service/Freepik Kling 3 and Kling 3 Omni/Kling 3 Omni Pro - Video-to-video generation.md.txt` — V2V Pro endpoint
+- `docs/video_generation_service/Freepik Kling 3 and Kling 3 Omni/Kling 3 Omni Standard - Video-to-video generation.txt` — V2V Standard endpoint
+- `docs/video_generation_service/Freepik Kling 3 and Kling 3 Omni/kling 3 omni - get task status.txt` — Poll T2V/I2V
+- `docs/video_generation_service/Freepik Kling 3 and Kling 3 Omni/Kling 3 Omni Reference-to-Video - Get task status.txt` — Poll V2V
+- `docs/video_generation_service/Freepik Kling 3 and Kling 3 Omni/kling_3_pro.md.txt` — Kling 3 (non-Omni) Pro
+- `docs/video_generation_service/Freepik Kling 3 and Kling 3 Omni/kling_3_std.md.txt` — Kling 3 (non-Omni) Standard
+- `docs/video_generation_service/Freepik Kling 3 and Kling 3 Omni/kling_3_get_task.md.txt` — Kling 3 poll
 
-When the user types `@` in any video prompt textarea (both Kling 3 and Kling 3 Omni), show a floating autocomplete dropdown/tooltip with available element references. The dropdown should appear anchored below the cursor position in the textarea.
+## Files to Fix
+- `src/services/freepik-kling-service.ts` — All create/poll functions
+- `src/app.tsx` — All callers: `generateKling3Omni`, `generateKling3` (search for these functions)
 
-### Behavior:
-1. User types `@` → dropdown appears with available references
-2. Arrow Up/Down to navigate options (highlighted item)
-3. Tab or Enter to confirm selection (inserts the reference text)
-4. Escape or typing a space closes the dropdown
-5. Only show references that actually exist (based on uploaded content)
+## Current State — What We Send Today
 
-### Available references by mode:
-
-**Kling 3 Omni — V2V mode:**
-- `@Video1` — always shown when reference video is uploaded
-
-**Kling 3 Omni — I2V mode:**
-- `@Image1`, `@Image2`, etc. — one per uploaded reference image (from `kling3OmniImageUrls` array)
-
-**Kling 3 Omni — T2V mode:**
-- `@Image1`, `@Image2`, etc. — one per uploaded reference image
-
-**Kling 3 (non-Omni):**
-- `@Element1`, `@Element2` — if elements are uploaded (currently not implemented, but future-proof)
-- No autocomplete needed yet since no elements UI exists — but build the reusable hook anyway
-
-### Implementation:
-
-Create a reusable custom hook + component:
-
-**`src/hooks/use-mention-autocomplete.ts`:**
-```typescript
-interface MentionOption {
-  label: string;      // e.g. "@Video1"
-  description: string; // e.g. "Reference video"
-  icon?: string;       // e.g. "🎥"
-}
-
-interface UseMentionAutocompleteReturn {
-  // Attach these to the textarea
-  onKeyDown: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void;
-  onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void;
-  
-  // Dropdown state
-  isOpen: boolean;
-  options: MentionOption[];
-  selectedIndex: number;
-  
-  // Position (relative to textarea)
-  position: { top: number; left: number };
-  
-  // Call this to close
-  close: () => void;
-}
-
-export function useMentionAutocomplete(
-  availableOptions: MentionOption[],
-  textareaRef: React.RefObject<HTMLTextAreaElement>,
-  value: string,
-  setValue: (val: string) => void
-): UseMentionAutocompleteReturn
+### T2V/I2V (`createKling3OmniTask` → `POST /v1/ai/video/kling-v3-omni-{tier}`)
+```
+Fields we send:
+- prompt ✅
+- multi_prompt ✅ (string array)
+- shot_type ✅ ('customize' when multi_prompt)
+- image_url ✅ (start frame when only start frame)
+- start_image_url ✅ (start frame when both frames exist)
+- end_image_url ✅
+- image_urls ✅ (reference images @Image1..N)
+- elements ❌ NEVER SENT — type exists but no UI, never passed from app.tsx
+- generate_audio ✅
+- voice_ids ❌ NEVER SENT — no UI (optional, skip for now)
+- aspect_ratio ✅
+- duration ✅ (as string)
+- webhook_url ❌ NEVER SENT (optional, skip for now)
 ```
 
-The hook should:
-- Track when `@` is typed (detect by checking the character before cursor)
-- Filter options as user types after `@` (e.g. `@Vi` filters to `@Video1`)
-- Handle Arrow Up/Down for selection
-- Handle Tab/Enter to insert the selected option (replace `@partial` with full `@Video1`)
-- Handle Escape to close
-- Calculate dropdown position from textarea cursor position using a hidden span mirror technique or `textarea.getBoundingClientRect()` with line/column estimation
-
-**`src/components/mention-dropdown.tsx`:**
-```typescript
-interface MentionDropdownProps {
-  isOpen: boolean;
-  options: MentionOption[];
-  selectedIndex: number;
-  position: { top: number; left: number };
-  onSelect: (option: MentionOption) => void;
-}
+### V2V (`createKling3OmniReferenceTask` → `POST /v1/ai/reference-to-video/kling-v3-omni-{tier}`)
+```
+Fields we send:
+- video_url ✅
+- prompt ✅
+- image_url ✅ (optional start frame)
+- duration ✅ (as string)
+- aspect_ratio ✅
+- cfg_scale ✅
+- negative_prompt ✅
+- webhook_url ❌ NEVER SENT (optional, skip)
 ```
 
-Small floating div, absolutely positioned:
-- Dark background: `bg-gray-800 border border-gray-600 rounded-lg shadow-xl`
-- Each option row: icon + label + description
-- Selected row: `bg-violet-700/30 text-violet-200`
-- Max 5 visible options, scrollable if more
-- `z-50` to float above everything
+### Poll endpoints
+- T2V/I2V: `GET /v1/ai/video/kling-v3-omni-{tier}/{taskId}`
+- V2V: `GET /v1/ai/reference-to-video/kling-v3-omni-{tier}/{taskId}`
 
-### Where to integrate:
+## Things to Validate and Fix
 
-**In `kling3-omni-panel.tsx`:**
-1. Add `useRef` for each prompt textarea
-2. Call `useMentionAutocomplete` with the right options based on mode:
-   - V2V: `[{ label: '@Video1', description: 'Reference video', icon: '🎥' }]` (only if refVideo exists)
-   - I2V/T2V: map `refImages` to `[{ label: '@Image1', ... }, { label: '@Image2', ... }]`
-3. Spread `onKeyDown` and `onChange` onto the textarea (merge with existing onChange)
-4. Render `<MentionDropdown>` next to each textarea
+### 1. BASE_URL and Endpoint Paths
+Check that `BASE_URL` + endpoint paths match EXACTLY what the docs say. The proxy prefix `/api/freepik` may or may not be correct. Check `vite.config.ts` for proxy setup.
 
-**In `left-panel.tsx` (Kling 3 section):**
-1. Same pattern for the main prompt textarea and per-shot textareas
-2. For now, pass empty options array (no elements UI yet) — the dropdown just won't show
+### 2. Poll Endpoint URLs
+Verify the poll URLs match the docs. Currently:
+- `pollKling3OmniTask` uses some URL — verify it matches `GET /v1/ai/video/kling-v3-omni-{tier}/{taskId}`
+- `pollKling3OmniReferenceTask` uses some URL — verify it matches `GET /v1/ai/reference-to-video/kling-v3-omni-{tier}/{taskId}`
+- Note: the T2V/I2V poll URL may differ from V2V poll URL — they use DIFFERENT endpoints per the docs
 
-## Feature 2: Wrap Image/Video Previews in Aspect Ratio Frames
-
-Currently the video and image previews in the Omni panel use `aspect-video` (16:9) regardless of the selected output aspect ratio. They should reflect the selected aspect ratio setting.
-
-### Changes in `kling3-omni-panel.tsx`:
-
-1. Compute the CSS aspect ratio from the selected setting:
-```typescript
-const selectedAspect = (videoSettings as any).kling3OmniAspectRatio || '16:9';
-const aspectClass = selectedAspect === '9:16' ? 'aspect-[9/16]'
-  : selectedAspect === '1:1' ? 'aspect-square'
-  : 'aspect-video'; // 16:9 and auto default to 16:9
+### 3. Poll Response Parsing
+Check the poll response structure matches docs. Currently we read:
 ```
-
-2. Replace ALL hardcoded `aspect-video` classes on preview containers with `aspectClass`:
-   - V2V reference video container (line ~201): `<video ... className="w-full aspect-video object-cover"` → use aspectClass
-   - V2V start frame container
-   - I2V start frame container  
-   - I2V end frame container
-   - The empty drop zone placeholders too
-
-3. For the reference video `<video>` element, change from `object-cover` to `object-contain` with a dark background so the video doesn't get cropped — just letterboxed inside the aspect frame:
+result.data.status → 'CREATED' | 'IN_PROGRESS' | 'COMPLETED' | 'FAILED'
+result.data.generated → string[] (video URLs)
 ```
-className={`w-full ${aspectClass} object-contain bg-black`}
-```
+Verify this matches the actual response schema in the docs for BOTH T2V/I2V and V2V endpoints.
 
-4. Same for start/end frame `<img>` elements:
-```
-className={`w-full h-full object-contain bg-black`}
-```
-(parent div has the aspect ratio class)
+### 4. Request Headers
+Verify we send:
+- `Content-Type: application/json`
+- `x-freepik-api-key: <key>`
 
-### Changes in `left-panel.tsx` (Kling 3 section):
+### 5. Duration Format
+Docs say duration is a STRING enum ('3', '4', '5', ..., '15'). We do `String(options.duration)`. Verify the input is a number that converts to valid enum value.
 
-Same pattern — look for any preview containers with hardcoded `aspect-video` in the Kling 3 block (lines ~820-1180) and make them respect:
-```typescript
-const kling3Aspect = (videoSettings as any).kling3AspectRatio || '16:9';
-const kling3AspectClass = kling3Aspect === '9:16' ? 'aspect-[9/16]'
-  : kling3Aspect === '1:1' ? 'aspect-square'
-  : 'aspect-video';
-```
+### 6. Aspect Ratio Values
+Docs say: 'auto', '16:9', '9:16', '1:1'. Verify we send exactly these strings.
 
-## Style Rules:
-- Dropdown: dark theme, violet accent for selected item (consistent with Omni panel)
-- Smooth transitions, no jank
-- Don't break any existing textarea behavior (existing onChange handlers must still work)
-- The mention autocomplete should work in both single-prompt and multi-shot textareas
+### 7. cfg_scale Range
+For V2V endpoint, check what range cfg_scale accepts. We send raw from UI (default 0.5).
 
-## Testing:
-After changes:
-1. `npx vite build` — must succeed
-2. Manual: type `@` in V2V prompt with a video uploaded → should show `@Video1` option
-3. Manual: type `@` in I2V prompt with 2 reference images → should show `@Image1`, `@Image2`
-4. Manual: change aspect ratio to 9:16 → previews should update to portrait frame
+### 8. Element Support
+Add Elements UI to `src/components/kling3-omni-panel.tsx`:
+- Add a collapsible "Elements" section in T2V and I2V modes
+- Each element has: multiple reference image uploads + one frontal image upload
+- Up to 2 elements (since max 4 total = elements + reference images)
+- Elements referenced as @Element1, @Element2 in prompts
+- Wire through app.tsx → createKling3OmniTask options.elements
+
+### 9. Kling 3 (non-Omni) — Also Check
+The `generateKling3` function and `createKling3Task` also need validation against `kling_3_pro.md.txt` and `kling_3_std.md.txt`.
+
+## Build Verification
+After ALL changes: `npx vite build` must succeed with zero errors.
+
+## Debug Logging
+Keep the existing debug logging that shows the request body in console. Add similar logging for poll responses showing the full response JSON.

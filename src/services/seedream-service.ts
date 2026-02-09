@@ -6,6 +6,7 @@
 import { SeedreamSettings, SeedreamTask, SeedreamAspectRatio } from '../types';
 import { waitForSlot } from './unified-kie-rate-limiter';
 import { logger } from './logger';
+import { uploadBase64ToR2 } from './r2-upload-service';
 
 const UPLOAD_URL = 'https://kieai.redpandaai.co/api/file-base64-upload';
 const CREATE_TASK_URL = 'https://api.kie.ai/api/v1/jobs/createTask';
@@ -273,9 +274,9 @@ export const generateWithSeedream = async (
   settings: SeedreamSettings,
   onProgress?: (stage: string, detail?: string) => void
 ): Promise<{ base64: string; mimeType: string }> => {
-  // Step 1: Upload source image
+  // Step 1: Upload source image to R2
   onProgress?.('uploading', 'Uploading source image...');
-  const imageUrl = await uploadImageBase64(apiKey, sourceImageBase64, sourceMimeType);
+  const imageUrl = await uploadBase64ToR2(sourceImageBase64, sourceMimeType);
 
   // Step 2: Create edit task
   onProgress?.('creating', 'Creating edit task...');

@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { AppSettings, PromptItem, ReferenceImage, ImageSize, SeedreamQuality, AppMode, VideoScene, VideoSettings, VideoModel, KlingProDuration, KlingProAspectRatio } from '../types';
+import { AppSettings, PromptItem, ReferenceImage, ImageSize, SeedreamQuality, AppMode, VideoScene, VideoSettings, VideoModel, KlingProDuration, KlingProAspectRatio, VeoGenerationType } from '../types';
 import { ASPECT_RATIO_LABELS, IMAGE_SIZE_LABELS, SEEDREAM_QUALITY_LABELS, DEFAULT_SETTINGS, MAX_REFERENCE_IMAGES } from '../constants';
 import BulkInputModal from './bulk-input-modal';
 import VideoSceneQueue from './video-scene-queue';
@@ -7,6 +7,8 @@ import VideoTrimmerModal from './video-trimmer-modal';
 import VideoReferenceModal from './video-reference-modal';
 import PromptGenerator from './prompt-generator';
 import Kling3OmniPanel from './kling3-omni-panel';
+import { VeoGenerationPanel } from './veo3';
+import type { VeoSettings, VeoTaskResult } from './veo3';
 import { useMentionAutocomplete, MentionOption } from '../hooks/use-mention-autocomplete';
 import MentionDropdown from './mention-dropdown';
 
@@ -37,6 +39,20 @@ interface LeftPanelProps {
   setVideoSettings?: (settings: VideoSettings) => void;
   onVideoGenerate?: () => void;
   geminiApiKey?: string;
+  // Veo 3.1 props
+  onVeoGenerate?: (params: {
+    mode: VeoGenerationType;
+    prompt: string;
+    settings: VeoSettings;
+    startImage?: ReferenceImage;
+    endImage?: ReferenceImage;
+    materials?: ReferenceImage[];
+  }) => void;
+  veoTaskResult?: VeoTaskResult | null;
+  onVeoGet1080p?: (taskId: string) => void;
+  onVeoGet4k?: (taskId: string) => void;
+  onVeoExtend?: (taskId: string) => void;
+  isVeoUpgrading?: boolean;
 }
 
 const LeftPanel: React.FC<LeftPanelProps> = ({
@@ -63,6 +79,12 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
   setVideoSettings = (_settings: VideoSettings) => {},
   onVideoGenerate = () => {},
   geminiApiKey = '',
+  onVeoGenerate,
+  veoTaskResult,
+  onVeoGet1080p,
+  onVeoGet4k,
+  onVeoExtend,
+  isVeoUpgrading,
 }) => {
   const [activePromptIndex, setActivePromptIndex] = useState(0);
   const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
@@ -328,6 +350,7 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
       if (selectedVideoModel === 'kling-2.6-pro') return 'Kling 2.6 Pro — Image to Video';
       if (selectedVideoModel === 'kling-3') return 'Kling 3 — MultiShot';
       if (selectedVideoModel === 'kling-3-omni') return 'Kling 3 Omni — Multimodal';
+      if (selectedVideoModel === 'veo-3.1') return 'Veo 3.1 — Google AI Video';
       return 'Kling 2.6 Motion Control';
     }
     if (safeSettings.spicyMode?.enabled) {
@@ -509,6 +532,7 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
                   { value: 'kling-2.6-pro' as VideoModel, label: 'Kling 2.6 Pro', desc: 'Image to Video', color: 'amber' },
                   { value: 'kling-3' as VideoModel, label: 'Kling 3', desc: 'MultiShot', color: 'emerald' },
                   { value: 'kling-3-omni' as VideoModel, label: 'Kling 3 Omni', desc: 'Multimodal', color: 'violet' },
+                  { value: 'veo-3.1' as VideoModel, label: 'Veo 3.1', desc: 'Google AI Video', color: 'violet' },
                 ]).map(opt => (
                   <button
                     key={opt.value}
@@ -1212,6 +1236,20 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
                 onVideoGenerate={onVideoGenerate}
                 isGenerating={isGenerating}
                 handleImageUpload={handleImageUpload}
+              />
+            )}
+
+            {/* ----- VEO 3.1 CONTENT ----- */}
+            {selectedVideoModel === 'veo-3.1' && onVeoGenerate && (
+              <VeoGenerationPanel
+                handleImageUpload={handleImageUpload}
+                onGenerate={onVeoGenerate}
+                isGenerating={isGenerating}
+                taskResult={veoTaskResult}
+                onGet1080p={onVeoGet1080p}
+                onGet4k={onVeoGet4k}
+                onExtend={onVeoExtend}
+                isUpgrading={isVeoUpgrading}
               />
             )}
           </>

@@ -4,7 +4,7 @@ export type ImageSize = '1K' | '2K' | '4K'; // Gemini 3 Pro supports up to 4K
 export type AppMode = 'image' | 'video';
 export type FixedBlockPosition = 'top' | 'bottom';
 
-export type VideoModel = 'kling-2.6' | 'kling-2.6-pro' | 'kling-3' | 'kling-3-omni';
+export type VideoModel = 'kling-2.6' | 'kling-2.6-pro' | 'kling-3' | 'kling-3-omni' | 'veo-3.1';
 export type KlingProvider = 'freepik' | 'kieai';
 
 export interface ReferenceImage {
@@ -33,6 +33,12 @@ export interface SpicyModeSettings {
   subMode: SpicySubMode;
 }
 
+// AMT Interpolation Settings
+export interface AMTSettings {
+  outputFps: number; // 10-120, default: 30
+  recursiveInterpolationPasses: number; // 1-5, default: 2
+}
+
 export interface AppSettings {
   temperature: number;
   outputCount: number; // 1-8
@@ -45,6 +51,8 @@ export interface AppSettings {
   safetyFilterEnabled: boolean; // Safety filter (true = enabled, false = BLOCK_NONE)
   // Spicy Mode (Seedream 4.5 Edit)
   spicyMode: SpicyModeSettings;
+  // AMT Interpolation Settings
+  amtSettings: AMTSettings;
 }
 
 export interface GeneratedImage {
@@ -144,6 +152,9 @@ export interface GeneratedVideo {
   status: 'pending' | 'generating' | 'success' | 'failed';
   error?: string;
   provider?: KlingProvider;
+  // AMT Interpolation result
+  isInterpolated?: boolean;
+  originalVideoId?: string; // Reference to source video if this is an interpolated result
 }
 
 export type KlingProAspectRatio = 'widescreen_16_9' | 'social_story_9_16' | 'square_1_1';
@@ -201,3 +212,143 @@ export interface UnifiedVideoSettings {
   // Kling 3 shot type (customize or intelligent) — Kling 3 only, not Omni
   kling3ShotType?: 'customize' | 'intelligent';
 }
+
+// ============ Veo 3.1 Video Generation Types ============
+
+export type VeoModel = 'veo3' | 'veo3_fast';
+export type VeoGenerationType = 'TEXT_2_VIDEO' | 'FIRST_AND_LAST_FRAMES_2_VIDEO' | 'REFERENCE_2_VIDEO';
+export type VeoAspectRatio = '16:9' | '9:16' | 'Auto';
+export type VeoTaskStatus = 0 | 1 | 2 | 3; // 0: Generating, 1: Success, 2: Failed, 3: Generation Failed
+export type VeoResolution = '720p' | '1080p' | '4K';
+
+export interface VeoGenerateRequest {
+  prompt: string;
+  imageUrls?: string[];
+  model?: VeoModel;
+  generationType?: VeoGenerationType;
+  aspectRatio?: VeoAspectRatio;
+  seeds?: number;
+  callBackUrl?: string;
+  enableTranslation?: boolean;
+  watermark?: string;
+}
+
+export interface VeoExtendRequest {
+  taskId: string;
+  prompt: string;
+  seeds?: number;
+  watermark?: string;
+  callBackUrl?: string;
+  model?: 'fast' | 'quality';
+}
+
+export interface VeoGenerateResponse {
+  code: number;
+  msg: string;
+  data: { taskId: string };
+}
+
+export interface VeoExtendResponse {
+  code: number;
+  msg: string;
+  data: { taskId: string };
+}
+
+export interface VeoRecordInfoResponse {
+  code: number;
+  msg: string;
+  data: {
+    taskId: string;
+    successFlag: VeoTaskStatus;
+    response?: {
+      resultUrls?: string[];
+      originUrls?: string[];
+      resolution?: string;
+      mediaIds?: string[];
+    };
+    fallbackFlag?: boolean;
+    failCode?: string;
+    failMsg?: string;
+    costTime?: number;
+  };
+}
+
+export interface Veo1080pRequest {
+  taskId: string;
+  index?: number;
+}
+
+export interface Veo1080pResponse {
+  code: number;
+  msg: string;
+  data: { resultUrl: string };
+}
+
+export interface Veo4kRequest {
+  taskId: string;
+  index?: number;
+  callBackUrl?: string;
+}
+
+export interface Veo4kResponse {
+  code: number;
+  msg: string;
+  data: {
+    taskId: string;
+    info?: {
+      resultUrls: string[];
+      imageUrls?: string[];
+    };
+  };
+}
+
+export interface VeoCallbackPayload {
+  code: number;
+  msg: string;
+  data: {
+    taskId: string;
+    info?: {
+      resultUrls?: string[];
+      originUrls?: string[];
+      resolution?: string;
+    };
+    fallbackFlag?: boolean;
+  };
+}
+
+export interface Veo4kCallbackPayload {
+  code: number;
+  msg: string;
+  data: {
+    taskId: string;
+    info?: {
+      resultUrls?: string[];
+      imageUrls?: string[];
+    };
+  };
+}
+
+export class VeoApiError extends Error {
+  constructor(
+    message: string,
+    public code: number,
+    public statusCode: number
+  ) {
+    super(message);
+    this.name = 'VeoApiError';
+  }
+}
+
+export type VeoVideoResult = {
+  taskId: string;
+  videoUrls: string[];
+  originUrls?: string[];
+  resolution?: string;
+  isFallback: boolean;
+};
+
+export type Veo4kResult = {
+  taskId: string;
+  videoUrls: string[];
+  imageUrls?: string[];
+};

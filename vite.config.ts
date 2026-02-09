@@ -19,6 +19,16 @@ export default defineConfig(({ mode }) => {
             changeOrigin: true,
             rewrite: (path) => path.replace(/^\/api\/freepik/, ''),
           },
+          '/api/fal': {
+            target: 'https://queue.fal.run',
+            changeOrigin: true,
+            rewrite: (path) => path.replace(/^\/api\/fal/, ''),
+          },
+          '/api/r2': {
+            target: 'https://r2-media-upload.tnguyen633.workers.dev',
+            changeOrigin: true,
+            rewrite: (path) => path.replace(/^\/api\/r2/, ''),
+          },
         },
       },
       plugins: [tailwindcss(), react(), fileSystemPlugin()],

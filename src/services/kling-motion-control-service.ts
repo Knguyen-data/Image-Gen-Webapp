@@ -5,13 +5,13 @@
  */
 
 import { VideoScene, VideoSettings, GeneratedVideo, ReferenceVideo, KlingProvider } from '../types';
-import { uploadImageBase64, pollForResult } from './seedream-service';
+import { pollForResult } from './seedream-service';
+import { uploadBase64ToR2, uploadBlobToR2 } from './r2-upload-service';
 import { createFreepikMotionTask, pollFreepikMotionTask } from './freepik-kling-service';
 import { waitForSlot } from './unified-kie-rate-limiter';
 import { logger } from './logger';
 import { getVideoDuration } from '../utils/video-dimensions';
 
-const UPLOAD_STREAM_URL = 'https://kieai.redpandaai.co/api/file-stream-upload';
 const CREATE_TASK_URL = 'https://api.kie.ai/api/v1/jobs/createTask';
 const MODEL_ID = 'kling-2.6/motion-control';
 const MAX_POLL_ATTEMPTS = 120; // 10 min at 5s intervals
@@ -23,36 +23,17 @@ type ProviderResult = { success: boolean; videoUrl?: string; error?: string; pro
  * Upload video via file stream (Kie.ai only — videos too large for base64)
  */
 export const uploadVideoStream = async (
-  apiKey: string,
+  _apiKey: string,
   file: File
 ): Promise<string> => {
-  logger.debug('KlingMotion', 'Uploading video', {
+  logger.debug('KlingMotion', 'Uploading video to R2', {
     name: file.name,
     sizeMB: (file.size / 1024 / 1024).toFixed(2)
   });
 
-  const formData = new FormData();
-  formData.append('file', file);
-  formData.append('uploadPath', 'kling/videos');
-
-  const response = await fetch(UPLOAD_STREAM_URL, {
-    method: 'POST',
-    headers: { 'Authorization': `Bearer ${apiKey}` },
-    body: formData,
-  });
-
-  if (!response.ok) {
-    if (response.status === 401) throw new Error('Kie.ai upload auth failed. Check API key.');
-    throw new Error(`Video upload failed: ${response.status} ${response.statusText}`);
-  }
-
-  const result = await response.json();
-  if (result.code !== 200 || !result.success) {
-    throw new Error(`Video upload failed: ${result.msg || 'Unknown error'}`);
-  }
-
-  logger.info('KlingMotion', 'Video uploaded', { url: result.data.downloadUrl?.slice(0, 50) });
-  return result.data.downloadUrl;
+  const url = await uploadBlobToR2(file, undefined);
+  logger.info('KlingMotion', 'Video uploaded to R2', { url: url.slice(0, 50) });
+  return url;
 };
 
 /**
@@ -243,7 +224,7 @@ export const generateMotionVideo = async (
 
     // Step 2: Upload via Kie.ai (both providers need public URLs)
     onProgress?.('uploading', 'Uploading reference image...');
-    const imageUrl = await uploadImageBase64(kieApiKey, scene.referenceImage.base64, scene.referenceImage.mimeType);
+    const imageUrl = await uploadBase64ToR2(scene.referenceImage.base64, scene.referenceImage.mimeType);
 
     onProgress?.('uploading', 'Uploading reference video...');
     const videoUrl = await uploadVideoStream(kieApiKey, videoToUse.file);

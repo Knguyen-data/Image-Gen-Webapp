@@ -1,5 +1,5 @@
-import React, { useRef, useMemo } from 'react';
-import { ReferenceImage, ReferenceVideo, VideoSettings } from '../types';
+import React, { useRef, useMemo, useState } from 'react';
+import { ReferenceImage, ReferenceVideo, VideoSettings, Kling3Element } from '../types';
 import { useMentionAutocomplete, MentionOption } from '../hooks/use-mention-autocomplete';
 import MentionDropdown from './mention-dropdown';
 
@@ -93,6 +93,56 @@ const Kling3OmniPanel: React.FC<Kling3OmniPanelProps> = ({
     setVideoSettings({ ...videoSettings, kling3OmniImageUrls: refImages.filter((_, i) => i !== idx) } as any);
   };
 
+  // --- Elements (T2V, I2V) ---
+  const [elementsExpanded, setElementsExpanded] = useState(false);
+
+  // Element images stored as { referenceImages: ReferenceImage[], frontalImage?: ReferenceImage }
+  type ElementData = { referenceImages: ReferenceImage[]; frontalImage?: ReferenceImage };
+  const elements: ElementData[] = (videoSettings as any).kling3OmniElements || [];
+  const setElements = (updated: ElementData[]) => {
+    setVideoSettings({ ...videoSettings, kling3OmniElements: updated } as any);
+  };
+  const addElement = () => {
+    if (elements.length >= 2) return;
+    setElements([...elements, { referenceImages: [] }]);
+    setElementsExpanded(true);
+  };
+  const removeElement = (idx: number) => {
+    setElements(elements.filter((_, i) => i !== idx));
+  };
+  const addElementRefImage = async (files: FileList | null, elementIdx: number) => {
+    if (!files || files.length === 0) return;
+    const file = files[0];
+    if (!file.type.startsWith('image/')) return;
+    const img = await handleImageUpload(file);
+    const updated = elements.map((el, i) =>
+      i === elementIdx ? { ...el, referenceImages: [...el.referenceImages, img] } : el
+    );
+    setElements(updated);
+  };
+  const removeElementRefImage = (elementIdx: number, imgIdx: number) => {
+    const updated = elements.map((el, i) =>
+      i === elementIdx ? { ...el, referenceImages: el.referenceImages.filter((_, j) => j !== imgIdx) } : el
+    );
+    setElements(updated);
+  };
+  const setElementFrontalImage = async (files: FileList | null, elementIdx: number) => {
+    if (!files || files.length === 0) return;
+    const file = files[0];
+    if (!file.type.startsWith('image/')) return;
+    const img = await handleImageUpload(file);
+    const updated = elements.map((el, i) =>
+      i === elementIdx ? { ...el, frontalImage: img } : el
+    );
+    setElements(updated);
+  };
+  const clearElementFrontalImage = (elementIdx: number) => {
+    const updated = elements.map((el, i) =>
+      i === elementIdx ? { ...el, frontalImage: undefined } : el
+    );
+    setElements(updated);
+  };
+
   // --- Video Upload (V2V) ---
   const refVideo = (videoSettings as any).kling3OmniReferenceVideo as ReferenceVideo | undefined;
   const handleVideoUpload = (files: FileList | null) => {
@@ -136,13 +186,19 @@ const Kling3OmniPanel: React.FC<Kling3OmniPanelProps> = ({
         ? [{ label: '@Video1', description: 'Reference video', icon: '🎥' }]
         : [];
     }
-    // I2V and T2V: reference images
-    return refImages.map((_, idx) => ({
+    // I2V and T2V: reference images + elements
+    const imageOpts = refImages.map((_, idx) => ({
       label: `@Image${idx + 1}`,
       description: `Reference image ${idx + 1}`,
       icon: '🖼️',
     }));
-  }, [isV2V, refVideo, refImages]);
+    const elementOpts = elements.map((_, idx) => ({
+      label: `@Element${idx + 1}`,
+      description: `Element ${idx + 1} (consistent identity)`,
+      icon: '👤',
+    }));
+    return [...imageOpts, ...elementOpts];
+  }, [isV2V, refVideo, refImages, elements]);
 
   // Single prompt textarea ref + hook
   const singlePromptRef = useRef<HTMLTextAreaElement>(null);
@@ -375,6 +431,84 @@ const Kling3OmniPanel: React.FC<Kling3OmniPanelProps> = ({
           {refImages.length > 0 && (
             <p className="text-[10px] text-gray-600">
               Use @Image1, @Image2, etc. in prompts to reference these images
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* T2V & I2V: Elements (@Element1, @Element2) */}
+      {(isT2V || isI2V) && (
+        <div className="px-6 py-4 border-b border-gray-800 space-y-2">
+          <div className="flex items-center justify-between">
+            <button
+              onClick={() => setElementsExpanded(!elementsExpanded)}
+              className="flex items-center gap-1 text-xs font-semibold text-gray-400 uppercase tracking-wider hover:text-gray-300 transition-colors"
+            >
+              <span className={`text-[10px] transition-transform ${elementsExpanded ? 'rotate-90' : ''}`}>&#9654;</span>
+              Elements ({elements.length}/2)
+            </button>
+            {elements.length < 2 && (
+              <button
+                onClick={addElement}
+                className="text-[10px] font-medium text-violet-400 hover:text-violet-300 transition-colors"
+              >+ Add Element</button>
+            )}
+          </div>
+          {elementsExpanded && elements.length > 0 && (
+            <div className="space-y-3">
+              {elements.map((el, elIdx) => (
+                <div key={elIdx} className="bg-gray-900/50 rounded-lg p-3 border border-gray-800 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-violet-400 font-medium">@Element{elIdx + 1}</span>
+                    <button
+                      onClick={() => removeElement(elIdx)}
+                      className="text-gray-600 hover:text-red-400 text-xs transition-colors"
+                    >&times; Remove</button>
+                  </div>
+                  {/* Reference Images for this element */}
+                  <div>
+                    <span className="text-[10px] text-gray-500 block mb-1">Reference Images</span>
+                    <div className="grid grid-cols-3 gap-1.5">
+                      {el.referenceImages.map((img, imgIdx) => (
+                        <div key={img.id} className="relative group rounded overflow-hidden border border-violet-500/30 aspect-square bg-gray-900">
+                          <img src={img.previewUrl} alt={`Ref ${imgIdx + 1}`} className="w-full h-full object-cover" />
+                          <button
+                            onClick={() => removeElementRefImage(elIdx, imgIdx)}
+                            className="absolute top-0.5 right-0.5 w-4 h-4 bg-black/70 rounded-full flex items-center justify-center text-gray-300 hover:text-white opacity-0 group-hover:opacity-100 text-[10px] transition-opacity"
+                          >&times;</button>
+                        </div>
+                      ))}
+                      <label className="flex flex-col items-center justify-center aspect-square rounded border-2 border-dashed border-gray-700 hover:border-violet-500/50 bg-gray-900/50 cursor-pointer transition-colors">
+                        <input type="file" accept="image/*" className="hidden" onChange={(e) => addElementRefImage(e.target.files, elIdx)} />
+                        <span className="text-gray-600 text-sm">+</span>
+                      </label>
+                    </div>
+                  </div>
+                  {/* Frontal Image for this element */}
+                  <div>
+                    <span className="text-[10px] text-gray-500 block mb-1">Frontal Image (Optional)</span>
+                    {el.frontalImage ? (
+                      <div className="relative group rounded overflow-hidden border border-violet-500/30 w-16 h-16 bg-gray-900">
+                        <img src={el.frontalImage.previewUrl} alt="Frontal" className="w-full h-full object-cover" />
+                        <button
+                          onClick={() => clearElementFrontalImage(elIdx)}
+                          className="absolute top-0.5 right-0.5 w-4 h-4 bg-black/70 rounded-full flex items-center justify-center text-gray-300 hover:text-white opacity-0 group-hover:opacity-100 text-[10px] transition-opacity"
+                        >&times;</button>
+                      </div>
+                    ) : (
+                      <label className="flex flex-col items-center justify-center w-16 h-16 rounded border-2 border-dashed border-gray-700 hover:border-violet-500/50 bg-gray-900/50 cursor-pointer transition-colors">
+                        <input type="file" accept="image/*" className="hidden" onChange={(e) => setElementFrontalImage(e.target.files, elIdx)} />
+                        <span className="text-gray-600 text-sm">+</span>
+                      </label>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          {elements.length > 0 && (
+            <p className="text-[10px] text-gray-600">
+              Use @Element1, @Element2 in prompts for consistent identity. Max 4 total (elements + reference images).
             </p>
           )}
         </div>

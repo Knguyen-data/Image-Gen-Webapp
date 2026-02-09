@@ -22,7 +22,7 @@ const FREEPIK_PROXY_URL = import.meta.env.DEV
   : 'https://freepik-proxy.tnguyen633.workers.dev';
 
 const BASE_URL = `${FREEPIK_PROXY_URL}/v1/ai`;
-const MAX_POLL_ATTEMPTS = 360; // 30 min at 5s intervals per attempt
+const MAX_POLL_ATTEMPTS = 720; // 60 min at 5s intervals per attempt
 const POLL_INTERVAL_MS = 5000;
 const MAX_TASK_RETRIES = 3; // Retry entire create+poll cycle on FAILED status
 
@@ -75,6 +75,10 @@ export const pollFreepikTask = async (
 
       consecutiveErrors = 0;
       const result = await response.json();
+
+      // Debug: log every poll response to browser console
+      console.log('[FreepikPoll]', taskId, 'attempt', attempt, JSON.stringify(result));
+
       const status = result?.data?.status as FreepikStatus;
       const generated = result?.data?.generated as string[] | undefined;
 
@@ -102,7 +106,7 @@ export const pollFreepikTask = async (
     }
   }
 
-  return { success: false, error: 'Freepik: polling timeout (30 minutes)' };
+  return { success: false, error: 'Freepik: polling timeout (60 minutes)' };
 };
 
 /**
@@ -352,6 +356,10 @@ export const createKling3Task = async (
   if (!response.ok) await handleFreepikError(response, 'Kling 3 task creation');
 
   const result = await response.json();
+
+  // Debug: log full creation response
+  logger.info('FreepikKling3', 'Creation response', { response: JSON.stringify(result) });
+
   const taskId = result?.data?.task_id;
   if (!taskId) throw new Error('Freepik: no task_id in Kling 3 response');
 
@@ -465,8 +473,10 @@ export const createKling3OmniTask = async (
   // Log request body for debugging (mask long image data)
   const debugBody = { ...body };
   if (debugBody.image_url) debugBody.image_url = String(debugBody.image_url).slice(0, 80) + '...';
+  if (debugBody.start_image_url) debugBody.start_image_url = String(debugBody.start_image_url).slice(0, 80) + '...';
+  if (debugBody.end_image_url) debugBody.end_image_url = String(debugBody.end_image_url).slice(0, 80) + '...';
   if (debugBody.image_urls) debugBody.image_urls = (debugBody.image_urls as string[]).map((u: string) => u.slice(0, 80) + '...');
-  logger.info('FreepikKling3Omni', 'Request body', { endpoint, body: debugBody });
+  console.log('[Kling3Omni] POST', endpoint, JSON.stringify(debugBody, null, 2));
 
   const response = await fetch(endpoint, {
     method: 'POST',
@@ -474,9 +484,21 @@ export const createKling3OmniTask = async (
     body: JSON.stringify(body),
   });
 
-  if (!response.ok) await handleFreepikError(response, 'Kling 3 Omni task creation');
+  // Capture raw response text before parsing
+  const responseText = await response.text();
+  console.log('[Kling3Omni] Creation response', response.status, responseText);
 
-  const result = await response.json();
+  if (!response.ok) {
+    throw new Error(`Freepik Kling 3 Omni task creation failed (${response.status}): ${responseText}`);
+  }
+
+  let result: any;
+  try {
+    result = JSON.parse(responseText);
+  } catch {
+    throw new Error(`Freepik Kling 3 Omni: invalid JSON response: ${responseText.slice(0, 500)}`);
+  }
+
   const taskId = result?.data?.task_id;
   if (!taskId) throw new Error('Freepik: no task_id in Kling 3 Omni response');
 
@@ -547,15 +569,30 @@ export const createKling3OmniReferenceTask = async (
     body.webhook_url = options.webhookUrl;
   }
 
+  // Log request body for debugging
+  console.log('[Kling3OmniRef] POST', endpoint, JSON.stringify(body, null, 2));
+
   const response = await fetch(endpoint, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'x-freepik-api-key': apiKey },
     body: JSON.stringify(body),
   });
 
-  if (!response.ok) await handleFreepikError(response, 'Kling 3 Omni reference task creation');
+  // Capture raw response text before parsing
+  const responseText = await response.text();
+  console.log('[Kling3OmniRef] Creation response', response.status, responseText);
 
-  const result = await response.json();
+  if (!response.ok) {
+    throw new Error(`Freepik Kling 3 Omni reference task creation failed (${response.status}): ${responseText}`);
+  }
+
+  let result: any;
+  try {
+    result = JSON.parse(responseText);
+  } catch {
+    throw new Error(`Freepik Kling 3 Omni reference: invalid JSON response: ${responseText.slice(0, 500)}`);
+  }
+
   const taskId = result?.data?.task_id;
   if (!taskId) throw new Error('Freepik: no task_id in Kling 3 Omni reference response');
 
