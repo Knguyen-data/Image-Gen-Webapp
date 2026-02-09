@@ -1269,7 +1269,13 @@ INSTRUCTIONS:
         const startUrl = kieApiKey
           ? await uploadImageToKie(startImage.base64, startImage.mimeType)
           : `data:${startImage.mimeType};base64,${startImage.base64}`;
-        options.startImageUrl = startUrl;
+        // If both frames: use start_image_url + end_image_url
+        // If only start frame: use image_url
+        if (endImage) {
+          options.startImageUrl = startUrl;
+        } else {
+          options.imageUrl = startUrl;
+        }
       }
       if (isI2V && endImage) {
         onProgress?.('Uploading end frame...');
