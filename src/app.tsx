@@ -140,6 +140,12 @@ const App: React.FC = () => {
   // Initial Load
   useEffect(() => {
     navigator.storage?.persist?.();
+    
+    // Initialize auto-backup system
+    import('./services/db-backup').then(({ initAutoBackup }) => {
+      initAutoBackup();
+    });
+    
     const loadData = async () => {
       logger.info('App', 'Loading application data');
       try {
@@ -2668,7 +2674,87 @@ INSTRUCTIONS:
             onRetryVideo={handleRetryVideo}
             onInterpolateVideo={handleAmtInterpolation}
             isInterpolating={isInterpolating}
+            selectMode={selectMode}
+            selectedVideos={selectedVideos}
+            onSelectVideo={toggleVideoSelection}
           />
+
+          {/* Video Compare Modal */}
+          {showCompareModal && selectedVideoUrls.length >= 2 && (
+            <CompareModal
+              videoUrls={selectedVideoUrls}
+              onClose={() => setShowCompareModal(false)}
+            />
+          )}
+
+          {/* Batch Actions Toolbar */}
+          {selectMode && selectedVideos.length > 0 && (
+            <BatchActionsToolbar
+              selectedCount={selectedVideos.length}
+              onSaveCollection={() => setShowSaveCollectionModal(true)}
+              onCompare={() => setShowCompareModal(true)}
+              onDownloadZip={handleDownloadZip}
+              onUploadR2={handleBatchUploadR2}
+              onDeleteAll={handleDeleteAll}
+              onClearSelection={clearSelection}
+            />
+          )}
+
+          {/* Save Collection Modal */}
+          {showSaveCollectionModal && (
+            <SaveCollectionModal
+              videoIds={selectedVideos}
+              onClose={() => setShowSaveCollectionModal(false)}
+              onSaved={(name, description, tags) => handleSaveCollection(name, description, tags)}
+            />
+          )}
+
+          {/* Upload Progress Overlay */}
+          {uploadProgress && (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+              <div className="bg-white dark:bg-gray-800 rounded-lg p-6">
+                <h3 className="text-lg font-semibold mb-4 text-gray-900 dark:text-white">Uploading to R2...</h3>
+                <div className="w-64 h-2 bg-gray-200 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-blue-600 transition-all"
+                    style={{ width: `${(uploadProgress.current / uploadProgress.total) * 100}%` }}
+                  />
+                </div>
+                <p className="text-sm text-gray-600 dark:text-gray-400 mt-2">
+                  {uploadProgress.current} / {uploadProgress.total}
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Save Payload Dialog */}
+          {showSavePayloadDialog && saveDialogPayload && (
+            <SavePayloadDialog
+              payload={saveDialogPayload}
+              onClose={() => setShowSavePayloadDialog(false)}
+              onRetryNow={() => {
+                retryPayload(saveDialogPayload.payloadId);
+                setShowSavePayloadDialog(false);
+              }}
+              onViewSaved={() => {
+                setShowSavePayloadDialog(false);
+                setCurrentView('saved-payloads');
+              }}
+            />
+          )}
+
+          {/* Saved Payloads Page */}
+          {currentView === 'saved-payloads' && (
+            <div className="fixed inset-0 bg-white dark:bg-gray-900 z-40 overflow-auto">
+              <SavedPayloadsPage
+                payloads={savedPayloads}
+                onRetry={retryPayload}
+                onDelete={handleDeletePayload}
+                onClose={() => setCurrentView('main')}
+                onRefresh={loadSavedPayloads}
+              />
+            </div>
+          )}
         </>
       )}
     </div>

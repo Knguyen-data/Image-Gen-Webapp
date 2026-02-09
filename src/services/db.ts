@@ -60,12 +60,15 @@ const getCurrentDbVersion = (): Promise<number> => {
 
 /**
  * Open Database Connection with automatic version handling.
- * Detects existing version and opens at that version to avoid VersionError.
+ * CRITICAL: Never force version increment - only add missing tables without upgrade.
+ * This prevents data loss from version changes.
  */
 export const openDB = async (): Promise<IDBDatabase> => {
   const currentVersion = await getCurrentDbVersion();
-  // Increment version to trigger upgrade for new tables (now version 3)
-  const newVersion = currentVersion < 3 ? 3 : currentVersion;
+  
+  // NEVER force version increment - use current version
+  // Only increment if we're at 0 (brand new DB)
+  const newVersion = currentVersion === 0 ? 1 : currentVersion;
 
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, newVersion);
@@ -74,34 +77,33 @@ export const openDB = async (): Promise<IDBDatabase> => {
       const db = (event.target as IDBOpenDBRequest).result;
       const oldVersion = event.oldVersion;
 
-      // Create runs table (version 1)
+      // Create runs table (if doesn't exist)
       if (!db.objectStoreNames.contains(STORE_NAME)) {
         db.createObjectStore(STORE_NAME, { keyPath: 'id' });
       }
 
-      // Create crash recovery tables (version 2)
-      if (oldVersion < 2) {
-        if (!db.objectStoreNames.contains('pendingRequests')) {
-          const pendingStore = db.createObjectStore('pendingRequests', {
-            keyPath: 'id',
-            autoIncrement: true
-          });
-          pendingStore.createIndex('requestId', 'requestId', { unique: true });
-          pendingStore.createIndex('taskId', 'taskId', { unique: false });
-          pendingStore.createIndex('status', 'status', { unique: false });
-          pendingStore.createIndex('createdAt', 'createdAt', { unique: false });
-          pendingStore.createIndex('type', 'type', { unique: false });
-        }
+      // Create crash recovery tables (if don't exist)
+      // NOTE: These are added WITHOUT version increment to preserve data
+      if (!db.objectStoreNames.contains('pendingRequests')) {
+        const pendingStore = db.createObjectStore('pendingRequests', {
+          keyPath: 'id',
+          autoIncrement: true
+        });
+        pendingStore.createIndex('requestId', 'requestId', { unique: true });
+        pendingStore.createIndex('taskId', 'taskId', { unique: false });
+        pendingStore.createIndex('status', 'status', { unique: false });
+        pendingStore.createIndex('createdAt', 'createdAt', { unique: false });
+        pendingStore.createIndex('type', 'type', { unique: false });
+      }
 
-        if (!db.objectStoreNames.contains('costRecords')) {
-          const costStore = db.createObjectStore('costRecords', {
-            keyPath: 'id',
-            autoIncrement: true
-          });
-          costStore.createIndex('requestId', 'requestId', { unique: false });
-          costStore.createIndex('timestamp', 'timestamp', { unique: false });
-          costStore.createIndex('recovered', 'recovered', { unique: false });
-        }
+      if (!db.objectStoreNames.contains('costRecords')) {
+        const costStore = db.createObjectStore('costRecords', {
+          keyPath: 'id',
+          autoIncrement: true
+        });
+        costStore.createIndex('requestId', 'requestId', { unique: false });
+        costStore.createIndex('timestamp', 'timestamp', { unique: false });
+        costStore.createIndex('recovered', 'recovered', { unique: false });
       }
 
       // Create video collections and saved payloads tables (version 3)
