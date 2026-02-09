@@ -5,15 +5,29 @@ import { VIDEO_CONSTRAINTS } from '../constants';
 import { getVideoDuration } from '../utils/video-dimensions';
 import {
   generateMotionPrompts,
+  generateMotionControlPrompts, // New import
   MotionStylePreset,
   MOTION_STYLE_OPTIONS,
 } from '../services/motion-director-service';
 
+// Helper to convert File to Base64
+const fileToBase64 = (file: File): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result as string;
+      resolve(result.split(',')[1]); // Remove data URL prefix
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+};
+
 interface VideoSceneQueueProps {
   scenes: VideoScene[];
   setScenes: (scenes: VideoScene[]) => void;
-  videoSettings: VideoSettings;
-  setVideoSettings: (settings: VideoSettings) => void;
+  videoSettings: UnifiedVideoSettings; // Changed from VideoSettings
+  setVideoSettings: (settings: UnifiedVideoSettings) => void; // Changed from VideoSettings
   onOpenVideoTrimmer: (file: File, isGlobal: boolean, sceneId?: string) => void;
   appMode: 'image' | 'video';
   onGenerate: () => void;
@@ -32,13 +46,32 @@ const VideoSceneQueue: React.FC<VideoSceneQueueProps> = ({
   onGenerate,
   isGenerating,
   hideReferenceVideo = false,
-  geminiApiKey = ''
+  geminiApiKey = '',
 }) => {
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   const [globalVideoDragOver, setGlobalVideoDragOver] = useState(false);
   const [perSceneVideoDragOver, setPerSceneVideoDragOver] = useState<string | null>(null);
   const globalVideoRef = useRef<HTMLInputElement>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
+
+  // Scene reorder drag state
+  const [reorderDragIndex, setReorderDragIndex] = useState<number | null>(null);
+  const [reorderOverIndex, setReorderOverIndex] = useState<number | null>(null);
+
+  // Kling 3 helpers
+  const isKling3 = videoSettings.model === 'kling-3' || videoSettings.model === 'kling-3-omni';
+  const isKling3Omni = videoSettings.model === 'kling-3-omni';
+  
+  // Calculate total duration for Kling 3 MultiShot
+  const totalDuration = isKling3 ? scenes.reduce((acc, s) => acc + (s.duration || 3), 0) : 0;
+  const maxScenes = isKling3 ? 6 : 999;
+  
+  // Update scene duration (Kling 3 only)
+  const updateSceneDuration = (sceneId: string, duration: number) => {
+    setScenes(scenes.map(s =>
+      s.id === sceneId ? { ...s, duration: Math.max(3, duration) } : s
+    ));
+  };
 
   // Auto Motion state
   const [showStylePicker, setShowStylePicker] = useState(false);
@@ -70,10 +103,35 @@ const VideoSceneQueue: React.FC<VideoSceneQueueProps> = ({
         mime_type: s.referenceImage.mimeType,
       }));
 
-      const result = await generateMotionPrompts(geminiApiKey, images, preset);
+      let result;
+
+      if (videoSettings.model === 'kling-2.6' && videoSettings.globalReferenceVideo) {
+        // Motion Control Pipeline
+        const globalReferenceVideo = videoSettings.globalReferenceVideo;
+        const globalReferenceVideoBase64 = await fileToBase64(globalReferenceVideo.file);
+        const globalReferenceVideoMimeType = globalReferenceVideo.file.type;
+
+        result = await generateMotionControlPrompts(
+          geminiApiKey,
+          images,
+          preset,
+          globalReferenceVideoBase64,
+          globalReferenceVideoMimeType,
+          videoSettings.orientation, // characterOrientation
+          videoSettings.klingProGenerateAudio, // keepOriginalSound
+        );
+      } else if (videoSettings.model === 'kling-2.6') {
+        // Pro I2V Pipeline
+        result = await generateMotionPrompts(geminiApiKey, images, preset);
+      } else {
+        // Handle other models or throw an error if no appropriate pipeline is found
+        setAutoMotionError(`Auto motion is not supported for model: ${videoSettings.model}`);
+        setTimeout(() => setAutoMotionError(null), 3000);
+        return;
+      }
 
       // Auto-fill prompts into scenes
-      const updated = scenes.map((scene, i) => {
+      let updated = scenes.map((scene, i) => {
         const match = result.prompts.find(p => p.scene_index === i);
         if (match && scene.referenceImage) {
           return {
@@ -84,6 +142,39 @@ const VideoSceneQueue: React.FC<VideoSceneQueueProps> = ({
         }
         return scene;
       });
+
+      // Merge all per-scene negative prompts into ONE global negative prompt
+      const negativePrompts = result.prompts
+        .map(p => p.negative_prompt)
+        .filter((np): np is string => !!np && np.trim().length > 0);
+      if (negativePrompts.length > 0) {
+        // Deduplicate and merge
+        const uniqueNegatives = [...new Set(
+          negativePrompts.flatMap(np => np.split(',').map(s => s.trim().toLowerCase()))
+        )].filter(Boolean);
+        const mergedNegative = uniqueNegatives.join(', ');
+        setVideoSettings({
+          ...videoSettings,
+          klingProNegativePrompt: mergedNegative,
+        });
+        // Flag user about global setting update
+        alert(`✨ Auto Motion updated PRO I2V Settings:\n\n• Negative Prompt auto-filled from ${negativePrompts.length} scene(s)\n• Check "PRO I2V Settings" below to review/edit`);
+      }
+
+      // Apply recommended order if provided by Config Agent
+      if (result.recommendedOrder && result.recommendedOrder.length === updated.length) {
+        const reordered = result.recommendedOrder
+          .map(idx => updated[idx])
+          .filter(Boolean);
+        if (reordered.length === updated.length) {
+          updated = reordered;
+          console.log('[Motion Director] Applied recommended order:', result.recommendedOrder);
+          if (result.orderReasoning) {
+            console.log('[Motion Director] Reasoning:', result.orderReasoning);
+          }
+        }
+      }
+
       setScenes(updated);
     } catch (err: any) {
       setAutoMotionError(err.message || 'Motion Director failed');
@@ -121,6 +212,12 @@ const VideoSceneQueue: React.FC<VideoSceneQueueProps> = ({
   const handleDrop = async (e: React.DragEvent) => {
     e.preventDefault();
     setDragOverIndex(null);
+
+    // Kling 3: Max 6 scenes limit
+    if (isKling3 && scenes.length >= maxScenes) {
+      alert(`Kling 3 MultiShot mode supports maximum ${maxScenes} scenes`);
+      return;
+    }
 
     // Check for external file drop FIRST
     const files = e.dataTransfer.files;
@@ -191,6 +288,90 @@ const VideoSceneQueue: React.FC<VideoSceneQueueProps> = ({
   const removeScene = (sceneId: string) => {
     setScenes(scenes.filter(s => s.id !== sceneId));
   };
+
+  // --- SCENE REORDER (Drag-to-reorder) ---
+  const handleSceneDragStart = (e: React.DragEvent, index: number) => {
+    setReorderDragIndex(index);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', String(index)); // Needed for Firefox
+    // Make the drag image slightly transparent
+    if (e.currentTarget instanceof HTMLElement) {
+      e.currentTarget.style.opacity = '0.5';
+    }
+  };
+
+  const handleSceneDragEnd = (e: React.DragEvent) => {
+    setReorderDragIndex(null);
+    setReorderOverIndex(null);
+    if (e.currentTarget instanceof HTMLElement) {
+      e.currentTarget.style.opacity = '1';
+    }
+  };
+
+  const handleSceneDragOverReorder = (e: React.DragEvent, index: number) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (reorderDragIndex === null || reorderDragIndex === index) return;
+    setReorderOverIndex(index);
+    e.dataTransfer.dropEffect = 'move';
+  };
+
+  const handleSceneDropReorder = (e: React.DragEvent, dropIndex: number) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (reorderDragIndex === null || reorderDragIndex === dropIndex) {
+      setReorderDragIndex(null);
+      setReorderOverIndex(null);
+      return;
+    }
+
+    const reordered = [...scenes];
+    const [moved] = reordered.splice(reorderDragIndex, 1);
+    reordered.splice(dropIndex, 0, moved);
+    setScenes(reordered);
+    setReorderDragIndex(null);
+    setReorderOverIndex(null);
+  };
+
+  // --- SHUFFLE SCENES (randomize order) ---
+  const shuffleScenes = () => {
+    if (scenes.length <= 1) return;
+    const shuffled = [...scenes];
+    // Fisher-Yates shuffle
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+    setScenes(shuffled);
+  };
+
+  // --- MOVE SCENE (programmatic, for agent use) ---
+  const moveScene = (fromIndex: number, toIndex: number) => {
+    if (fromIndex < 0 || fromIndex >= scenes.length || toIndex < 0 || toIndex >= scenes.length) return;
+    const reordered = [...scenes];
+    const [moved] = reordered.splice(fromIndex, 1);
+    reordered.splice(toIndex, 0, moved);
+    setScenes(reordered);
+  };
+
+  // Expose shuffle/move/reorder for programmatic access (agent, console, browser automation)
+  React.useEffect(() => {
+    (window as any).__videoSceneControls = {
+      shuffle: shuffleScenes,
+      move: moveScene,
+      getScenes: () => scenes,
+      setOrder: (ids: string[]) => {
+        const ordered = ids
+          .map(id => scenes.find(s => s.id === id))
+          .filter(Boolean) as typeof scenes;
+        // Add any scenes not in the new order at the end
+        const remaining = scenes.filter(s => !ids.includes(s.id));
+        setScenes([...ordered, ...remaining]);
+      },
+      reverse: () => setScenes([...scenes].reverse()),
+    };
+    return () => { delete (window as any).__videoSceneControls; };
+  }, [scenes]);
 
   const handleGlobalVideoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -435,9 +616,42 @@ const VideoSceneQueue: React.FC<VideoSceneQueueProps> = ({
 
       {/* Scene Queue */}
       <div className="space-y-2">
-        <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
-          Scene Queue
-        </label>
+        <div className="flex items-center justify-between">
+          <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
+            Scene Queue
+            {isKling3 && (
+              <span className={`ml-2 text-[10px] font-normal ${scenes.length >= maxScenes ? 'text-red-400' : 'text-gray-500'}`}>
+                ({scenes.length}/{maxScenes} scenes)
+              </span>
+            )}
+          </label>
+          {scenes.length > 1 && (
+            <button
+              onClick={shuffleScenes}
+              className="flex items-center gap-1 px-2 py-1 text-xs rounded-md bg-gray-800 text-gray-400 hover:text-white hover:bg-gray-700 transition-all border border-gray-700"
+              title="Shuffle scene order"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              Shuffle
+            </button>
+          )}
+        </div>
+
+        {/* Kling 3: Total Duration Indicator */}
+        {isKling3 && scenes.length > 0 && (
+          <div className={`flex items-center justify-between px-3 py-2 rounded-lg border text-xs ${
+            isKling3Omni
+              ? 'bg-violet-900/20 border-violet-500/40 text-violet-300'
+              : totalDuration > 15
+                ? 'bg-red-900/20 border-red-500/40 text-red-300'
+                : 'bg-emerald-900/20 border-emerald-500/40 text-emerald-300'
+          }`}>
+            <span className="font-medium">{isKling3Omni ? 'Duration:' : 'Total Duration:'}</span>
+            <span className="font-mono font-semibold">{isKling3Omni ? 'Auto-distributed across shots' : `${totalDuration}s / 15s`}</span>
+          </div>
+        )}
 
         {/* Drop Zone */}
         {scenes.length === 0 && (
@@ -465,11 +679,33 @@ const VideoSceneQueue: React.FC<VideoSceneQueueProps> = ({
           {scenes.map((scene, index) => (
             <div
               key={scene.id}
-              className="bg-gray-800/50 rounded-lg border border-gray-700 p-3 space-y-2 relative group"
+              draggable
+              onDragStart={(e) => handleSceneDragStart(e, index)}
+              onDragEnd={handleSceneDragEnd}
+              onDragOver={(e) => handleSceneDragOverReorder(e, index)}
+              onDrop={(e) => handleSceneDropReorder(e, index)}
+              className={`bg-gray-800/50 rounded-lg border p-3 space-y-2 relative group transition-all ${
+                reorderOverIndex === index && reorderDragIndex !== null
+                  ? 'border-dash-400 ring-2 ring-dash-400/30 scale-[1.02]'
+                  : reorderDragIndex === index
+                    ? 'border-gray-600 opacity-50'
+                    : 'border-gray-700'
+              }`}
             >
               {/* Scene Header */}
               <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold text-gray-400">Scene {index + 1}</span>
+                <div className="flex items-center gap-2">
+                  {/* Drag Handle */}
+                  <div
+                    className="cursor-grab active:cursor-grabbing text-gray-500 hover:text-gray-300 transition-colors p-0.5"
+                    title="Drag to reorder"
+                  >
+                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                      <path d="M8 6a2 2 0 1 1 0-4 2 2 0 0 1 0 4zm0 8a2 2 0 1 1 0-4 2 2 0 0 1 0 4zm0 8a2 2 0 1 1 0-4 2 2 0 0 1 0 4zm8-16a2 2 0 1 1 0-4 2 2 0 0 1 0 4zm0 8a2 2 0 1 1 0-4 2 2 0 0 1 0 4zm0 8a2 2 0 1 1 0-4 2 2 0 0 1 0 4z" />
+                    </svg>
+                  </div>
+                  <span className="text-xs font-semibold text-gray-400">Scene {index + 1}</span>
+                </div>
                 <button
                   onClick={() => removeScene(scene.id)}
                   className="opacity-0 group-hover:opacity-100 transition-opacity text-red-400 hover:text-red-300 p-1"
@@ -605,8 +841,8 @@ const VideoSceneQueue: React.FC<VideoSceneQueueProps> = ({
         )}
       </div>
 
-      {/* Auto Motion Button */}
-      {scenes.length > 0 && scenes.some(s => s.referenceImage) && (
+      {/* Auto Motion Button — disabled for Kling 2.6 Motion Control */}
+      {!isKling3 && videoSettings.model !== 'kling-2.6' && scenes.length > 0 && scenes.some(s => s.referenceImage) && (
         <div className="relative mb-2">
           {autoMotionError && (
             <p className="text-xs text-red-400 mb-1">{autoMotionError}</p>
@@ -623,7 +859,12 @@ const VideoSceneQueue: React.FC<VideoSceneQueueProps> = ({
               </>
             ) : (
               <>
-                ✨ Auto Motion Prompts
+                {videoSettings.model === 'kling-2.6' && videoSettings.globalReferenceVideo
+                  ? '🏃 Auto Motion Control'
+                  : isKling3 
+                  ? (isKling3Omni ? '🎬 Auto Omni' : '🎬 Auto MultiShot')
+                  : '✨ Auto Motion Prompts'
+                }
               </>
             )}
           </button>

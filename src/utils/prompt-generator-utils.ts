@@ -54,11 +54,6 @@ export function buildFullPromptText(gp: GeneratedPrompt): string {
     result = parts.join(' ');
   }
 
-  // Append negative prompt if present
-  if (gp.negativePrompt && gp.negativePrompt.trim()) {
-    result += `\n\nAvoid: ${gp.negativePrompt.trim()}`;
-  }
-
   return result;
 }
 

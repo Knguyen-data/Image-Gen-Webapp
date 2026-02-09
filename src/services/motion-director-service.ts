@@ -2,6 +2,9 @@
  * Motion Director Service — calls the Python ADK motion director backend
  * to generate Kling 2.6 I2V motion prompts using a 3-agent pipeline.
  *
+ * v2: Supports structured prompts (visual + audio layers), scene reordering,
+ * and shared pipeline state across Config Agent → Motion Writers → Editor Agent.
+ *
  * Same URL/key patterns as prompt-generator-service.ts.
  */
 
@@ -42,9 +45,21 @@ export interface MotionImageInput {
   mime_type: string;
 }
 
+/** Structured Kling 2.6 prompt with visual + audio layers */
+export interface StructuredPrompt {
+  scene: string;
+  action: string;
+  camera: string;
+  audio_dialogue: string;
+  audio_ambience_sfx: string;
+  music: string;
+  avoid: string;
+}
+
 export interface MotionPromptResult {
   scene_index: number;
   motion_prompt: string;
+  structured_prompt?: StructuredPrompt;
   camera_move: string;
   subject_motion: string;
   duration_suggestion: string;
@@ -54,10 +69,72 @@ export interface MotionPromptResult {
 export interface MotionGenerateResult {
   sessionId: string;
   prompts: MotionPromptResult[];
+  recommendedOrder?: number[];
+  orderReasoning?: string;
+  videoAnalysis?: any;
 }
 
 // ---------------------------------------------------------------------------
-// Health check
+// Generate motion control prompts (Pipeline B)
+// ---------------------------------------------------------------------------
+
+export const generateMotionControlPrompts = async (
+  apiKey: string,
+  images: MotionImageInput[],
+  stylePreset: MotionStylePreset,
+  globalReferenceVideoBase64: string,
+  globalReferenceVideoMimeType: string,
+  characterOrientation?: 'image' | 'video',
+  keepOriginalSound?: boolean,
+  userNote?: string,
+  signal?: AbortSignal,
+): Promise<MotionGenerateResult> => {
+  if (!apiKey) throw new Error('Gemini API Key is missing. Set it in API Key settings.');
+  if (!images.length) throw new Error('At least one image is required.');
+  if (!globalReferenceVideoBase64) throw new Error('Reference video is required for Motion Control.');
+
+  const res = await fetch(`${getAgentUrl()}/motion/generate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      pipeline_type: 'motion-control',
+      api_key: apiKey,
+      images,
+      style_preset: stylePreset,
+      global_reference_video_base64: globalReferenceVideoBase64,
+      global_reference_video_mime_type: globalReferenceVideoMimeType,
+      character_orientation: characterOrientation,
+      keep_original_sound: keepOriginalSound,
+      user_note: userNote || null,
+    }),
+    signal,
+  });
+
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(body.detail || `Motion Director error: ${res.status}`);
+  }
+
+  const data = await res.json();
+  return {
+    sessionId: data.session_id,
+    prompts: (data.prompts || []).map((p: any) => ({
+      scene_index: p.scene_index ?? 0,
+      motion_prompt: p.motion_prompt || '',
+      structured_prompt: p.structured_prompt || undefined,
+      camera_move: p.camera_move || '',
+      subject_motion: p.subject_motion || '',
+      duration_suggestion: p.duration_suggestion || '5s',
+      negative_prompt: p.negative_prompt || undefined,
+    })),
+    recommendedOrder: data.recommended_order || undefined,
+    orderReasoning: data.order_reasoning || undefined,
+    videoAnalysis: data.video_analysis || undefined,
+  };
+};
+
+// ---------------------------------------------------------------------------
+// Generate motion prompts
 // ---------------------------------------------------------------------------
 
 export const checkMotionHealth = async (): Promise<boolean> => {
@@ -108,11 +185,14 @@ export const generateMotionPrompts = async (
     prompts: (data.prompts || []).map((p: any) => ({
       scene_index: p.scene_index ?? 0,
       motion_prompt: p.motion_prompt || '',
+      structured_prompt: p.structured_prompt || undefined,
       camera_move: p.camera_move || '',
       subject_motion: p.subject_motion || '',
       duration_suggestion: p.duration_suggestion || '5s',
       negative_prompt: p.negative_prompt || undefined,
     })),
+    recommendedOrder: data.recommended_order || undefined,
+    orderReasoning: data.order_reasoning || undefined,
   };
 };
 
@@ -152,10 +232,13 @@ export const refineMotionPrompts = async (
     prompts: (data.prompts || []).map((p: any) => ({
       scene_index: p.scene_index ?? 0,
       motion_prompt: p.motion_prompt || '',
+      structured_prompt: p.structured_prompt || undefined,
       camera_move: p.camera_move || '',
       subject_motion: p.subject_motion || '',
       duration_suggestion: p.duration_suggestion || '5s',
       negative_prompt: p.negative_prompt || undefined,
     })),
+    recommendedOrder: data.recommended_order || undefined,
+    orderReasoning: data.order_reasoning || undefined,
   };
 };

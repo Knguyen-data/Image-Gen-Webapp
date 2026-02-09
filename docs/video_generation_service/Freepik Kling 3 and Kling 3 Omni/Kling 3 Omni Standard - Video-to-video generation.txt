@@ -1,0 +1,390 @@
+> ## Documentation Index
+> Fetch the complete documentation index at: https://docs.freepik.com/llms.txt
+> Use this file to discover all available pages before exploring further.
+
+# Kling 3 Omni Standard - Video-to-video generation
+
+> Generate AI video using Kling 3 Omni Standard with a reference video for motion and style guidance.
+
+**Video-to-video mode:** This endpoint requires a `video_url` parameter. Reference the video in your prompt using `@Video1`.
+
+**Features:**
+- Use a reference video (3-10s) to guide motion and style
+- Combine with an image for start frame control
+- Faster generation at slightly lower quality
+
+**Use case:** Create videos that follow motion patterns from a reference video while applying your creative prompt.
+
+**Duration:** 3-15 seconds
+**Quality:** Standard mode offers faster generation at slightly lower quality.
+
+**Tip:** For text-to-video or image-to-video without a reference video, use the `/ai/video/kling-v3-omni-std` endpoint instead.
+
+
+
+
+## OpenAPI
+
+````yaml post /v1/ai/reference-to-video/kling-v3-omni-std
+openapi: 3.0.0
+info:
+  description: >-
+    The Freepik API is your gateway to a vast collection of high-quality digital
+    resources for your applications and projects. As a leading platform, it
+    offers a wide range of graphics, including vectors, photos, illustrations,
+    icons, PSD templates, and more, all curated by talented designers from
+    around the world.
+  title: Freepik API
+  version: 1.0.0
+servers:
+  - description: B2B API Production V1
+    url: https://api.freepik.com
+security:
+  - apiKey: []
+paths:
+  /v1/ai/reference-to-video/kling-v3-omni-std:
+    post:
+      tags:
+        - reference-to-video
+        - kling-v3-omni-std-r2v
+        - background_tasks
+      summary: Kling 3 Omni Standard - Video-to-video generation
+      description: >
+        Generate AI video using Kling 3 Omni Standard with a reference video for
+        motion and style guidance.
+
+
+        **Video-to-video mode:** This endpoint requires a `video_url` parameter.
+        Reference the video in your prompt using `@Video1`.
+
+
+        **Features:**
+
+        - Use a reference video (3-10s) to guide motion and style
+
+        - Combine with an image for start frame control
+
+        - Faster generation at slightly lower quality
+
+
+        **Use case:** Create videos that follow motion patterns from a reference
+        video while applying your creative prompt.
+
+
+        **Duration:** 3-15 seconds
+
+        **Quality:** Standard mode offers faster generation at slightly lower
+        quality.
+
+
+        **Tip:** For text-to-video or image-to-video without a reference video,
+        use the `/ai/video/kling-v3-omni-std` endpoint instead.
+      operationId: postAiReferenceToVideoKlingV3OmniStd
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/kling-v3-omni-video-reference-request'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/task-detail-200-default-response'
+          description: OK - Task created successfully
+        '400':
+          content:
+            application/json:
+              examples:
+                invalid_page:
+                  summary: Parameter 'page' is not valid
+                  value:
+                    message: Parameter 'page' must be greater than 0
+                invalid_query:
+                  summary: Parameter 'query' is not valid
+                  value:
+                    message: Parameter 'query' must not be empty
+                invalid_filter:
+                  summary: Parameter 'filter' is not valid
+                  value:
+                    message: Parameter 'filter' is not valid
+                generic_bad_request:
+                  summary: Bad Request
+                  value:
+                    message: Parameter ':attribute' is not valid
+              schema:
+                $ref: '#/components/schemas/get_all_style_transfer_tasks_400_response'
+            application/problem+json:
+              examples:
+                invalid_page:
+                  summary: Parameter 'page' is not valid
+                  value:
+                    message: Your request parameters didn't validate.
+                    invalid_params:
+                      - name: page
+                        reason: Parameter 'page' must be greater than 0
+                      - name: per_page
+                        reason: Parameter 'per_page' must be greater than 0
+              schema:
+                $ref: >-
+                  #/components/schemas/get_all_style_transfer_tasks_400_response_1
+          description: >-
+            Bad Request - The server could not understand the request due to
+            invalid syntax.
+        '401':
+          content:
+            application/json:
+              examples:
+                invalid_api_key:
+                  summary: API key is not valid
+                  value:
+                    message: Invalid API key
+                missing_api_key:
+                  summary: API key is not provided
+                  value:
+                    message: Missing API key
+              schema:
+                $ref: '#/components/schemas/get_all_style_transfer_tasks_400_response'
+          description: >-
+            Unauthorized - The client must authenticate itself to get the
+            requested response.
+        '500':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/get_all_style_transfer_tasks_500_response'
+          description: >-
+            Internal Server Error - The server has encountered a situation it
+            doesn't know how to handle.
+        '503':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/get_all_style_transfer_tasks_503_response'
+          description: Service Unavailable
+      security:
+        - apiKey: []
+components:
+  schemas:
+    kling-v3-omni-video-reference-request:
+      description: >
+        Generate video using Kling 3 Omni with a reference video for
+        motion/style guidance.
+
+
+        **Required:** The `video_url` parameter is required for this endpoint.
+        Reference the video in your prompt using `@Video1`.
+
+
+        **Best for:**
+
+        - Transferring motion patterns from reference videos
+
+        - Maintaining visual consistency with reference material
+
+        - Creating videos that follow a specific style or movement pattern
+      properties:
+        webhook_url:
+          description: >
+            Optional callback URL that receives asynchronous notifications when
+            the task changes status.
+
+            The payload includes the task status and result URL when completed.
+          format: uri
+          type: string
+        prompt:
+          description: >
+            Text prompt describing the desired video content. Maximum 2500
+            characters.
+
+            Reference the video in your prompt as @Video1.
+
+
+            **Tips for better results:**
+
+            - Be specific about actions, camera movements, and mood
+
+            - Reference @Video1 to indicate how the reference video should
+            influence generation
+          maxLength: 2500
+          type: string
+        image_url:
+          description: >
+            URL of the start frame image for image-to-video generation with
+            video reference.
+
+
+            **Image requirements:**
+
+            - Minimum: 300x300 pixels
+
+            - Maximum: 10MB file size
+
+            - Formats: JPG, JPEG, PNG
+          type: string
+        video_url:
+          description: >
+            **Required.** URL of the reference video to use as a creative guide
+            for video-to-video generation.
+
+            Reference in your prompt as `@Video1`.
+
+
+            **Video constraints:**
+
+            - Duration: 3-10 seconds
+
+            - Resolution: 720-2160px (minimum 720px width or height)
+
+            - Max file size: 200MB
+
+            - Frame rate: 24-60 FPS
+
+            - Formats: `.mp4` or `.mov` only
+          format: uri
+          type: string
+        duration:
+          $ref: '#/components/schemas/kling-v3-duration'
+        aspect_ratio:
+          $ref: '#/components/schemas/kling-v3-omni-aspect-ratio'
+        cfg_scale:
+          default: 0.5
+          description: >
+            Guidance scale for prompt adherence. Higher values mean stronger
+            adherence to the prompt.
+
+
+            - **0**: Maximum flexibility, more creative interpretation
+
+            - **0.5** (default): Balanced between prompt adherence and
+            creativity
+
+            - **2**: Strict adherence to prompt, less creative variation
+          format: float
+          maximum: 2
+          minimum: 0
+          type: number
+        negative_prompt:
+          default: blur, distort, and low quality
+          description: >-
+            Undesired elements to avoid in the generated video. Maximum 2500
+            characters.
+          maxLength: 2500
+          type: string
+      required:
+        - video_url
+      title: Kling 3 Omni Video Reference Request
+      type: object
+    task-detail-200-default-response:
+      description: OK - The task exists and the status is returned
+    get_all_style_transfer_tasks_400_response:
+      example:
+        message: message
+      properties:
+        message:
+          type: string
+      type: object
+    get_all_style_transfer_tasks_400_response_1:
+      properties:
+        problem:
+          $ref: >-
+            #/components/schemas/get_all_style_transfer_tasks_400_response_1_problem
+      type: object
+    get_all_style_transfer_tasks_500_response:
+      example:
+        message: Internal Server Error
+      properties:
+        message:
+          example: Internal Server Error
+          type: string
+      type: object
+    get_all_style_transfer_tasks_503_response:
+      example:
+        message: Service Unavailable. Please try again later.
+      properties:
+        message:
+          example: Service Unavailable. Please try again later.
+          type: string
+      type: object
+    kling-v3-duration:
+      default: '5'
+      description: >
+        Duration of the generated video in seconds.
+
+
+        **Range:** 3-15 seconds
+
+        **Note:** When using multi-shot mode, total duration across all shots
+        cannot exceed 15 seconds.
+      enum:
+        - '3'
+        - '4'
+        - '5'
+        - '6'
+        - '7'
+        - '8'
+        - '9'
+        - '10'
+        - '11'
+        - '12'
+        - '13'
+        - '14'
+        - '15'
+      type: string
+    kling-v3-omni-aspect-ratio:
+      default: '16:9'
+      description: >
+        Aspect ratio for Kling V3 Omni video generation:
+
+        - `auto`: Automatically match the input image aspect ratio
+        (image-to-video only)
+
+        - `16:9`: Landscape (widescreen)
+
+        - `9:16`: Portrait (vertical)
+
+        - `1:1`: Square
+      enum:
+        - auto
+        - '16:9'
+        - '9:16'
+        - '1:1'
+      type: string
+    get_all_style_transfer_tasks_400_response_1_problem:
+      properties:
+        message:
+          example: Your request parameters didn't validate.
+          type: string
+        invalid_params:
+          items:
+            $ref: >-
+              #/components/schemas/get_all_style_transfer_tasks_400_response_1_problem_invalid_params_inner
+          type: array
+      required:
+        - invalid_params
+        - message
+      type: object
+    get_all_style_transfer_tasks_400_response_1_problem_invalid_params_inner:
+      properties:
+        name:
+          example: page
+          type: string
+        reason:
+          example: Parameter 'page' must be greater than 0
+          type: string
+      required:
+        - name
+        - reason
+      type: object
+  securitySchemes:
+    apiKey:
+      description: >
+        Your Freepik API key. Required for authentication. [Learn how to obtain
+        an API
+        key](https://docs.freepik.com/authentication#obtaining-an-api-key)
+      in: header
+      name: x-freepik-api-key
+      type: apiKey
+
+````

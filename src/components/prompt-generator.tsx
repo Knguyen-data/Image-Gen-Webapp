@@ -200,7 +200,6 @@ const PromptGenerator: React.FC<PromptGeneratorProps> = ({
     const newPrompt: PromptItem = {
       id: crypto.randomUUID(),
       text: buildFullPromptText(gp),
-      negativePrompt: gp.negativePrompt || undefined,
       referenceImages: activeRef ? [{ ...activeRef, id: crypto.randomUUID() }] : [],
     };
     if (prompts.length === 1 && prompts[0].text.trim() === '') {
@@ -215,7 +214,6 @@ const PromptGenerator: React.FC<PromptGeneratorProps> = ({
     const newPrompts: PromptItem[] = generatedPrompts.map(gp => ({
       id: crypto.randomUUID(),
       text: buildFullPromptText(gp),
-      negativePrompt: gp.negativePrompt || undefined,
       referenceImages: activeRef ? [{ ...activeRef, id: crypto.randomUUID() }] : [],
     }));
     if (prompts.length === 1 && prompts[0].text.trim() === '') {
@@ -596,9 +594,6 @@ const PromptGenerator: React.FC<PromptGeneratorProps> = ({
                         )}
                         {gp.pose && (
                           <span className="text-[9px] bg-blue-900/30 text-blue-300 px-1.5 py-0.5 rounded border border-blue-500/20">{gp.pose}</span>
-                        )}
-                        {gp.negativePrompt && (
-                          <span className="text-[9px] bg-red-900/30 text-red-300 px-1.5 py-0.5 rounded border border-red-500/20" title={gp.negativePrompt}>⛔ neg</span>
                         )}
                       </div>
 

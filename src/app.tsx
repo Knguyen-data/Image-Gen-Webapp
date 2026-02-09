@@ -3,7 +3,7 @@ import LeftPanel from './components/left-panel';
 import RightPanel from './components/right-panel';
 import ApiKeyModal from './components/api-key-modal';
 import ModifyImageModal from './components/modify-image-modal';
-import { AppSettings, Run, GeneratedImage, PromptItem, ReferenceImage, AppMode, VideoScene, VideoSettings, GeneratedVideo, VideoModel, KlingProDuration, KlingProAspectRatio } from './types';
+import { AppSettings, Run, GeneratedImage, PromptItem, ReferenceImage, ReferenceVideo, AppMode, VideoScene, VideoSettings, GeneratedVideo, VideoModel, KlingProDuration, KlingProAspectRatio, Kling3ImageListItem } from './types';
 import { DEFAULT_SETTINGS } from './constants';
 import { generateImage, modifyImage } from './services/gemini-service';
 import { getAllRunsFromDB, saveRunToDB, deleteRunFromDB } from './services/db';
@@ -14,7 +14,7 @@ import { useSeedreamCredits } from './hooks/use-seedream-credits';
 import { generateWithSeedream, mapAspectRatio, uploadImageBase64 } from './services/seedream-service';
 import { generateWithSeedreamTxt2Img } from './services/seedream-txt2img-service';
 import { generateMotionVideo } from './services/kling-motion-control-service';
-import { createFreepikProI2VTask, pollFreepikProI2VTask } from './services/freepik-kling-service';
+import { createFreepikProI2VTask, pollFreepikProI2VTask, createKling3Task, pollKling3Task, createKling3OmniTask, createKling3OmniReferenceTask, pollKling3OmniTask, pollKling3OmniReferenceTask } from './services/freepik-kling-service';
 import { logger } from './services/logger';
 import { generateThumbnail, base64ToBlob, blobToBase64 } from './services/image-blob-manager';
 import { useActivityQueue } from './hooks/use-activity-queue';
@@ -46,7 +46,14 @@ const App: React.FC = () => {
     klingCfgScale: 0.5,
     klingProNegativePrompt: '',
     klingProGenerateAudio: false,
-  });
+    // Kling 3 defaults
+    kling3AspectRatio: '16:9',
+    kling3Duration: 5,
+    kling3CfgScale: 0.5,
+    kling3NegativePrompt: '',
+    kling3GenerateAudio: false,
+    kling3InputMode: 'image-to-video',
+  } as any);
   const [generatedVideos, setGeneratedVideos] = useState<GeneratedVideo[]>([]);
 
   // State: Data
@@ -196,51 +203,52 @@ const App: React.FC = () => {
     setLoadingStatus(`Retrying with ${model}...`);
     abortControllerRef.current = new AbortController();
 
-    // Find the original run to get reference images
+    // Find the original run to get stored reference images
     const originalRun = runs.find(run =>
       run.images.some(img => img.id === image.id)
     );
 
-    // Build reference images: original refs from the prompt card + the generated image for analysis
-    const retryRefs: ReferenceImage[] = [];
-    let refCount = 0;
-
-    // 1. Find original reference images from the prompt that generated this image
-    if (originalRun) {
-      // Check if there are prompt cards with reference images
+    // Get original reference images from the run (stored at generation time)
+    // Falls back to current prompt cards / fixed block for legacy runs without stored refs
+    const originalRefs: ReferenceImage[] = [];
+    if (originalRun?.referenceImages?.length) {
+      // Preferred: use refs stored on the run
+      originalRefs.push(...originalRun.referenceImages);
+    } else if (originalRun) {
+      // Legacy fallback: try prompt cards + fixed block
       const promptCard = prompts.find(p => p.text === originalRun.promptRaw || p.text === originalRun.finalPrompt);
       if (promptCard?.referenceImages?.length) {
-        promptCard.referenceImages.forEach((ref, i) => {
-          refCount++;
-          retryRefs.push({ ...ref, id: crypto.randomUUID(), label: `[ORIGINAL REFERENCE #${refCount}]` });
-        });
+        originalRefs.push(...promptCard.referenceImages);
       }
-      // Also check fixed block references
       if (originalRun.fixedBlockUsed && settings.fixedBlockImages?.length) {
-        settings.fixedBlockImages.forEach(fb => {
-          refCount++;
+        originalRefs.push(...settings.fixedBlockImages);
+      }
+    }
+
+    try {
+      let result: GeneratedImage;
+
+      if (model === 'gemini') {
+        if (!apiKey) {
+          setKeyModalMode('gemini');
+          setIsKeyModalOpen(true);
+          return;
+        }
+
+        // Build retry refs: original references + failed image for analysis
+        const retryRefs: ReferenceImage[] = originalRefs.map((ref, i) => ({
+          ...ref, id: crypto.randomUUID(), label: `[ORIGINAL REFERENCE #${i + 1}]`
+        }));
+        if (image.base64) {
           retryRefs.push({
             id: crypto.randomUUID(),
-            base64: fb.base64,
-            mimeType: fb.mimeType,
-            label: `[ORIGINAL REFERENCE #${refCount}]`,
+            base64: image.base64,
+            mimeType: image.mimeType,
+            label: `[FAILED GENERATED IMAGE — DO NOT REPRODUCE THIS]`,
           });
-        });
-      }
-    }
+        }
 
-    // 2. Add the generated image itself as a reference so the model can analyze and improve
-    if (image.base64) {
-      retryRefs.push({
-        id: crypto.randomUUID(),
-        base64: image.base64,
-        mimeType: image.mimeType,
-        label: `[FAILED GENERATED IMAGE — DO NOT REPRODUCE THIS]`,
-      });
-    }
-
-    // 3. Build retry prompt with analysis instructions
-    const retryPrompt = `RETRY GENERATION — Analyze and improve.
+        const retryPrompt = `RETRY GENERATION — Analyze and improve.
 
 You previously attempted to generate an image from the prompt below but the result was unsatisfactory.
 
@@ -252,15 +260,6 @@ INSTRUCTIONS:
 - Generate a NEW, IMPROVED image that follows the original prompt more accurately.
 - Do NOT reproduce the failed image. Improve upon it.`;
 
-    try {
-      let result: GeneratedImage;
-
-      if (model === 'gemini') {
-        if (!apiKey) {
-          setKeyModalMode('gemini');
-          setIsKeyModalOpen(true);
-          return;
-        }
         const genResult = await generateImage({
           prompt: retryPrompt,
           referenceImages: retryRefs,
@@ -276,24 +275,51 @@ INSTRUCTIONS:
           setIsKeyModalOpen(true);
           return;
         }
-        const genResult = await generateWithSeedreamTxt2Img(
-          kieApiKey,
-          image.promptUsed,
-          {
-            aspectRatio: mapAspectRatio(image.settingsSnapshot.aspectRatio),
-            quality: image.settingsSnapshot.spicyMode?.quality || 'basic'
-          },
-          (stage) => setLoadingStatus(`🌶️ Retry: ${stage}`)
-        );
-        result = {
-          id: crypto.randomUUID(),
-          base64: genResult.base64,
-          mimeType: genResult.mimeType,
-          createdAt: Date.now(),
-          promptUsed: image.promptUsed,
-          settingsSnapshot: image.settingsSnapshot,
-          generatedBy: 'seedream-txt2img'
-        };
+
+        // SeedDream txt2img: if we have original refs, use seedream-edit instead
+        // (edit mode gives better results with a reference image)
+        if (originalRefs.length > 0 && originalRefs[0].base64) {
+          const genResult = await generateWithSeedream(
+            kieApiKey,
+            image.promptUsed,
+            originalRefs[0].base64,
+            originalRefs[0].mimeType || 'image/jpeg',
+            {
+              aspectRatio: mapAspectRatio(image.settingsSnapshot.aspectRatio),
+              quality: image.settingsSnapshot.spicyMode?.quality || 'high'
+            },
+            (stage) => setLoadingStatus(`🌶️ Retry: ${stage}`)
+          );
+          result = {
+            id: crypto.randomUUID(),
+            base64: genResult.base64,
+            mimeType: genResult.mimeType,
+            createdAt: Date.now(),
+            promptUsed: image.promptUsed,
+            settingsSnapshot: image.settingsSnapshot,
+            generatedBy: 'seedream-edit'
+          };
+        } else {
+          // No refs available — pure txt2img retry
+          const genResult = await generateWithSeedreamTxt2Img(
+            kieApiKey,
+            image.promptUsed,
+            {
+              aspectRatio: mapAspectRatio(image.settingsSnapshot.aspectRatio),
+              quality: image.settingsSnapshot.spicyMode?.quality || 'basic'
+            },
+            (stage) => setLoadingStatus(`🌶️ Retry: ${stage}`)
+          );
+          result = {
+            id: crypto.randomUUID(),
+            base64: genResult.base64,
+            mimeType: genResult.mimeType,
+            createdAt: Date.now(),
+            promptUsed: image.promptUsed,
+            settingsSnapshot: image.settingsSnapshot,
+            generatedBy: 'seedream-txt2img'
+          };
+        }
 
       } else { // seedream-edit
         if (!kieApiKey) {
@@ -301,13 +327,16 @@ INSTRUCTIONS:
           setIsKeyModalOpen(true);
           return;
         }
-        // For edit mode retry, we need the source image
-        // Use the image itself as source (re-edit)
+        // Use original reference image if available, otherwise fall back to the failed image
+        const sourceImage = (originalRefs.length > 0 && originalRefs[0].base64)
+          ? originalRefs[0]
+          : { base64: image.base64, mimeType: image.mimeType };
+
         const genResult = await generateWithSeedream(
           kieApiKey,
           image.promptUsed,
-          image.base64,
-          image.mimeType,
+          sourceImage.base64,
+          sourceImage.mimeType || 'image/jpeg',
           {
             aspectRatio: mapAspectRatio(image.settingsSnapshot.aspectRatio),
             quality: image.settingsSnapshot.spicyMode?.quality || 'basic'
@@ -557,7 +586,12 @@ INSTRUCTIONS:
       fixedBlockUsed: settings.fixedBlockEnabled,
       finalPrompt: finalPromptSummary,
       settingsSnapshot: { ...settings },
-      images: []
+      images: [],
+      // Store reference images for reliable retry access
+      referenceImages: [
+        ...(settings.fixedBlockEnabled ? (settings.fixedBlockImages || []) : []),
+        ...validItems.flatMap(item => item.referenceImages),
+      ],
     };
 
     setRuns(prev => [newRun, ...prev]);
@@ -595,7 +629,6 @@ INSTRUCTIONS:
         taskQueue.push({
           id: crypto.randomUUID(),
           prompt: finalPrompt,
-          negativePrompt: item.negativePrompt || undefined,
           refs: allRefs,
           settings: settings
         });
@@ -909,6 +942,19 @@ INSTRUCTIONS:
   };
 
   /**
+   * Upload base64 image to Kie.ai and return public URL
+   */
+  const uploadImageToKie = async (
+    imageBase64: string,
+    mimeType: string
+  ): Promise<string> => {
+    if (!kieApiKey) {
+      throw new Error('Kie.ai API key required for image upload');
+    }
+    return uploadImageBase64(kieApiKey, imageBase64, mimeType);
+  };
+
+  /**
    * Pro I2V generation: upload image via Kie.ai → Freepik Pro I2V → poll
    */
   const generateProI2V = async (
@@ -987,6 +1033,311 @@ INSTRUCTIONS:
     }
   };
 
+  /**
+   * Kling 3 MultiShot generation: single API call with all scenes
+   */
+  const generateKling3 = async (
+    onProgress?: (detail: string) => void
+  ): Promise<GeneratedVideo> => {
+    const startTime = Date.now();
+    const shotType = (videoSettings as any).kling3ShotType || 'intelligent';
+    const cfgScale = (videoSettings as any).kling3CfgScale ?? 0.5;
+    const negativePrompt = (videoSettings as any).kling3NegativePrompt || '';
+    const aspectRatio = (videoSettings as any).kling3AspectRatio || '16:9';
+    const duration = (videoSettings as any).kling3Duration || 5;
+    const generateAudio = (videoSettings as any).kling3GenerateAudio || false;
+    const tierRaw = (videoSettings as any).kling3Tier || 'pro';
+    const tier = tierRaw === 'standard' ? 'std' : tierRaw; // UI stores 'standard', API expects 'std'
+    const startImage = (videoSettings as any).kling3StartImage as ReferenceImage | null;
+    const endImage = (videoSettings as any).kling3EndImage as ReferenceImage | null;
+
+    try {
+      // Build prompt or multi_prompt based on shot type
+      let prompt: string | undefined;
+      let multiPrompt: Array<{index: number; prompt: string; duration: number}> | undefined;
+
+      if (shotType === 'intelligent') {
+        prompt = (videoSettings as any).kling3Prompt || '';
+      } else {
+        const shots: Array<{prompt: string; duration: number}> = (videoSettings as any).kling3MultiPrompt || [];
+        multiPrompt = shots.map((s, i) => ({
+          index: i,
+          prompt: s.prompt,
+          duration: s.duration || 3,
+        }));
+      }
+
+      // Upload start/end frame images if provided
+      let imageList: Kling3ImageListItem[] | undefined;
+      if (startImage) {
+        onProgress?.('Uploading start frame...');
+        const startUrl = kieApiKey
+          ? await uploadImageToKie(startImage.base64, startImage.mimeType)
+          : `data:${startImage.mimeType};base64,${startImage.base64}`;
+        imageList = [{ image_url: startUrl, type: 'first_frame' }];
+      }
+      if (endImage) {
+        onProgress?.('Uploading end frame...');
+        const endUrl = kieApiKey
+          ? await uploadImageToKie(endImage.base64, endImage.mimeType)
+          : `data:${endImage.mimeType};base64,${endImage.base64}`;
+        if (!imageList) imageList = [];
+        imageList.push({ image_url: endUrl, type: 'end_frame' });
+      }
+
+      // Create task
+      onProgress?.('Creating Kling 3 task...');
+      const taskId = await createKling3Task(freepikApiKey, tier as 'pro' | 'std', {
+        prompt,
+        imageList,
+        multiShot: shotType === 'customize',
+        multiPrompt,
+        negativePrompt,
+        aspectRatio: aspectRatio as any,
+        duration,
+        cfgScale,
+        shotType,
+        generateAudio,
+      });
+
+      // Poll for completion
+      onProgress?.('Generating...');
+      const result = await pollKling3Task(freepikApiKey, taskId, (status, attempt) => {
+        onProgress?.(`${status} (${attempt + 1}/120)`);
+      });
+
+      const promptSummary = prompt || (multiPrompt?.map(s => s.prompt).join(' || ') || '');
+      const videoDuration = shotType === 'intelligent'
+        ? duration
+        : (multiPrompt?.reduce((a, s) => a + s.duration, 0) || duration);
+
+      if (result.success && result.videoUrl) {
+        logger.info('App', 'Kling 3 complete', { durationMs: Date.now() - startTime });
+        return {
+          id: `video-${Date.now()}`,
+          sceneId: 'kling3-direct',
+          url: result.videoUrl,
+          duration: videoDuration,
+          prompt: promptSummary,
+          createdAt: Date.now(),
+          status: 'success',
+          provider: 'freepik',
+        };
+      }
+
+      return {
+        id: `video-${Date.now()}`,
+        sceneId: 'kling3-direct',
+        url: '',
+        duration: 0,
+        prompt: promptSummary,
+        createdAt: Date.now(),
+        status: 'failed',
+        error: result.error || 'Kling 3 generation failed',
+      };
+    } catch (error) {
+      logger.error('App', 'Kling 3 failed', { error });
+      return {
+        id: `video-${Date.now()}`,
+        sceneId: 'kling3-direct',
+        url: '',
+        duration: 0,
+        prompt: '',
+        createdAt: Date.now(),
+        status: 'failed',
+        error: error instanceof Error ? error.message : 'Unknown error',
+      };
+    }
+  };
+
+  /**
+   * Kling 3 Omni generation: supports T2V, I2V, V2V modes
+   * Reads ALL inputs from videoSettings (kling3Omni* prefixed fields)
+   */
+  const generateKling3Omni = async (
+    onProgress?: (detail: string) => void
+  ): Promise<GeneratedVideo> => {
+    const startTime = Date.now();
+
+    // Read all settings from videoSettings
+    const inputMode = (videoSettings as any).kling3OmniInputMode || 'image-to-video';
+    const multiEnabled = !!(videoSettings as any).kling3OmniMultiPromptEnabled;
+    const prompt = (videoSettings as any).kling3OmniPrompt || '';
+    const multiPrompt: string[] = (videoSettings as any).kling3OmniMultiPrompt || [];
+    const startImage = (videoSettings as any).kling3OmniStartImage as ReferenceImage | null;
+    const endImage = (videoSettings as any).kling3OmniEndImage as ReferenceImage | null;
+    const imageUrls: ReferenceImage[] = (videoSettings as any).kling3OmniImageUrls || [];
+    const refVideo = (videoSettings as any).kling3OmniReferenceVideo as ReferenceVideo | null;
+
+    // Shared settings
+    const tierRaw = (videoSettings as any).kling3Tier || 'pro';
+    const tier = tierRaw === 'standard' ? 'std' : tierRaw; // UI stores 'standard', API expects 'std'
+    const aspectRatio = (videoSettings as any).kling3AspectRatio || '16:9';
+    const duration = (videoSettings as any).kling3Duration || 5;
+    const generateAudio = (videoSettings as any).kling3GenerateAudio || false;
+    const cfgScale = (videoSettings as any).kling3CfgScale ?? 0.5;
+    const negativePrompt = (videoSettings as any).kling3NegativePrompt || 'blur, distort, and low quality';
+
+    const isV2V = inputMode === 'video-to-video';
+    const isI2V = inputMode === 'image-to-video';
+    const isT2V = inputMode === 'text-to-video';
+
+    try {
+      // ---------- V2V Mode ----------
+      if (isV2V) {
+        if (!refVideo?.file) throw new Error('V2V mode requires a reference video');
+
+        // Upload reference video to Kie.ai to get URL
+        onProgress?.('Uploading reference video...');
+        let videoUrl: string;
+        if (kieApiKey) {
+          // Use blob upload — convert File to base64
+          const videoBase64 = await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => {
+              const dataUrl = reader.result as string;
+              const base64 = dataUrl.split(',')[1];
+              resolve(base64);
+            };
+            reader.onerror = reject;
+            reader.readAsDataURL(refVideo.file);
+          });
+          const mimeType = refVideo.file.type || 'video/mp4';
+          videoUrl = await uploadImageBase64(kieApiKey, videoBase64, mimeType);
+        } else {
+          throw new Error('Kie.ai API key required to upload reference video');
+        }
+
+        // Optional start frame for V2V
+        let startFrameUrl: string | undefined;
+        if (startImage) {
+          onProgress?.('Uploading start frame...');
+          startFrameUrl = kieApiKey
+            ? await uploadImageToKie(startImage.base64, startImage.mimeType)
+            : `data:${startImage.mimeType};base64,${startImage.base64}`;
+        }
+
+        onProgress?.('Creating V2V task...');
+        const taskId = await createKling3OmniReferenceTask(freepikApiKey, tier as 'pro' | 'std', {
+          videoUrl,
+          prompt,
+          imageUrl: startFrameUrl,
+          aspectRatio: aspectRatio as any,
+          duration,
+          cfgScale,
+          negativePrompt,
+        });
+
+        onProgress?.('Generating...');
+        const result = await pollKling3OmniReferenceTask(freepikApiKey, taskId, (status, attempt) => {
+          onProgress?.(`${status} (${attempt + 1}/180)`);
+        });
+
+        if (result.success && result.videoUrl) {
+          return {
+            id: `video-${Date.now()}`,
+            sceneId: 'kling3-omni-v2v',
+            url: result.videoUrl,
+            duration,
+            prompt,
+            createdAt: Date.now(),
+            status: 'success',
+            provider: 'freepik',
+          };
+        }
+        throw new Error(result.error || 'Kling 3 Omni V2V failed');
+      }
+
+      // ---------- T2V / I2V Mode ----------
+      const options: any = {
+        aspectRatio: aspectRatio as any,
+        duration,
+        generateAudio,
+      };
+
+      // Build prompt or multi_prompt
+      if (multiEnabled && !isV2V) {
+        // Multi-shot mode (T2V or I2V)
+        const validShots = multiPrompt.filter(s => s.trim());
+        if (validShots.length > 0) {
+          options.multiPrompt = validShots;
+        } else {
+          options.prompt = prompt || 'Create an engaging video.';
+        }
+      } else {
+        options.prompt = prompt || 'Create an engaging video.';
+      }
+
+      // Upload start/end frames for I2V
+      if (isI2V && startImage) {
+        onProgress?.('Uploading start frame...');
+        const startUrl = kieApiKey
+          ? await uploadImageToKie(startImage.base64, startImage.mimeType)
+          : `data:${startImage.mimeType};base64,${startImage.base64}`;
+        options.imageUrl = startUrl;
+      }
+      if (isI2V && endImage) {
+        onProgress?.('Uploading end frame...');
+        const endUrl = kieApiKey
+          ? await uploadImageToKie(endImage.base64, endImage.mimeType)
+          : `data:${endImage.mimeType};base64,${endImage.base64}`;
+        options.endImageUrl = endUrl;
+      }
+
+      // Upload reference images (@Image1, @Image2, etc.)
+      if (imageUrls.length > 0 && (isT2V || isI2V)) {
+        onProgress?.('Uploading reference images...');
+        const uploadedUrls: string[] = [];
+        for (const img of imageUrls) {
+          const url = kieApiKey
+            ? await uploadImageToKie(img.base64, img.mimeType)
+            : `data:${img.mimeType};base64,${img.base64}`;
+          uploadedUrls.push(url);
+        }
+        options.imageUrls = uploadedUrls;
+      }
+
+      onProgress?.('Creating Kling 3 Omni task...');
+      const taskId = await createKling3OmniTask(freepikApiKey, tier as 'pro' | 'std', options);
+
+      onProgress?.('Generating...');
+      const result = await pollKling3OmniTask(freepikApiKey, taskId, (status, attempt) => {
+        onProgress?.(`${status} (${attempt + 1}/180)`);
+      });
+
+      const promptSummary = multiEnabled && options.multiPrompt
+        ? options.multiPrompt.join(' || ')
+        : (options.prompt || '');
+
+      if (result.success && result.videoUrl) {
+        return {
+          id: `video-${Date.now()}`,
+          sceneId: `kling3-omni-${inputMode}`,
+          url: result.videoUrl,
+          duration,
+          prompt: promptSummary,
+          createdAt: Date.now(),
+          status: 'success',
+          provider: 'freepik',
+        };
+      }
+      throw new Error(result.error || 'Kling 3 Omni generation failed');
+
+    } catch (error) {
+      logger.error('App', 'Kling 3 Omni failed', { error, inputMode });
+      return {
+        id: `video-${Date.now()}`,
+        sceneId: `kling3-omni-${inputMode}`,
+        url: '',
+        duration: 0,
+        prompt: prompt || multiPrompt.join(' || '),
+        createdAt: Date.now(),
+        status: 'failed',
+        error: error instanceof Error ? error.message : 'Unknown error',
+      };
+    }
+  };
+
   const handleRetryVideo = async (video: GeneratedVideo) => {
     // Find the scene for this video
     const scene = videoScenes.find(s => s.id === video.sceneId);
@@ -1042,8 +1393,9 @@ INSTRUCTIONS:
   };
 
   const handleVideoGenerate = async () => {
-    // Pro I2V only needs Freepik key; Motion Control needs Kie.ai key
-    if (videoModel === 'kling-2.6-pro') {
+    // Kling 3 and Kling 2.6 Pro only need Freepik key; Motion Control needs Kie.ai key
+    const needsFreepikOnly = ['kling-2.6-pro', 'kling-3', 'kling-3-omni'].includes(videoModel);
+    if (needsFreepikOnly) {
       if (!freepikApiKey) {
         setKeyModalMode('freepik');
         setIsKeyModalOpen(true);
@@ -1058,28 +1410,132 @@ INSTRUCTIONS:
       }
     }
 
-    if (videoScenes.length === 0) {
-      alert('Add at least one scene to generate videos');
-      return;
+    // Kling 3: validate new UI fields (prompt or multi-shot)
+    if (videoModel === 'kling-3') {
+      const shotType = (videoSettings as any).kling3ShotType || 'intelligent';
+      if (shotType === 'intelligent') {
+        if (!(videoSettings as any).kling3Prompt?.trim()) {
+          alert('Please enter a video prompt');
+          return;
+        }
+      } else {
+        const shots: any[] = (videoSettings as any).kling3MultiPrompt || [];
+        if (shots.length === 0) { alert('Add at least one shot'); return; }
+        if (shots.some((s: any) => !s.prompt?.trim())) { alert('All shots need prompts'); return; }
+      }
+    } else if (videoModel === 'kling-3-omni') {
+      // Kling 3 Omni: validate based on input mode and multi-prompt setting
+      const omniMode = (videoSettings as any).kling3OmniInputMode || 'image-to-video';
+      const multiEnabled = !!(videoSettings as any).kling3OmniMultiPromptEnabled;
+
+      if (multiEnabled && omniMode !== 'video-to-video') {
+        const shots = (videoSettings as any).kling3OmniMultiPrompt || [];
+        if (shots.length === 0 || shots.every((s: string) => !s.trim())) {
+          alert('Add at least one shot prompt');
+          return;
+        }
+      } else {
+        const prompt = (videoSettings as any).kling3OmniPrompt?.trim();
+        if (!prompt) {
+          alert('Please enter a video prompt');
+          return;
+        }
+      }
+
+      if (omniMode === 'image-to-video' && !(videoSettings as any).kling3OmniStartImage) {
+        alert('I2V mode requires a start frame image');
+        return;
+      }
+      if (omniMode === 'video-to-video' && !(videoSettings as any).kling3OmniReferenceVideo) {
+        alert('V2V mode requires a reference video');
+        return;
+      }
+    } else {
+      // Kling 2.6 and other models
+      if (videoScenes.length === 0) { alert('Add at least one scene to generate videos'); return; }
     }
 
-    const scenesNeedingPrompts = videoScenes.filter(s => s.usePrompt && !s.prompt.trim());
-    if (scenesNeedingPrompts.length > 0) {
-      alert('Scenes with motion prompt enabled must have a prompt');
-      return;
-    }
+    // Log start — Kling 3 doesn't use videoScenes anymore
+    const kling3PromptSummary = videoModel === 'kling-3'
+      ? ((videoSettings as any).kling3ShotType === 'customize'
+          ? ((videoSettings as any).kling3MultiPrompt || []).map((s: any) => s.prompt).join(' || ')
+          : (videoSettings as any).kling3Prompt || 'Kling 3 video')
+      : '';
+    const logPrompt = videoModel === 'kling-3'
+      ? kling3PromptSummary.slice(0, 50)
+      : (videoScenes[0]?.prompt || 'Motion video').slice(0, 50) + (videoScenes.length > 1 ? ` (+${videoScenes.length - 1} more)` : '');
 
-    logger.info('App', `Starting ${videoModel} generation for ${videoScenes.length} scene(s)`);
+    logger.info('App', `Starting ${videoModel} generation`);
     setIsGenerating(true);
 
     const jobId = addJob({
       type: 'video',
       status: 'active',
-      prompt: (videoScenes[0].prompt || 'Motion video').slice(0, 50) + (videoScenes.length > 1 ? ` (+${videoScenes.length - 1} more)` : '')
+      prompt: logPrompt
     });
-    addLog({ level: 'info', message: `Starting ${videoScenes.length} video${videoScenes.length > 1 ? 's' : ''} (${videoModel})`, jobId });
+    addLog({ level: 'info', message: `Starting ${videoModel} video generation`, jobId });
 
-    // --------------- Parallel generation ---------------
+    // --------------- Kling 3 / Kling 3 Omni (single API call, multi-shot) ---------------
+    if (videoModel === 'kling-3' || videoModel === 'kling-3-omni') {
+      // Single placeholder for Kling 3 multi-shot
+      const placeholderId = `video-${Date.now()}-kling3`;
+      const placeholder: GeneratedVideo = {
+        id: placeholderId,
+        sceneId: videoModel === 'kling-3' ? 'kling3-direct' : videoScenes[0]?.id || 'kling3-omni',
+        url: '',
+        duration: 0,
+        prompt: videoModel === 'kling-3' ? kling3PromptSummary : videoScenes.map(s => s.prompt).join(' || '),
+        createdAt: Date.now(),
+        status: 'generating',
+      };
+      setGeneratedVideos(prev => [placeholder, ...prev]);
+
+      try {
+        setLoadingStatus(`Generating ${videoModel} video...`);
+
+        const video = videoModel === 'kling-3'
+          ? await generateKling3((detail) => setLoadingStatus(detail))
+          : await generateKling3Omni((detail) => setLoadingStatus(detail));
+
+        setGeneratedVideos(prev => prev.map(v =>
+          v.id === placeholderId ? { ...video, id: placeholderId } : v
+        ));
+
+        if (video.status === 'success') {
+          setLoadingStatus(`🎬 Kling 3 done! ${video.duration}s video generated`);
+          saveGeneratedVideoToDB({ ...video, id: placeholderId }).catch(e =>
+            logger.warn('App', 'Failed to persist video to IndexedDB', e)
+          );
+          updateJob(jobId, { status: 'completed' });
+          addLog({ level: 'info', message: 'Kling 3 video generated successfully', jobId });
+        } else {
+          setLoadingStatus('🎬 Kling 3 failed');
+          updateJob(jobId, { status: 'failed', error: video.error });
+          addLog({ level: 'error', message: `Kling 3 failed: ${video.error}`, jobId });
+          setTimeout(() => {
+            setGeneratedVideos(prev => prev.filter(v => v.id !== placeholderId));
+          }, 8000);
+        }
+      } catch (error: any) {
+        logger.error('App', 'Kling 3 generation error', { error });
+        setLoadingStatus('🎬 Kling 3 error');
+        updateJob(jobId, { status: 'failed', error: error.message });
+        addLog({ level: 'error', message: `Kling 3 error: ${error.message}`, jobId });
+        setGeneratedVideos(prev => prev.map(v =>
+          v.id === placeholderId ? { ...v, status: 'failed' as const, error: error.message } : v
+        ));
+        setTimeout(() => {
+          setGeneratedVideos(prev => prev.filter(v => v.id !== placeholderId));
+        }, 8000);
+      } finally {
+        setIsGenerating(false);
+        refreshCredits();
+        setTimeout(() => setLoadingStatus(''), 3000);
+      }
+      return;
+    }
+
+    // --------------- Parallel generation (Kling 2.6 / Pro I2V) ---------------
     // Fire all scenes concurrently. Stagger task creation by 500ms to
     // respect Freepik rate-limit (10 req/s avg over 2 min) while polling
     // all tasks in parallel.

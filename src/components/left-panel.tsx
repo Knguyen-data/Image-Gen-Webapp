@@ -6,6 +6,7 @@ import VideoSceneQueue from './video-scene-queue';
 import VideoTrimmerModal from './video-trimmer-modal';
 import VideoReferenceModal from './video-reference-modal';
 import PromptGenerator from './prompt-generator';
+import Kling3OmniPanel from './kling3-omni-panel';
 
 interface LeftPanelProps {
   prompts: PromptItem[];
@@ -322,7 +323,10 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
   // Header subtitle text
   const getSubtitleText = () => {
     if (isVideoMode) {
-      return selectedVideoModel === 'kling-2.6-pro' ? 'Kling 2.6 Pro — Image to Video' : 'Kling 2.6 Motion Control';
+      if (selectedVideoModel === 'kling-2.6-pro') return 'Kling 2.6 Pro — Image to Video';
+      if (selectedVideoModel === 'kling-3') return 'Kling 3 — MultiShot';
+      if (selectedVideoModel === 'kling-3-omni') return 'Kling 3 Omni — Multimodal';
+      return 'Kling 2.6 Motion Control';
     }
     if (safeSettings.spicyMode?.enabled) {
       return `Seedream 4.5 ${safeSettings.spicyMode.subMode === 'edit' ? 'Edit' : 'Txt2Img'}`;
@@ -497,19 +501,25 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
               <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider block mb-2">
                 Video Model
               </label>
-              <div className="flex gap-1 bg-gray-800 rounded-lg p-1">
+              <div className="grid grid-cols-2 gap-1 bg-gray-800 rounded-lg p-1">
                 {([
                   { value: 'kling-2.6' as VideoModel, label: 'Kling 2.6', desc: 'Motion Control', color: 'dash' },
                   { value: 'kling-2.6-pro' as VideoModel, label: 'Kling 2.6 Pro', desc: 'Image to Video', color: 'amber' },
+                  { value: 'kling-3' as VideoModel, label: 'Kling 3', desc: 'MultiShot', color: 'emerald' },
+                  { value: 'kling-3-omni' as VideoModel, label: 'Kling 3 Omni', desc: 'Multimodal', color: 'violet' },
                 ]).map(opt => (
                   <button
                     key={opt.value}
                     onClick={() => handleModelSelect(opt.value)}
     
-                    className={`flex-1 py-2 px-2 rounded-md text-xs font-medium transition-all ${
+                    className={`py-2 px-2 rounded-md text-xs font-medium transition-all ${
                       selectedVideoModel === opt.value
                         ? opt.color === 'amber'
                           ? 'bg-amber-700 text-white ring-1 ring-amber-400'
+                          : opt.color === 'emerald'
+                          ? 'bg-emerald-700 text-white ring-1 ring-emerald-400'
+                          : opt.color === 'violet'
+                          ? 'bg-violet-700 text-white ring-1 ring-violet-400'
                           : 'bg-dash-700 text-white ring-1 ring-dash-400'
                         : 'text-gray-400 hover:text-white hover:bg-gray-700/50'
                     }`}
@@ -536,6 +546,7 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
                     onGenerate={onVideoGenerate}
                     isGenerating={isGenerating}
                     geminiApiKey={geminiApiKey}
+                    videoModel={selectedVideoModel}
                   />
                 </div>
 
@@ -681,6 +692,7 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
                     isGenerating={isGenerating}
                     hideReferenceVideo
                     geminiApiKey={geminiApiKey}
+                    videoModel={selectedVideoModel}
                   />
                 </div>
 
@@ -756,7 +768,14 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
 
                   {/* Negative Prompt */}
                   <div className="space-y-2">
-                    <span className="text-xs text-gray-500">Negative Prompt</span>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-gray-500">Negative Prompt</span>
+                      {(videoSettings as any).klingProNegativePrompt && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-900/30 text-purple-300 border border-purple-500/30">
+                          ✨ Auto-set by Motion Director
+                        </span>
+                      )}
+                    </div>
                     <textarea
                       className="w-full bg-gray-950 border border-gray-700 rounded-lg p-2 text-xs text-gray-300 font-mono resize-y min-h-[40px]"
                       rows={2}
@@ -795,6 +814,380 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
                   </div>
                 </div>
               </>
+            )}
+
+            {/* ----- KLING 3 (MultiShot) CONTENT ----- */}
+            {selectedVideoModel === 'kling-3' && videoSettings && (() => {
+              const shotType = (videoSettings as any).kling3ShotType || 'intelligent';
+              const multiPrompt: {prompt: string; duration: number}[] =
+                (videoSettings as any).kling3MultiPrompt || [{ prompt: '', duration: 5 }];
+              const totalDuration = multiPrompt.reduce((sum: number, s: {duration: number}) => sum + s.duration, 0);
+
+              // Helper: handle frame image upload (start or end)
+              const handleFrameUpload = async (files: FileList | null, which: 'kling3StartImage' | 'kling3EndImage') => {
+                if (!files || files.length === 0) return;
+                const file = files[0];
+                if (!file.type.startsWith('image/')) return;
+                const img = await handleImageUpload(file);
+                setVideoSettings({ ...videoSettings, [which]: img } as any);
+              };
+
+              // Helper: update a single shot in multi_prompt
+              const updateShot = (idx: number, patch: Partial<{prompt: string; duration: number}>) => {
+                const updated = multiPrompt.map((s, i) => i === idx ? { ...s, ...patch } : s);
+                setVideoSettings({ ...videoSettings, kling3MultiPrompt: updated } as any);
+              };
+              const addShot = () => {
+                if (multiPrompt.length >= 6) return;
+                setVideoSettings({ ...videoSettings, kling3MultiPrompt: [...multiPrompt, { prompt: '', duration: 3 }] } as any);
+              };
+              const removeShot = (idx: number) => {
+                if (multiPrompt.length <= 1) return;
+                setVideoSettings({ ...videoSettings, kling3MultiPrompt: multiPrompt.filter((_, i) => i !== idx) } as any);
+              };
+
+              return (
+              <>
+                {/* 1. Shot Mode Toggle */}
+                <div className="px-6 py-4 border-b border-gray-800">
+                  <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2 block">
+                    Shot Mode
+                  </label>
+                  <div className="flex gap-2">
+                    {([
+                      { value: 'intelligent' as const, label: '\u{1F916} Intelligent' },
+                      { value: 'customize' as const, label: '\u270F\uFE0F Customize' },
+                    ]).map(opt => (
+                      <button
+                        key={opt.value}
+                        onClick={() => setVideoSettings({ ...videoSettings, kling3ShotType: opt.value } as any)}
+                        className={`flex-1 py-2.5 rounded-lg text-sm font-medium transition-all ${
+                          shotType === opt.value
+                            ? 'bg-emerald-700 text-white ring-1 ring-emerald-400'
+                            : 'bg-gray-800 text-gray-400 hover:bg-gray-700 border border-gray-700'
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-[10px] text-gray-600 mt-1.5">
+                    {shotType === 'intelligent'
+                      ? 'AI automatically splits your prompt into cinematic shots.'
+                      : 'Manually define up to 6 shots with individual prompts and durations.'}
+                  </p>
+                </div>
+
+                {/* 2. Frames Section (always shown) */}
+                <div className="px-6 py-4 border-b border-gray-800 space-y-2">
+                  <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                    Frames (Optional)
+                  </label>
+                  <div className="flex gap-3">
+                    {/* Start Frame */}
+                    {(() => {
+                      const startImg = (videoSettings as any).kling3StartImage as ReferenceImage | undefined;
+                      return (
+                        <div className="flex-1">
+                          <span className="text-[10px] text-gray-500 mb-1 block">Start Frame</span>
+                          {startImg ? (
+                            <div className="relative group rounded-lg overflow-hidden border border-emerald-500/40 aspect-video bg-gray-900">
+                              <img src={startImg.previewUrl} alt="Start frame" className="w-full h-full object-cover" />
+                              <button
+                                onClick={() => setVideoSettings({ ...videoSettings, kling3StartImage: undefined } as any)}
+                                className="absolute top-1 right-1 w-5 h-5 bg-black/70 rounded-full flex items-center justify-center text-gray-300 hover:text-white opacity-0 group-hover:opacity-100 transition-opacity"
+                              >
+                                &times;
+                              </button>
+                            </div>
+                          ) : (
+                            <label
+                              className="flex flex-col items-center justify-center aspect-video rounded-lg border-2 border-dashed border-gray-700 hover:border-emerald-500/50 bg-gray-900/50 cursor-pointer transition-colors"
+                              onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add('border-emerald-400', 'bg-gray-800/60'); }}
+                              onDragLeave={(e) => { e.preventDefault(); e.currentTarget.classList.remove('border-emerald-400', 'bg-gray-800/60'); }}
+                              onDrop={async (e) => { e.preventDefault(); e.currentTarget.classList.remove('border-emerald-400', 'bg-gray-800/60'); await handleFrameUpload(e.dataTransfer.files, 'kling3StartImage'); }}
+                            >
+                              <input type="file" accept="image/*" className="hidden" onChange={(e) => handleFrameUpload(e.target.files, 'kling3StartImage')} />
+                              <span className="text-gray-600 text-lg mb-1">+</span>
+                              <span className="text-[10px] text-gray-600">Drop or click</span>
+                            </label>
+                          )}
+                        </div>
+                      );
+                    })()}
+                    {/* End Frame */}
+                    {(() => {
+                      const endImg = (videoSettings as any).kling3EndImage as ReferenceImage | undefined;
+                      return (
+                        <div className="flex-1">
+                          <span className="text-[10px] text-gray-500 mb-1 block">End Frame</span>
+                          {endImg ? (
+                            <div className="relative group rounded-lg overflow-hidden border border-emerald-500/40 aspect-video bg-gray-900">
+                              <img src={endImg.previewUrl} alt="End frame" className="w-full h-full object-cover" />
+                              <button
+                                onClick={() => setVideoSettings({ ...videoSettings, kling3EndImage: undefined } as any)}
+                                className="absolute top-1 right-1 w-5 h-5 bg-black/70 rounded-full flex items-center justify-center text-gray-300 hover:text-white opacity-0 group-hover:opacity-100 transition-opacity"
+                              >
+                                &times;
+                              </button>
+                            </div>
+                          ) : (
+                            <label
+                              className="flex flex-col items-center justify-center aspect-video rounded-lg border-2 border-dashed border-gray-700 hover:border-emerald-500/50 bg-gray-900/50 cursor-pointer transition-colors"
+                              onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add('border-emerald-400', 'bg-gray-800/60'); }}
+                              onDragLeave={(e) => { e.preventDefault(); e.currentTarget.classList.remove('border-emerald-400', 'bg-gray-800/60'); }}
+                              onDrop={async (e) => { e.preventDefault(); e.currentTarget.classList.remove('border-emerald-400', 'bg-gray-800/60'); await handleFrameUpload(e.dataTransfer.files, 'kling3EndImage'); }}
+                            >
+                              <input type="file" accept="image/*" className="hidden" onChange={(e) => handleFrameUpload(e.target.files, 'kling3EndImage')} />
+                              <span className="text-gray-600 text-lg mb-1">+</span>
+                              <span className="text-[10px] text-gray-600">Drop or click</span>
+                            </label>
+                          )}
+                        </div>
+                      );
+                    })()}
+                  </div>
+                </div>
+
+                {/* 3. Prompt Area */}
+                <div className="px-6 py-4 border-b border-gray-800 space-y-3">
+                  {shotType === 'intelligent' ? (
+                    <>
+                      <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider block">
+                        Video Prompt
+                      </label>
+                      <textarea
+                        className="w-full bg-gray-950 border border-gray-700 rounded-lg p-3 text-sm text-gray-200 resize-y min-h-[80px] focus:ring-1 focus:ring-emerald-400 focus:border-emerald-500/50 transition-all placeholder:text-gray-600"
+                        rows={4}
+                        value={(videoSettings as any).kling3Prompt || ''}
+                        onChange={(e) => setVideoSettings({ ...videoSettings, kling3Prompt: e.target.value } as any)}
+                        placeholder="Describe your entire video. AI will automatically split it into shots..."
+                      />
+                    </>
+                  ) : (
+                    <>
+                      <div className="flex items-center justify-between">
+                        <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                          Shots ({multiPrompt.length}/6)
+                        </label>
+                        <button
+                          onClick={addShot}
+                          disabled={multiPrompt.length >= 6}
+                          className="text-[10px] font-medium text-emerald-400 hover:text-emerald-300 disabled:text-gray-600 disabled:cursor-not-allowed transition-colors"
+                        >
+                          + Add Shot
+                        </button>
+                      </div>
+                      {/* Duration Bar */}
+                      <div className="space-y-1">
+                        <div className="flex justify-between text-[10px]">
+                          <span className="text-gray-500">Total Duration</span>
+                          <span className={`font-mono ${totalDuration > 15 ? 'text-red-400' : totalDuration >= 12 ? 'text-amber-400' : 'text-emerald-400'}`}>
+                            {totalDuration}s / 15s
+                          </span>
+                        </div>
+                        <div className="w-full h-1.5 bg-gray-800 rounded-full overflow-hidden">
+                          <div
+                            className={`h-full rounded-full transition-all ${totalDuration > 15 ? 'bg-red-500' : totalDuration >= 12 ? 'bg-amber-500' : 'bg-emerald-500'}`}
+                            style={{ width: `${Math.min((totalDuration / 15) * 100, 100)}%` }}
+                          />
+                        </div>
+                      </div>
+                      {/* Shot List */}
+                      <div className="space-y-2">
+                        {multiPrompt.map((shot, idx) => (
+                          <div key={idx} className="flex items-start gap-2 bg-gray-900/50 rounded-lg p-2 border border-gray-800">
+                            <span className="text-[10px] font-mono text-emerald-400/70 mt-2 w-4 text-right shrink-0">
+                              {idx + 1}
+                            </span>
+                            <textarea
+                              className="flex-1 bg-gray-950 border border-gray-700 rounded p-2 text-xs text-gray-300 resize-y min-h-[36px] focus:ring-1 focus:ring-emerald-400 focus:border-emerald-500/50 transition-all placeholder:text-gray-600"
+                              rows={2}
+                              value={shot.prompt}
+                              onChange={(e) => updateShot(idx, { prompt: e.target.value })}
+                              placeholder={`Shot ${idx + 1} prompt...`}
+                            />
+                            <select
+                              className="bg-gray-950 border border-gray-700 rounded px-1.5 py-1.5 text-[10px] text-gray-300 focus:ring-1 focus:ring-emerald-400 shrink-0 w-14"
+                              value={shot.duration}
+                              onChange={(e) => updateShot(idx, { duration: parseInt(e.target.value) })}
+                            >
+                              {Array.from({ length: 13 }, (_, i) => i + 3).map(d => (
+                                <option key={d} value={d}>{d}s</option>
+                              ))}
+                            </select>
+                            <button
+                              onClick={() => removeShot(idx)}
+                              disabled={multiPrompt.length <= 1}
+                              className="text-gray-600 hover:text-red-400 disabled:opacity-30 disabled:cursor-not-allowed mt-1.5 shrink-0 transition-colors"
+                              title="Remove shot"
+                            >
+                              &times;
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </div>
+
+                {/* 4. Generate Button */}
+                <div className="px-6 py-4 border-b border-gray-800">
+                  <button
+                    onClick={onVideoGenerate}
+                    disabled={isGenerating}
+                    className="w-full py-3 rounded-lg text-sm font-semibold transition-all bg-emerald-700 hover:bg-emerald-600 text-white ring-1 ring-emerald-400 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isGenerating ? 'Generating...' : '\u{1F3AC} Generate Video'}
+                  </button>
+                </div>
+
+                {/* 5. Settings */}
+                <div className="px-6 py-4 space-y-4">
+                  <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider block">
+                    Settings
+                  </label>
+
+                  {/* Quality Tier */}
+                  <div className="space-y-2">
+                    <span className="text-xs text-gray-500">Quality Tier</span>
+                    <div className="flex gap-2">
+                      {([
+                        { value: 'standard', label: 'Standard' },
+                        { value: 'pro', label: 'Pro' },
+                      ] as const).map(opt => (
+                        <button
+                          key={opt.value}
+                          onClick={() => setVideoSettings({ ...videoSettings, kling3Tier: opt.value } as any)}
+                          className={`flex-1 py-2 rounded-lg text-xs font-medium transition-all ${
+                            ((videoSettings as any).kling3Tier || 'pro') === opt.value
+                              ? 'bg-emerald-700 text-white ring-1 ring-emerald-400'
+                              : 'bg-gray-800 text-gray-400 hover:bg-gray-700 border border-gray-700'
+                          }`}
+                        >
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Aspect Ratio */}
+                  <div className="space-y-2">
+                    <span className="text-xs text-gray-500">Aspect Ratio</span>
+                    <div className="flex gap-2">
+                      {([
+                        { value: '16:9', label: '16:9' },
+                        { value: '9:16', label: '9:16' },
+                        { value: '1:1', label: '1:1' },
+                      ] as const).map(opt => (
+                        <button
+                          key={opt.value}
+                          onClick={() => setVideoSettings({ ...videoSettings, kling3AspectRatio: opt.value } as any)}
+                          className={`flex-1 py-2 rounded-lg text-xs font-medium transition-all ${
+                            ((videoSettings as any).kling3AspectRatio || '16:9') === opt.value
+                              ? 'bg-emerald-700 text-white ring-1 ring-emerald-400'
+                              : 'bg-gray-800 text-gray-400 hover:bg-gray-700 border border-gray-700'
+                          }`}
+                        >
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Duration Slider — only in Intelligent mode */}
+                  {shotType === 'intelligent' && (
+                    <div className="space-y-2">
+                      <div className="flex justify-between">
+                        <span className="text-xs text-gray-500">Duration</span>
+                        <span className="text-xs text-emerald-400 font-mono">{((videoSettings as any).kling3Duration || 5)}s</span>
+                      </div>
+                      <input
+                        type="range"
+                        min="3"
+                        max="15"
+                        step="1"
+                        className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-emerald-400"
+                        value={(videoSettings as any).kling3Duration || 5}
+                        onChange={(e) => setVideoSettings({ ...videoSettings, kling3Duration: parseInt(e.target.value) } as any)}
+                      />
+                      <p className="text-[10px] text-gray-600">Total video duration (3-15 seconds)</p>
+                    </div>
+                  )}
+
+                  {/* CFG Scale */}
+                  <div className="space-y-2">
+                    <div className="flex justify-between">
+                      <span className="text-xs text-gray-500">CFG Scale</span>
+                      <span className="text-xs text-emerald-400 font-mono">{((videoSettings as any).kling3CfgScale ?? 0.5).toFixed(2)}</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0"
+                      max="2"
+                      step="0.05"
+                      className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-emerald-400"
+                      value={(videoSettings as any).kling3CfgScale ?? 0.5}
+                      onChange={(e) => setVideoSettings({ ...videoSettings, kling3CfgScale: parseFloat(e.target.value) } as any)}
+                    />
+                    <p className="text-[10px] text-gray-600">0 = creative · 0.5 = balanced · 2 = strict prompt adherence</p>
+                  </div>
+
+                  {/* Negative Prompt */}
+                  <div className="space-y-2">
+                    <span className="text-xs text-gray-500">Negative Prompt</span>
+                    <textarea
+                      className="w-full bg-gray-950 border border-gray-700 rounded-lg p-2 text-xs text-gray-300 font-mono resize-y min-h-[40px]"
+                      rows={2}
+                      value={(videoSettings as any).kling3NegativePrompt || ''}
+                      onChange={(e) => setVideoSettings({ ...videoSettings, kling3NegativePrompt: e.target.value } as any)}
+                      placeholder="Things to avoid (e.g. blurry, shaky, watermark)..."
+                    />
+                  </div>
+
+                  {/* Generate Audio Toggle */}
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <span className="text-xs text-gray-500 block">Generate Audio</span>
+                      <span className="text-[10px] text-gray-600">AI-generated sound for the video</span>
+                    </div>
+                    <button
+                      onClick={() => setVideoSettings({ ...videoSettings, kling3GenerateAudio: !(videoSettings as any).kling3GenerateAudio } as any)}
+                      className={`w-10 h-5 rounded-full relative transition-colors ${
+                        (videoSettings as any).kling3GenerateAudio
+                          ? 'bg-emerald-700 ring-1 ring-emerald-400'
+                          : 'bg-gray-700'
+                      }`}
+                    >
+                      <div className={`absolute top-1 w-3 h-3 rounded-full bg-white transition-transform ${
+                        (videoSettings as any).kling3GenerateAudio ? 'left-6' : 'left-1'
+                      }`} />
+                    </button>
+                  </div>
+
+                  {/* 6. Info Box */}
+                  <div className="p-3 bg-emerald-900/20 border border-emerald-500/30 rounded-lg text-xs text-emerald-300">
+                    <p className="font-medium mb-1">Kling 3 — One Video, One Call</p>
+                    <p className="text-emerald-400/80">
+                      {shotType === 'intelligent'
+                        ? 'Write a single prompt and AI splits it into cinematic shots (3-15s). Optionally set start/end frames.'
+                        : 'Define up to 6 shots with per-shot prompts and durations (max 15s total). Optionally set start/end frames.'}
+                    </p>
+                  </div>
+                </div>
+              </>
+              );
+            })()}
+
+            {/* ----- KLING 3 OMNI (Multimodal) CONTENT ----- */}
+            {selectedVideoModel === 'kling-3-omni' && videoSettings && (
+              <Kling3OmniPanel
+                videoSettings={videoSettings}
+                setVideoSettings={setVideoSettings}
+                onVideoGenerate={onVideoGenerate}
+                isGenerating={isGenerating}
+                handleImageUpload={handleImageUpload}
+              />
             )}
           </>
         )}

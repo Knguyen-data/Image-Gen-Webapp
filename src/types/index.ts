@@ -4,7 +4,7 @@ export type ImageSize = '1K' | '2K' | '4K'; // Gemini 3 Pro supports up to 4K
 export type AppMode = 'image' | 'video';
 export type FixedBlockPosition = 'top' | 'bottom';
 
-export type VideoModel = 'kling-2.6' | 'kling-2.6-pro';
+export type VideoModel = 'kling-2.6' | 'kling-2.6-pro' | 'kling-3' | 'kling-3-omni';
 export type KlingProvider = 'freepik' | 'kieai';
 
 export interface ReferenceImage {
@@ -18,7 +18,6 @@ export interface ReferenceImage {
 export interface PromptItem {
   id: string;
   text: string;
-  negativePrompt?: string;
   referenceImages: ReferenceImage[];
 }
 
@@ -72,6 +71,7 @@ export interface Run {
   finalPrompt: string;
   settingsSnapshot: AppSettings;
   images: GeneratedImage[];
+  referenceImages?: ReferenceImage[];  // stored at generation time for retry
 }
 
 export interface GenerationRequest {
@@ -116,6 +116,7 @@ export interface VideoScene {
   referenceVideo?: ReferenceVideo; // only if per-scene mode
   prompt?: string; // Optional prompt for video generation
   usePrompt?: boolean; // Toggle to enable/disable prompt per scene
+  duration?: number; // Kling 3: duration for this scene (seconds)
 }
 
 /** @deprecated Use UnifiedVideoSettings instead */
@@ -148,7 +149,30 @@ export interface GeneratedVideo {
 export type KlingProAspectRatio = 'widescreen_16_9' | 'social_story_9_16' | 'square_1_1';
 export type KlingProDuration = '5' | '10';
 
-// Unified Video Settings (Kling 2.6)
+// Kling 3 Types
+export type Kling3AspectRatio = '16:9' | '9:16' | '1:1' | 'auto';
+export type Kling3OmniInputMode = 'text-to-video' | 'image-to-video' | 'video-to-video';
+
+// Kling 3 image_list item
+export interface Kling3ImageListItem {
+  image_url: string;
+  type: 'first_frame' | 'end_frame';
+}
+
+// Kling 3 multi_prompt item
+export interface Kling3MultiPromptItem {
+  index: number;  // 0-5
+  prompt: string;  // max 2500 chars
+  duration: number;  // min 3 seconds
+}
+
+// Kling 3 Omni element definition
+export interface Kling3Element {
+  reference_image_urls: string[];
+  frontal_image_url?: string;
+}
+
+// Unified Video Settings (Kling 2.6 + Kling 3)
 export interface UnifiedVideoSettings {
   model: VideoModel;
   // Kling Motion Control
@@ -165,4 +189,15 @@ export interface UnifiedVideoSettings {
   // Pro I2V only
   klingProNegativePrompt: string;
   klingProGenerateAudio: boolean;
+  // Kling 3 settings
+  kling3AspectRatio: Kling3AspectRatio;
+  kling3Duration: number;  // 3-15 seconds, flexible
+  kling3CfgScale: number;  // 0-1
+  kling3NegativePrompt: string;
+  kling3GenerateAudio: boolean;
+  kling3OmniInputMode: Kling3OmniInputMode;
+  // Kling 3 quality tier (standard or pro)
+  kling3Tier?: 'standard' | 'pro';
+  // Kling 3 shot type (customize or intelligent) — Kling 3 only, not Omni
+  kling3ShotType?: 'customize' | 'intelligent';
 }

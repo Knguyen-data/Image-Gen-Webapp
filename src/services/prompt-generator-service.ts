@@ -13,7 +13,6 @@ export interface GeneratedPrompt {
   expression: string;
   pose: string;
   cameraAngle: string;
-  negativePrompt: string;
 }
 
 export type PromptGeneratorMode = 'storyboard' | 'photoset';
@@ -96,7 +95,6 @@ export const generatePrompts = async (
       expression: p.expression || '',
       pose: p.pose || '',
       cameraAngle: p.cameraAngle || '',
-      negativePrompt: p.negativePrompt || p.negative_prompt || '',
     })),
   };
 };
@@ -146,7 +144,6 @@ export const refinePrompts = async (
       expression: p.expression || '',
       pose: p.pose || '',
       cameraAngle: p.cameraAngle || '',
-      negativePrompt: p.negativePrompt || p.negative_prompt || '',
     })),
   };
 };
