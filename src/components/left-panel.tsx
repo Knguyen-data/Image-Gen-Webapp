@@ -834,6 +834,23 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
                 setVideoSettings({ ...videoSettings, [which]: img } as any);
               };
 
+              // Handle drop from gallery (application/json) OR file system
+              const handleFrameDrop = async (e: React.DragEvent, which: 'kling3StartImage' | 'kling3EndImage') => {
+                e.preventDefault();
+                e.currentTarget.classList.remove('border-emerald-400', 'bg-gray-800/60');
+                const jsonData = e.dataTransfer.getData('application/json');
+                if (jsonData) {
+                  try {
+                    const refImage = JSON.parse(jsonData);
+                    if (refImage.base64 && refImage.mimeType) {
+                      setVideoSettings({ ...videoSettings, [which]: refImage } as any);
+                      return;
+                    }
+                  } catch { /* fall through */ }
+                }
+                await handleFrameUpload(e.dataTransfer.files, which);
+              };
+
               // Helper: update a single shot in multi_prompt
               const updateShot = (idx: number, patch: Partial<{prompt: string; duration: number}>) => {
                 const updated = multiPrompt.map((s, i) => i === idx ? { ...s, ...patch } : s);
@@ -913,7 +930,7 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
                               className={`flex flex-col items-center justify-center ${kling3AspectClass} rounded-lg border-2 border-dashed border-gray-700 hover:border-emerald-500/50 bg-gray-900/50 cursor-pointer transition-colors`}
                               onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add('border-emerald-400', 'bg-gray-800/60'); }}
                               onDragLeave={(e) => { e.preventDefault(); e.currentTarget.classList.remove('border-emerald-400', 'bg-gray-800/60'); }}
-                              onDrop={async (e) => { e.preventDefault(); e.currentTarget.classList.remove('border-emerald-400', 'bg-gray-800/60'); await handleFrameUpload(e.dataTransfer.files, 'kling3StartImage'); }}
+                              onDrop={(e) => handleFrameDrop(e, 'kling3StartImage')}
                             >
                               <input type="file" accept="image/*" className="hidden" onChange={(e) => handleFrameUpload(e.target.files, 'kling3StartImage')} />
                               <span className="text-gray-600 text-lg mb-1">+</span>
@@ -944,7 +961,7 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
                               className={`flex flex-col items-center justify-center ${kling3AspectClass} rounded-lg border-2 border-dashed border-gray-700 hover:border-emerald-500/50 bg-gray-900/50 cursor-pointer transition-colors`}
                               onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add('border-emerald-400', 'bg-gray-800/60'); }}
                               onDragLeave={(e) => { e.preventDefault(); e.currentTarget.classList.remove('border-emerald-400', 'bg-gray-800/60'); }}
-                              onDrop={async (e) => { e.preventDefault(); e.currentTarget.classList.remove('border-emerald-400', 'bg-gray-800/60'); await handleFrameUpload(e.dataTransfer.files, 'kling3EndImage'); }}
+                              onDrop={(e) => handleFrameDrop(e, 'kling3EndImage')}
                             >
                               <input type="file" accept="image/*" className="hidden" onChange={(e) => handleFrameUpload(e.target.files, 'kling3EndImage')} />
                               <span className="text-gray-600 text-lg mb-1">+</span>

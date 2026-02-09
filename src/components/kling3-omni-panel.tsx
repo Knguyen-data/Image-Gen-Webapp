@@ -40,6 +40,27 @@ const Kling3OmniPanel: React.FC<Kling3OmniPanelProps> = ({
     setVideoSettings({ ...videoSettings, [which]: img } as any);
   };
 
+  // Handle drop from gallery (application/json) OR file system
+  const handleFrameDrop = async (e: React.DragEvent, which: 'kling3OmniStartImage' | 'kling3OmniEndImage') => {
+    e.preventDefault();
+    e.currentTarget.classList.remove('border-violet-400', 'bg-gray-800/60');
+
+    // Try gallery drag (application/json) first
+    const jsonData = e.dataTransfer.getData('application/json');
+    if (jsonData) {
+      try {
+        const refImage = JSON.parse(jsonData) as ReferenceImage;
+        if (refImage.base64 && refImage.mimeType) {
+          setVideoSettings({ ...videoSettings, [which]: refImage } as any);
+          return;
+        }
+      } catch { /* not valid JSON, fall through to file handling */ }
+    }
+
+    // Fall back to file drop
+    await handleFrameUpload(e.dataTransfer.files, which);
+  };
+
   // --- Reference Images (T2V, I2V) ---
   const refImages: ReferenceImage[] = (videoSettings as any).kling3OmniImageUrls || [];
   const addReferenceImage = async (files: FileList | null) => {
@@ -48,6 +69,25 @@ const Kling3OmniPanel: React.FC<Kling3OmniPanelProps> = ({
     if (!file.type.startsWith('image/')) return;
     const img = await handleImageUpload(file);
     setVideoSettings({ ...videoSettings, kling3OmniImageUrls: [...refImages, img] } as any);
+  };
+  const handleRefImageDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    e.currentTarget.classList.remove('border-violet-400', 'bg-gray-800/60');
+    if (refImages.length >= 4) return;
+
+    // Try gallery drag first
+    const jsonData = e.dataTransfer.getData('application/json');
+    if (jsonData) {
+      try {
+        const refImage = JSON.parse(jsonData) as ReferenceImage;
+        if (refImage.base64 && refImage.mimeType) {
+          setVideoSettings({ ...videoSettings, kling3OmniImageUrls: [...refImages, refImage] } as any);
+          return;
+        }
+      } catch { /* fall through */ }
+    }
+
+    await addReferenceImage(e.dataTransfer.files);
   };
   const removeReferenceImage = (idx: number) => {
     setVideoSettings({ ...videoSettings, kling3OmniImageUrls: refImages.filter((_, i) => i !== idx) } as any);
@@ -193,7 +233,7 @@ const Kling3OmniPanel: React.FC<Kling3OmniPanelProps> = ({
                       className={`flex flex-col items-center justify-center ${aspectClass} rounded-lg border-2 border-dashed border-gray-700 hover:border-violet-500/50 bg-gray-900/50 cursor-pointer transition-colors`}
                       onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add('border-violet-400', 'bg-gray-800/60'); }}
                       onDragLeave={(e) => { e.preventDefault(); e.currentTarget.classList.remove('border-violet-400', 'bg-gray-800/60'); }}
-                      onDrop={async (e) => { e.preventDefault(); e.currentTarget.classList.remove('border-violet-400', 'bg-gray-800/60'); await handleFrameUpload(e.dataTransfer.files, 'kling3OmniStartImage'); }}
+                      onDrop={(e) => handleFrameDrop(e, 'kling3OmniStartImage')}
                     >
                       <input type="file" accept="image/*" className="hidden" onChange={(e) => handleFrameUpload(e.target.files, 'kling3OmniStartImage')} />
                       <span className="text-gray-600 text-lg mb-1">+</span>
@@ -224,7 +264,7 @@ const Kling3OmniPanel: React.FC<Kling3OmniPanelProps> = ({
                       className={`flex flex-col items-center justify-center ${aspectClass} rounded-lg border-2 border-dashed border-gray-700 hover:border-violet-500/50 bg-gray-900/50 cursor-pointer transition-colors`}
                       onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add('border-violet-400', 'bg-gray-800/60'); }}
                       onDragLeave={(e) => { e.preventDefault(); e.currentTarget.classList.remove('border-violet-400', 'bg-gray-800/60'); }}
-                      onDrop={async (e) => { e.preventDefault(); e.currentTarget.classList.remove('border-violet-400', 'bg-gray-800/60'); await handleFrameUpload(e.dataTransfer.files, 'kling3OmniEndImage'); }}
+                      onDrop={(e) => handleFrameDrop(e, 'kling3OmniEndImage')}
                     >
                       <input type="file" accept="image/*" className="hidden" onChange={(e) => handleFrameUpload(e.target.files, 'kling3OmniEndImage')} />
                       <span className="text-gray-600 text-lg mb-1">+</span>
@@ -289,7 +329,7 @@ const Kling3OmniPanel: React.FC<Kling3OmniPanelProps> = ({
                 className={`flex flex-col items-center justify-center ${aspectClass} rounded-lg border-2 border-dashed border-gray-700 hover:border-violet-500/50 bg-gray-900/50 cursor-pointer transition-colors`}
                 onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add('border-violet-400', 'bg-gray-800/60'); }}
                 onDragLeave={(e) => { e.preventDefault(); e.currentTarget.classList.remove('border-violet-400', 'bg-gray-800/60'); }}
-                onDrop={async (e) => { e.preventDefault(); e.currentTarget.classList.remove('border-violet-400', 'bg-gray-800/60'); await handleFrameUpload(e.dataTransfer.files, 'kling3OmniStartImage'); }}
+                onDrop={(e) => handleFrameDrop(e, 'kling3OmniStartImage')}
               >
                 <input type="file" accept="image/*" className="hidden" onChange={(e) => handleFrameUpload(e.target.files, 'kling3OmniStartImage')} />
                 <span className="text-gray-600 text-lg mb-1">+</span>
@@ -324,7 +364,7 @@ const Kling3OmniPanel: React.FC<Kling3OmniPanelProps> = ({
                 className="flex flex-col items-center justify-center aspect-square rounded-lg border-2 border-dashed border-gray-700 hover:border-violet-500/50 bg-gray-900/50 cursor-pointer transition-colors"
                 onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add('border-violet-400', 'bg-gray-800/60'); }}
                 onDragLeave={(e) => { e.preventDefault(); e.currentTarget.classList.remove('border-violet-400', 'bg-gray-800/60'); }}
-                onDrop={async (e) => { e.preventDefault(); e.currentTarget.classList.remove('border-violet-400', 'bg-gray-800/60'); await addReferenceImage(e.dataTransfer.files); }}
+                onDrop={handleRefImageDrop}
               >
                 <input type="file" accept="image/*" className="hidden" onChange={(e) => addReferenceImage(e.target.files)} />
                 <span className="text-gray-600 text-lg">+</span>
