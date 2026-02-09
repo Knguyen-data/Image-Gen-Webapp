@@ -87,7 +87,7 @@ export const pollFreepikTask = async (
 
       if (status === 'FAILED') {
         const errorMsg = result?.data?.error || result?.message || 'Generation failed';
-        logger.error('FreepikKling', 'Task failed', { taskId, error: errorMsg });
+        logger.error('FreepikKling', 'Task failed', { taskId, error: errorMsg, fullResponse: JSON.stringify(result) });
         return { success: false, failed: true, error: `Freepik: ${errorMsg}` };
       }
 
@@ -461,6 +461,12 @@ export const createKling3OmniTask = async (
   if (options.webhookUrl) {
     body.webhook_url = options.webhookUrl;
   }
+
+  // Log request body for debugging (mask long image data)
+  const debugBody = { ...body };
+  if (debugBody.image_url) debugBody.image_url = String(debugBody.image_url).slice(0, 80) + '...';
+  if (debugBody.image_urls) debugBody.image_urls = (debugBody.image_urls as string[]).map((u: string) => u.slice(0, 80) + '...');
+  logger.info('FreepikKling3Omni', 'Request body', { endpoint, body: debugBody });
 
   const response = await fetch(endpoint, {
     method: 'POST',

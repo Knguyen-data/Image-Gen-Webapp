@@ -1,14 +1,15 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { SavedPrompt } from '../types/prompt-library';
 
 interface PromptLibraryCardProps {
   prompt: SavedPrompt;
   isSelected: boolean;
   onLoad: () => void;
-  onSelect: () => void;   // single click to select & edit
+  onSelect: () => void;
   onDelete: () => void;
   onToggleFavorite: () => void;
   onCopy: () => void;
+  onDropImage: (image: { id: string; base64: string; mimeType: string }) => void;
 }
 
 const PromptLibraryCard: React.FC<PromptLibraryCardProps> = ({
@@ -19,17 +20,43 @@ const PromptLibraryCard: React.FC<PromptLibraryCardProps> = ({
   onDelete,
   onToggleFavorite,
   onCopy,
+  onDropImage,
 }) => {
+  const [dragOver, setDragOver] = useState(false);
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+    setDragOver(true);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOver(false);
+    try {
+      const json = e.dataTransfer.getData('application/json');
+      if (!json) return;
+      const img = JSON.parse(json) as { id: string; base64: string; mimeType: string };
+      if (img.base64 && img.mimeType) onDropImage(img);
+    } catch { /* ignore */ }
+  };
+
   return (
     <div
-      className={`rounded-lg p-3 cursor-pointer transition-colors border ${
-        isSelected
-          ? 'bg-gray-800 border-dash-500/50'
-          : 'bg-gray-900 hover:bg-gray-800 border-transparent'
+      className={`rounded-lg p-3 cursor-pointer transition-colors border-2 ${
+        dragOver
+          ? 'border-dash-400 bg-dash-900/20'
+          : isSelected
+            ? 'bg-gray-800 border-dash-500/50'
+            : 'bg-gray-900 hover:bg-gray-800 border-transparent'
       }`}
       onClick={onSelect}
       onDoubleClick={onLoad}
-      title="Click to edit · Double-click to load"
+      onDragOver={handleDragOver}
+      onDragLeave={() => setDragOver(false)}
+      onDrop={handleDrop}
+      title="Click to edit · Double-click to load · Drop images to attach"
     >
       {/* Prompt text (2 lines max) */}
       <p className="text-xs text-gray-300 line-clamp-2 leading-relaxed mb-2">
@@ -54,7 +81,12 @@ const PromptLibraryCard: React.FC<PromptLibraryCardProps> = ({
         </div>
       )}
 
-      {/* Bottom row: refs count, favorite, copy, delete, load */}
+      {/* Drag-over hint */}
+      {dragOver && (
+        <p className="text-[10px] text-dash-300 text-center mb-1">Drop to attach image</p>
+      )}
+
+      {/* Bottom row */}
       <div className="flex items-center gap-2 text-[10px]">
         {prompt.settings?.model && (
           <span className="text-gray-600 truncate max-w-[60px]" title={prompt.settings.model}>
@@ -64,7 +96,6 @@ const PromptLibraryCard: React.FC<PromptLibraryCardProps> = ({
 
         <span className="flex-1" />
 
-        {/* Load into left panel */}
         <button
           onClick={e => { e.stopPropagation(); onLoad(); }}
           className="text-gray-600 hover:text-dash-300 transition-colors"

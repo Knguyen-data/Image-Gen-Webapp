@@ -55,7 +55,6 @@ const PromptLibraryPanel: React.FC<PromptLibraryPanelProps> = ({
   const [renameValue, setRenameValue] = useState('');
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saved'>('idle');
   const [selectedPromptId, setSelectedPromptId] = useState<string | null>(null);
-  const [dropHighlight, setDropHighlight] = useState(false);
 
   // Inline prompt editing
   const [editText, setEditText] = useState('');
@@ -207,29 +206,17 @@ const PromptLibraryPanel: React.FC<PromptLibraryPanelProps> = ({
     loadPrompts();
   };
 
-  // Drop zone: accept images dragged from gallery
-  const handleDrop = async (e: React.DragEvent) => {
-    e.preventDefault();
-    setDropHighlight(false);
-    if (!selectedPromptId) return;
-
-    try {
-      const json = e.dataTransfer.getData('application/json');
-      if (!json) return;
-      const img = JSON.parse(json) as { id: string; base64: string; mimeType: string };
-      if (!img.base64 || !img.mimeType) return;
-
-      const target = prompts.find(p => p.id === selectedPromptId);
-      if (!target) return;
-
-      const updated: SavedPrompt = {
-        ...target,
-        referenceImages: [...target.referenceImages, { id: img.id || crypto.randomUUID(), base64: img.base64, mimeType: img.mimeType }],
-        updatedAt: Date.now(),
-      };
-      await updatePrompt(updated);
-      loadPrompts();
-    } catch { /* ignore invalid drag data */ }
+  // Attach a dropped image to a specific prompt card
+  const handleDropImageOnPrompt = async (promptId: string, img: { id: string; base64: string; mimeType: string }) => {
+    const target = prompts.find(p => p.id === promptId);
+    if (!target) return;
+    const updated: SavedPrompt = {
+      ...target,
+      referenceImages: [...target.referenceImages, { id: img.id || crypto.randomUUID(), base64: img.base64, mimeType: img.mimeType }],
+      updatedAt: Date.now(),
+    };
+    await updatePrompt(updated);
+    loadPrompts();
   };
 
   // Filtered prompts
@@ -348,31 +335,10 @@ const PromptLibraryPanel: React.FC<PromptLibraryPanelProps> = ({
               onDelete={() => handleDeletePrompt(p.id)}
               onToggleFavorite={() => handleToggleFavorite(p.id)}
               onCopy={() => handleCopyPrompt(p.prompt)}
+              onDropImage={(img) => handleDropImageOnPrompt(p.id, img)}
             />
           ))
         )}
-      </div>
-
-      {/* Drop zone for attaching images — large and prominent */}
-      <div
-        className={`mx-2 mb-2 border-2 border-dashed rounded-lg flex flex-col items-center justify-center text-center transition-colors ${
-          dropHighlight
-            ? 'border-dash-400 bg-dash-900/30 text-dash-300'
-            : selectedPromptId
-              ? 'border-gray-600 text-gray-500 hover:border-gray-500'
-              : 'border-gray-800 text-gray-700'
-        }`}
-        style={{ minHeight: 80 }}
-        onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; setDropHighlight(true); }}
-        onDragLeave={() => setDropHighlight(false)}
-        onDrop={handleDrop}
-      >
-        <svg className="w-5 h-5 mb-1 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.5">
-          <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909M3.75 21h16.5A2.25 2.25 0 0022.5 18.75V5.25A2.25 2.25 0 0020.25 3H3.75A2.25 2.25 0 001.5 5.25v13.5A2.25 2.25 0 003.75 21z" />
-        </svg>
-        <span className="text-xs">
-          {selectedPromptId ? 'Drop images here to attach' : 'Select a prompt first'}
-        </span>
       </div>
 
       {/* Inline prompt editor + save actions */}
