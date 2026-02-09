@@ -14,11 +14,13 @@ import { useSeedreamCredits } from './hooks/use-seedream-credits';
 import { generateWithSeedream, mapAspectRatio, uploadImageBase64 } from './services/seedream-service';
 import { generateWithSeedreamTxt2Img } from './services/seedream-txt2img-service';
 import { generateMotionVideo } from './services/kling-motion-control-service';
-import { createFreepikProI2VTask, pollFreepikProI2VTask, createKling3Task, pollKling3Task, createKling3OmniTask, createKling3OmniReferenceTask, pollKling3OmniTask, pollKling3OmniReferenceTask } from './services/freepik-kling-service';
+import { createFreepikProI2VTask, pollFreepikProI2VTask, createKling3Task, pollKling3Task, createKling3OmniTask, createKling3OmniReferenceTask, pollKling3OmniTask, pollKling3OmniReferenceTask, createAndPollWithRetry } from './services/freepik-kling-service';
 import { logger } from './services/logger';
 import { generateThumbnail, base64ToBlob, blobToBase64 } from './services/image-blob-manager';
 import { useActivityQueue } from './hooks/use-activity-queue';
 import ActivityPanel from './components/activity-panel';
+import PromptLibraryPanel from './components/prompt-library-panel';
+import { SavedPrompt } from './types/prompt-library';
 
 const App: React.FC = () => {
   // State: Settings & Inputs
@@ -981,18 +983,15 @@ INSTRUCTIONS:
         imageRef = `data:${scene.referenceImage.mimeType};base64,${scene.referenceImage.base64}`;
       }
 
-      // Create task
-      onProgress?.('Creating Pro I2V task...');
-      const taskId = await createFreepikProI2VTask(
-        freepikApiKey, imageRef, scene.prompt, duration, aspectRatio,
-        cfgScale, negativePrompt, generateAudio
+      // Create + poll with auto-retry on FAILED
+      const result = await createAndPollWithRetry(
+        () => createFreepikProI2VTask(
+          freepikApiKey, imageRef, scene.prompt, duration, aspectRatio,
+          cfgScale, negativePrompt, generateAudio
+        ),
+        (taskId, onPollProgress) => pollFreepikProI2VTask(freepikApiKey, taskId, onPollProgress),
+        (status, attempt) => onProgress?.(status)
       );
-
-      // Poll
-      onProgress?.('Generating...');
-      const result = await pollFreepikProI2VTask(freepikApiKey, taskId, (status, attempt) => {
-        onProgress?.(`${status} (${attempt + 1}/120)`);
-      });
 
       if (result.success && result.videoUrl) {
         logger.info('App', 'Pro I2V complete', { sceneId: scene.id, durationMs: Date.now() - startTime });
@@ -1085,26 +1084,23 @@ INSTRUCTIONS:
         imageList.push({ image_url: endUrl, type: 'end_frame' });
       }
 
-      // Create task
-      onProgress?.('Creating Kling 3 task...');
-      const taskId = await createKling3Task(freepikApiKey, tier as 'pro' | 'std', {
-        prompt,
-        imageList,
-        multiShot: shotType === 'customize',
-        multiPrompt,
-        negativePrompt,
-        aspectRatio: aspectRatio as any,
-        duration,
-        cfgScale,
-        shotType,
-        generateAudio,
-      });
-
-      // Poll for completion
-      onProgress?.('Generating...');
-      const result = await pollKling3Task(freepikApiKey, taskId, (status, attempt) => {
-        onProgress?.(`${status} (${attempt + 1}/120)`);
-      });
+      // Create + poll with auto-retry on FAILED
+      const result = await createAndPollWithRetry(
+        () => createKling3Task(freepikApiKey, tier as 'pro' | 'std', {
+          prompt,
+          imageList,
+          multiShot: shotType === 'customize',
+          multiPrompt,
+          negativePrompt,
+          aspectRatio: aspectRatio as any,
+          duration,
+          cfgScale,
+          shotType,
+          generateAudio,
+        }),
+        (taskId, onPollProgress) => pollKling3Task(freepikApiKey, taskId, onPollProgress),
+        (status, attempt) => onProgress?.(status)
+      );
 
       const promptSummary = prompt || (multiPrompt?.map(s => s.prompt).join(' || ') || '');
       const videoDuration = shotType === 'intelligent'
@@ -1217,21 +1213,20 @@ INSTRUCTIONS:
             : `data:${startImage.mimeType};base64,${startImage.base64}`;
         }
 
-        onProgress?.('Creating V2V task...');
-        const taskId = await createKling3OmniReferenceTask(freepikApiKey, tier as 'pro' | 'std', {
-          videoUrl,
-          prompt,
-          imageUrl: startFrameUrl,
-          aspectRatio: aspectRatio as any,
-          duration,
-          cfgScale,
-          negativePrompt,
-        });
-
-        onProgress?.('Generating...');
-        const result = await pollKling3OmniReferenceTask(freepikApiKey, taskId, (status, attempt) => {
-          onProgress?.(`${status} (${attempt + 1}/180)`);
-        });
+        // Create + poll with auto-retry on FAILED
+        const result = await createAndPollWithRetry(
+          () => createKling3OmniReferenceTask(freepikApiKey, tier as 'pro' | 'std', {
+            videoUrl,
+            prompt,
+            imageUrl: startFrameUrl,
+            aspectRatio: aspectRatio as any,
+            duration,
+            cfgScale,
+            negativePrompt,
+          }),
+          (taskId, onPollProgress) => pollKling3OmniReferenceTask(freepikApiKey, taskId, onPollProgress),
+          (status, attempt) => onProgress?.(status)
+        );
 
         if (result.success && result.videoUrl) {
           return {
@@ -1297,13 +1292,12 @@ INSTRUCTIONS:
         options.imageUrls = uploadedUrls;
       }
 
-      onProgress?.('Creating Kling 3 Omni task...');
-      const taskId = await createKling3OmniTask(freepikApiKey, tier as 'pro' | 'std', options);
-
-      onProgress?.('Generating...');
-      const result = await pollKling3OmniTask(freepikApiKey, taskId, (status, attempt) => {
-        onProgress?.(`${status} (${attempt + 1}/180)`);
-      });
+      // Create + poll with auto-retry on FAILED
+      const result = await createAndPollWithRetry(
+        () => createKling3OmniTask(freepikApiKey, tier as 'pro' | 'std', options),
+        (taskId, onPollProgress) => pollKling3OmniTask(freepikApiKey, taskId, onPollProgress),
+        (status, attempt) => onProgress?.(status)
+      );
 
       const promptSummary = multiEnabled && options.multiPrompt
         ? options.multiPrompt.join(' || ')
@@ -1389,6 +1383,30 @@ INSTRUCTIONS:
     } finally {
       setIsGenerating(false);
       setTimeout(() => setLoadingStatus(''), 2000);
+    }
+  };
+
+  // Load a saved prompt from the Prompt Library into the active prompt slot
+  const handleLoadSavedPrompt = (saved: SavedPrompt) => {
+    const newPrompt: PromptItem = {
+      id: crypto.randomUUID(),
+      text: saved.prompt,
+      referenceImages: saved.referenceImages.map(img => ({
+        id: img.id || crypto.randomUUID(),
+        base64: img.base64,
+        mimeType: img.mimeType,
+        previewUrl: `data:${img.mimeType};base64,${img.base64}`,
+      })),
+    };
+    setPrompts([newPrompt, ...prompts]);
+
+    if (saved.settings) {
+      setSettings(prev => ({
+        ...prev,
+        ...(saved.settings?.aspectRatio && { aspectRatio: saved.settings.aspectRatio as any }),
+        ...(saved.settings?.temperature != null && { temperature: saved.settings.temperature }),
+        ...(saved.settings?.imageSize && { imageSize: saved.settings.imageSize as any }),
+      }));
     }
   };
 
@@ -1741,6 +1759,22 @@ INSTRUCTIONS:
             setVideoSettings={setVideoSettings}
             onVideoGenerate={handleVideoGenerate}
             geminiApiKey={apiKey}
+          />
+          <PromptLibraryPanel
+            onLoadPrompt={handleLoadSavedPrompt}
+            currentPrompt={prompts[0]?.text || ''}
+            currentNegativePrompt=""
+            currentReferenceImages={prompts[0]?.referenceImages?.map(img => ({
+              id: img.id,
+              base64: img.base64,
+              mimeType: img.mimeType,
+            }))}
+            currentSettings={{
+              model: settings.spicyMode?.enabled ? 'seedream' : 'gemini',
+              aspectRatio: settings.aspectRatio,
+              temperature: settings.temperature,
+              imageSize: settings.imageSize,
+            }}
           />
           <RightPanel
             runs={runs}

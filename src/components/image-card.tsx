@@ -30,9 +30,7 @@ const ImageCard: React.FC<ImageCardProps> = ({ image, selected, onToggleSelect, 
   };
 
   const handleDragStart = (e: React.DragEvent) => {
-    if (appMode !== 'video') return;
-
-    // Create ReferenceImage object from GeneratedImage
+    // Allow drag in all modes (video scenes + prompt library drop zone)
     const refImage: ReferenceImage = {
       id: image.id,
       base64: image.base64,
@@ -48,8 +46,8 @@ const ImageCard: React.FC<ImageCardProps> = ({ image, selected, onToggleSelect, 
     <div
       className={`relative group rounded-xl overflow-hidden bg-gray-900 border transition-all duration-200 ${
         selected ? 'border-dash-300 ring-2 ring-dash-300/30' : 'border-gray-800 hover:border-gray-600'
-      } ${appMode === 'video' ? 'cursor-move' : ''}`}
-      draggable={appMode === 'video'}
+      } cursor-grab`}
+      draggable={true}
       onDragStart={handleDragStart}
     >
       <div

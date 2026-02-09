@@ -22,9 +22,9 @@ const FREEPIK_PROXY_URL = import.meta.env.DEV
   : 'https://freepik-proxy.tnguyen633.workers.dev';
 
 const BASE_URL = `${FREEPIK_PROXY_URL}/v1/ai`;
-const MAX_POLL_ATTEMPTS = 180; // 15 min at 5s intervals
+const MAX_POLL_ATTEMPTS = 120; // 10 min at 5s intervals per attempt
 const POLL_INTERVAL_MS = 5000;
-const MAX_RETRIES = 3; // Retry entire poll cycle up to 3 times
+const MAX_TASK_RETRIES = 3; // Retry entire create+poll cycle on FAILED status
 
 type FreepikStatus = 'CREATED' | 'IN_PROGRESS' | 'COMPLETED' | 'FAILED';
 
@@ -52,79 +52,105 @@ export const pollFreepikTask = async (
   taskId: string,
   pollUrl: string,
   onProgress?: (status: string, attempt: number) => void
-): Promise<{ success: boolean; videoUrl?: string; error?: string }> => {
-  let lastError = '';
+): Promise<{ success: boolean; videoUrl?: string; error?: string; failed?: boolean }> => {
+  let consecutiveErrors = 0;
 
-  for (let retry = 0; retry < MAX_RETRIES; retry++) {
+  for (let attempt = 0; attempt < MAX_POLL_ATTEMPTS; attempt++) {
+    try {
+      const response = await fetch(`${pollUrl}/${taskId}`, {
+        method: 'GET',
+        headers: { 'x-freepik-api-key': apiKey },
+      });
+
+      if (!response.ok) {
+        if (response.status === 401) return { success: false, error: 'Freepik auth failed during polling' };
+        consecutiveErrors++;
+        onProgress?.(`Poll error ${response.status} (${consecutiveErrors})`, attempt);
+        if (consecutiveErrors >= 15) {
+          return { success: false, error: `Freepik: too many poll errors (HTTP ${response.status})` };
+        }
+        await new Promise(r => setTimeout(r, POLL_INTERVAL_MS));
+        continue;
+      }
+
+      consecutiveErrors = 0;
+      const result = await response.json();
+      const status = result?.data?.status as FreepikStatus;
+      const generated = result?.data?.generated as string[] | undefined;
+
+      onProgress?.(status, attempt);
+
+      if (status === 'COMPLETED' && generated && generated.length > 0) {
+        logger.info('FreepikKling', 'Task completed', { taskId });
+        return { success: true, videoUrl: generated[0] };
+      }
+
+      if (status === 'FAILED') {
+        const errorMsg = result?.data?.error || result?.message || 'Generation failed';
+        logger.error('FreepikKling', 'Task failed', { taskId, error: errorMsg });
+        return { success: false, failed: true, error: `Freepik: ${errorMsg}` };
+      }
+
+      await new Promise(r => setTimeout(r, POLL_INTERVAL_MS));
+    } catch (fetchError) {
+      consecutiveErrors++;
+      onProgress?.(`Network error (${consecutiveErrors})`, attempt);
+      if (consecutiveErrors >= 15) {
+        return { success: false, error: `Freepik: too many network errors` };
+      }
+      await new Promise(r => setTimeout(r, POLL_INTERVAL_MS));
+    }
+  }
+
+  return { success: false, error: 'Freepik: polling timeout (10 minutes)' };
+};
+
+/**
+ * Generic retry wrapper: create task → poll → if FAILED, retry entire cycle up to MAX_TASK_RETRIES times.
+ * Works for all Freepik video services (Kling 2.6, Kling 3, Omni).
+ */
+export const createAndPollWithRetry = async (
+  createTask: () => Promise<string>,
+  poll: (taskId: string, onProgress?: (status: string, attempt: number) => void) => Promise<{ success: boolean; videoUrl?: string; error?: string; failed?: boolean }>,
+  onProgress?: (status: string, attempt: number) => void
+): Promise<{ success: boolean; videoUrl?: string; error?: string }> => {
+  for (let retry = 0; retry < MAX_TASK_RETRIES; retry++) {
     if (retry > 0) {
-      logger.info('FreepikKling', `Retry ${retry}/${MAX_RETRIES} for task ${taskId}`);
-      onProgress?.(`Retry ${retry}/${MAX_RETRIES}...`, 0);
-      await new Promise(r => setTimeout(r, 3000)); // Brief pause before retry
+      logger.info('FreepikKling', `Auto-retry ${retry}/${MAX_TASK_RETRIES} after FAILED status`);
+      onProgress?.(`Auto-retry ${retry}/${MAX_TASK_RETRIES}...`, 0);
+      await new Promise(r => setTimeout(r, 3000));
     }
 
-    let consecutiveErrors = 0;
+    try {
+      onProgress?.(retry > 0 ? `Retry ${retry}: Creating task...` : 'Creating task...', 0);
+      const taskId = await createTask();
 
-    for (let attempt = 0; attempt < MAX_POLL_ATTEMPTS; attempt++) {
-      try {
-        const response = await fetch(`${pollUrl}/${taskId}`, {
-          method: 'GET',
-          headers: { 'x-freepik-api-key': apiKey },
-        });
+      onProgress?.('Generating...', 0);
+      const result = await poll(taskId, (status, attempt) => {
+        const prefix = retry > 0 ? `Retry ${retry}: ` : '';
+        onProgress?.(`${prefix}${status} (${attempt + 1}/${MAX_POLL_ATTEMPTS})`, attempt);
+      });
 
-        if (!response.ok) {
-          if (response.status === 401) return { success: false, error: 'Freepik auth failed during polling' };
-          consecutiveErrors++;
-          const statusText = `Poll error ${response.status} (${consecutiveErrors})`;
-          onProgress?.(statusText, attempt);
-          lastError = `HTTP ${response.status}`;
-          
-          // If we get 10 consecutive errors, break to retry cycle
-          if (consecutiveErrors >= 10) {
-            logger.warn('FreepikKling', `10 consecutive poll errors, will retry`, { taskId, retry });
-            break;
-          }
-          await new Promise(r => setTimeout(r, POLL_INTERVAL_MS));
-          continue;
-        }
+      if (result.success) return result;
 
-        // Reset error counter on success
-        consecutiveErrors = 0;
+      // If server said FAILED, retry the whole cycle
+      if (result.failed) {
+        logger.warn('FreepikKling', `Task FAILED, will retry`, { retry, error: result.error });
+        continue;
+      }
 
-        const result = await response.json();
-        const status = result?.data?.status as FreepikStatus;
-        const generated = result?.data?.generated as string[] | undefined;
-
-        onProgress?.(status, attempt);
-
-        if (status === 'COMPLETED' && generated && generated.length > 0) {
-          logger.info('FreepikKling', 'Task completed', { taskId });
-          return { success: true, videoUrl: generated[0] };
-        }
-
-        if (status === 'FAILED') {
-          const errorMsg = result?.data?.error || result?.message || 'Generation failed';
-          logger.error('FreepikKling', 'Task failed', { taskId, error: errorMsg });
-          // Server explicitly said FAILED — don't retry
-          return { success: false, error: `Freepik: ${errorMsg}` };
-        }
-
-        await new Promise(r => setTimeout(r, POLL_INTERVAL_MS));
-      } catch (fetchError) {
-        // Network error (offline, DNS, etc.)
-        consecutiveErrors++;
-        lastError = fetchError instanceof Error ? fetchError.message : 'Network error';
-        onProgress?.(`Network error (${consecutiveErrors})`, attempt);
-        
-        if (consecutiveErrors >= 10) {
-          logger.warn('FreepikKling', `10 consecutive network errors, will retry`, { taskId, retry });
-          break;
-        }
-        await new Promise(r => setTimeout(r, POLL_INTERVAL_MS));
+      // Non-retryable error (auth, timeout, etc.)
+      return result;
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : 'Unknown error';
+      logger.error('FreepikKling', `Create/poll error on attempt ${retry}`, { error: msg });
+      if (retry >= MAX_TASK_RETRIES - 1) {
+        return { success: false, error: msg };
       }
     }
   }
 
-  return { success: false, error: `Freepik: timeout after ${MAX_RETRIES} retries (15min each). Last error: ${lastError}` };
+  return { success: false, error: `Freepik: failed after ${MAX_TASK_RETRIES} attempts` };
 };
 
 // ---------- Motion Control ----------

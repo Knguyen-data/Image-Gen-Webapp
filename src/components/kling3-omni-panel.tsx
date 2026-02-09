@@ -1,5 +1,7 @@
-import React from 'react';
+import React, { useRef, useMemo } from 'react';
 import { ReferenceImage, ReferenceVideo, VideoSettings } from '../types';
+import { useMentionAutocomplete, MentionOption } from '../hooks/use-mention-autocomplete';
+import MentionDropdown from './mention-dropdown';
 
 interface Kling3OmniPanelProps {
   videoSettings: VideoSettings | null;
@@ -22,6 +24,12 @@ const Kling3OmniPanel: React.FC<Kling3OmniPanelProps> = ({
   const isV2V = inputMode === 'video-to-video';
   const isI2V = inputMode === 'image-to-video';
   const isT2V = inputMode === 'text-to-video';
+
+  // --- Aspect Ratio ---
+  const selectedAspect = (videoSettings as any).kling3AspectRatio || '16:9';
+  const aspectClass = selectedAspect === '9:16' ? 'aspect-[9/16]'
+    : selectedAspect === '1:1' ? 'aspect-square'
+    : 'aspect-video';
 
   // --- Frame Upload Helpers (I2V) ---
   const handleFrameUpload = async (files: FileList | null, which: 'kling3OmniStartImage' | 'kling3OmniEndImage') => {
@@ -81,6 +89,48 @@ const Kling3OmniPanel: React.FC<Kling3OmniPanelProps> = ({
   // --- V2V Optional Start Frame ---
   const v2vStartImage = (videoSettings as any).kling3OmniStartImage as ReferenceImage | undefined;
 
+  // --- Mention Autocomplete ---
+  const mentionOptions = useMemo<MentionOption[]>(() => {
+    if (isV2V) {
+      return refVideo
+        ? [{ label: '@Video1', description: 'Reference video', icon: '🎥' }]
+        : [];
+    }
+    // I2V and T2V: reference images
+    return refImages.map((_, idx) => ({
+      label: `@Image${idx + 1}`,
+      description: `Reference image ${idx + 1}`,
+      icon: '🖼️',
+    }));
+  }, [isV2V, refVideo, refImages]);
+
+  // Single prompt textarea ref + hook
+  const singlePromptRef = useRef<HTMLTextAreaElement>(null);
+  const singlePromptValue = (videoSettings as any).kling3OmniPrompt || '';
+  const setSinglePromptValue = (val: string) =>
+    setVideoSettings({ ...videoSettings, kling3OmniPrompt: val } as any);
+  const singleMention = useMentionAutocomplete(
+    mentionOptions, singlePromptRef, singlePromptValue, setSinglePromptValue
+  );
+
+  // Multi-prompt textarea refs + hooks (max 6 shots)
+  const multiRefs = [
+    useRef<HTMLTextAreaElement>(null),
+    useRef<HTMLTextAreaElement>(null),
+    useRef<HTMLTextAreaElement>(null),
+    useRef<HTMLTextAreaElement>(null),
+    useRef<HTMLTextAreaElement>(null),
+    useRef<HTMLTextAreaElement>(null),
+  ];
+  const multiMentions = multiRefs.map((ref, idx) =>
+    useMentionAutocomplete(
+      mentionOptions,
+      ref,
+      multiPrompt[idx] || '',
+      (val: string) => updatePrompt(idx, val)
+    )
+  );
+
   return (
     <>
       {/* 1. Input Mode Toggle */}
@@ -129,8 +179,8 @@ const Kling3OmniPanel: React.FC<Kling3OmniPanelProps> = ({
                 <div className="flex-1">
                   <span className="text-[10px] text-gray-500 mb-1 block">Start Frame</span>
                   {startImg ? (
-                    <div className="relative group rounded-lg overflow-hidden border border-violet-500/40 aspect-video bg-gray-900">
-                      <img src={startImg.previewUrl} alt="Start frame" className="w-full h-full object-cover" />
+                    <div className={`relative group rounded-lg overflow-hidden border border-violet-500/40 ${aspectClass} bg-gray-900`}>
+                      <img src={startImg.previewUrl} alt="Start frame" className="w-full h-full object-contain bg-black" />
                       <button
                         onClick={() => setVideoSettings({ ...videoSettings, kling3OmniStartImage: undefined } as any)}
                         className="absolute top-1 right-1 w-5 h-5 bg-black/70 rounded-full flex items-center justify-center text-gray-300 hover:text-white opacity-0 group-hover:opacity-100 transition-opacity"
@@ -140,7 +190,7 @@ const Kling3OmniPanel: React.FC<Kling3OmniPanelProps> = ({
                     </div>
                   ) : (
                     <label
-                      className="flex flex-col items-center justify-center aspect-video rounded-lg border-2 border-dashed border-gray-700 hover:border-violet-500/50 bg-gray-900/50 cursor-pointer transition-colors"
+                      className={`flex flex-col items-center justify-center ${aspectClass} rounded-lg border-2 border-dashed border-gray-700 hover:border-violet-500/50 bg-gray-900/50 cursor-pointer transition-colors`}
                       onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add('border-violet-400', 'bg-gray-800/60'); }}
                       onDragLeave={(e) => { e.preventDefault(); e.currentTarget.classList.remove('border-violet-400', 'bg-gray-800/60'); }}
                       onDrop={async (e) => { e.preventDefault(); e.currentTarget.classList.remove('border-violet-400', 'bg-gray-800/60'); await handleFrameUpload(e.dataTransfer.files, 'kling3OmniStartImage'); }}
@@ -160,8 +210,8 @@ const Kling3OmniPanel: React.FC<Kling3OmniPanelProps> = ({
                 <div className="flex-1">
                   <span className="text-[10px] text-gray-500 mb-1 block">End Frame</span>
                   {endImg ? (
-                    <div className="relative group rounded-lg overflow-hidden border border-violet-500/40 aspect-video bg-gray-900">
-                      <img src={endImg.previewUrl} alt="End frame" className="w-full h-full object-cover" />
+                    <div className={`relative group rounded-lg overflow-hidden border border-violet-500/40 ${aspectClass} bg-gray-900`}>
+                      <img src={endImg.previewUrl} alt="End frame" className="w-full h-full object-contain bg-black" />
                       <button
                         onClick={() => setVideoSettings({ ...videoSettings, kling3OmniEndImage: undefined } as any)}
                         className="absolute top-1 right-1 w-5 h-5 bg-black/70 rounded-full flex items-center justify-center text-gray-300 hover:text-white opacity-0 group-hover:opacity-100 transition-opacity"
@@ -171,7 +221,7 @@ const Kling3OmniPanel: React.FC<Kling3OmniPanelProps> = ({
                     </div>
                   ) : (
                     <label
-                      className="flex flex-col items-center justify-center aspect-video rounded-lg border-2 border-dashed border-gray-700 hover:border-violet-500/50 bg-gray-900/50 cursor-pointer transition-colors"
+                      className={`flex flex-col items-center justify-center ${aspectClass} rounded-lg border-2 border-dashed border-gray-700 hover:border-violet-500/50 bg-gray-900/50 cursor-pointer transition-colors`}
                       onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add('border-violet-400', 'bg-gray-800/60'); }}
                       onDragLeave={(e) => { e.preventDefault(); e.currentTarget.classList.remove('border-violet-400', 'bg-gray-800/60'); }}
                       onDrop={async (e) => { e.preventDefault(); e.currentTarget.classList.remove('border-violet-400', 'bg-gray-800/60'); await handleFrameUpload(e.dataTransfer.files, 'kling3OmniEndImage'); }}
@@ -198,7 +248,7 @@ const Kling3OmniPanel: React.FC<Kling3OmniPanelProps> = ({
             </label>
             {refVideo ? (
               <div className="relative group rounded-lg overflow-hidden border border-violet-500/40 bg-gray-900">
-                <video src={refVideo.previewUrl} className="w-full aspect-video object-cover" controls />
+                <video src={refVideo.previewUrl} className={`w-full ${aspectClass} object-contain bg-black`} controls />
                 <button
                   onClick={clearVideo}
                   className="absolute top-2 right-2 w-6 h-6 bg-black/70 rounded-full flex items-center justify-center text-gray-300 hover:text-white opacity-0 group-hover:opacity-100 transition-opacity"
@@ -208,7 +258,7 @@ const Kling3OmniPanel: React.FC<Kling3OmniPanelProps> = ({
               </div>
             ) : (
               <label
-                className="flex flex-col items-center justify-center aspect-video rounded-lg border-2 border-dashed border-violet-500/50 hover:border-violet-400 bg-gray-900/50 cursor-pointer transition-colors"
+                className={`flex flex-col items-center justify-center ${aspectClass} rounded-lg border-2 border-dashed border-violet-500/50 hover:border-violet-400 bg-gray-900/50 cursor-pointer transition-colors`}
                 onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add('border-violet-400', 'bg-gray-800/60'); }}
                 onDragLeave={(e) => { e.preventDefault(); e.currentTarget.classList.remove('border-violet-400', 'bg-gray-800/60'); }}
                 onDrop={async (e) => { e.preventDefault(); e.currentTarget.classList.remove('border-violet-400', 'bg-gray-800/60'); handleVideoUpload(e.dataTransfer.files); }}
@@ -225,8 +275,8 @@ const Kling3OmniPanel: React.FC<Kling3OmniPanelProps> = ({
           <div>
             <span className="text-xs text-gray-500 mb-1 block">Start Frame (Optional)</span>
             {v2vStartImage ? (
-              <div className="relative group rounded-lg overflow-hidden border border-violet-500/40 aspect-video bg-gray-900">
-                <img src={v2vStartImage.previewUrl} alt="Start frame" className="w-full h-full object-cover" />
+              <div className={`relative group rounded-lg overflow-hidden border border-violet-500/40 ${aspectClass} bg-gray-900`}>
+                <img src={v2vStartImage.previewUrl} alt="Start frame" className="w-full h-full object-contain bg-black" />
                 <button
                   onClick={() => setVideoSettings({ ...videoSettings, kling3OmniStartImage: undefined } as any)}
                   className="absolute top-1 right-1 w-5 h-5 bg-black/70 rounded-full flex items-center justify-center text-gray-300 hover:text-white opacity-0 group-hover:opacity-100 transition-opacity"
@@ -236,7 +286,7 @@ const Kling3OmniPanel: React.FC<Kling3OmniPanelProps> = ({
               </div>
             ) : (
               <label
-                className="flex flex-col items-center justify-center aspect-video rounded-lg border-2 border-dashed border-gray-700 hover:border-violet-500/50 bg-gray-900/50 cursor-pointer transition-colors"
+                className={`flex flex-col items-center justify-center ${aspectClass} rounded-lg border-2 border-dashed border-gray-700 hover:border-violet-500/50 bg-gray-900/50 cursor-pointer transition-colors`}
                 onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add('border-violet-400', 'bg-gray-800/60'); }}
                 onDragLeave={(e) => { e.preventDefault(); e.currentTarget.classList.remove('border-violet-400', 'bg-gray-800/60'); }}
                 onDrop={async (e) => { e.preventDefault(); e.currentTarget.classList.remove('border-violet-400', 'bg-gray-800/60'); await handleFrameUpload(e.dataTransfer.files, 'kling3OmniStartImage'); }}
@@ -314,13 +364,27 @@ const Kling3OmniPanel: React.FC<Kling3OmniPanelProps> = ({
               {multiPrompt.map((p, idx) => (
                 <div key={idx} className="flex items-start gap-2 bg-gray-900/50 rounded-lg p-2 border border-gray-800">
                   <span className="text-[10px] font-mono text-violet-400/70 mt-2 w-4 text-right shrink-0">{idx + 1}</span>
-                  <textarea
-                    className="flex-1 bg-gray-950 border border-gray-700 rounded p-2 text-xs text-gray-300 resize-y min-h-[36px] focus:ring-1 focus:ring-violet-400 focus:border-violet-500/50 transition-all placeholder:text-gray-600"
-                    rows={2}
-                    value={p}
-                    onChange={(e) => updatePrompt(idx, e.target.value)}
-                    placeholder={`Shot ${idx + 1} prompt...`}
-                  />
+                  <div className="flex-1 relative">
+                    <textarea
+                      ref={multiRefs[idx]}
+                      className="w-full bg-gray-950 border border-gray-700 rounded p-2 text-xs text-gray-300 resize-y min-h-[36px] focus:ring-1 focus:ring-violet-400 focus:border-violet-500/50 transition-all placeholder:text-gray-600"
+                      rows={2}
+                      value={p}
+                      onChange={(e) => {
+                        updatePrompt(idx, e.target.value);
+                        multiMentions[idx].onChange(e);
+                      }}
+                      onKeyDown={multiMentions[idx].onKeyDown}
+                      placeholder={`Shot ${idx + 1} prompt...`}
+                    />
+                    <MentionDropdown
+                      isOpen={multiMentions[idx].isOpen}
+                      options={multiMentions[idx].options}
+                      selectedIndex={multiMentions[idx].selectedIndex}
+                      position={multiMentions[idx].position}
+                      onSelect={multiMentions[idx].onSelect}
+                    />
+                  </div>
                   <button
                     onClick={() => removePrompt(idx)}
                     disabled={multiPrompt.length <= 1}
@@ -340,15 +404,29 @@ const Kling3OmniPanel: React.FC<Kling3OmniPanelProps> = ({
             </p>
           </>
         ) : (
-          <textarea
-            className="w-full bg-gray-950 border border-gray-700 rounded-lg p-3 text-sm text-gray-200 resize-y min-h-[80px] focus:ring-1 focus:ring-violet-400 focus:border-violet-500/50 transition-all placeholder:text-gray-600"
-            rows={3}
-            value={(videoSettings as any).kling3OmniPrompt || ''}
-            onChange={(e) => setVideoSettings({ ...videoSettings, kling3OmniPrompt: e.target.value } as any)}
-            placeholder={isT2V ? 'Describe the video scene...'
-              : isI2V ? 'Describe how the image should animate... Use @Image1 for reference images.'
-              : 'Describe how to transform the video... Use @Video1 to reference the clip.'}
-          />
+          <div className="relative">
+            <textarea
+              ref={singlePromptRef}
+              className="w-full bg-gray-950 border border-gray-700 rounded-lg p-3 text-sm text-gray-200 resize-y min-h-[80px] focus:ring-1 focus:ring-violet-400 focus:border-violet-500/50 transition-all placeholder:text-gray-600"
+              rows={3}
+              value={singlePromptValue}
+              onChange={(e) => {
+                setSinglePromptValue(e.target.value);
+                singleMention.onChange(e);
+              }}
+              onKeyDown={singleMention.onKeyDown}
+              placeholder={isT2V ? 'Describe the video scene...'
+                : isI2V ? 'Describe how the image should animate... Use @Image1 for reference images.'
+                : 'Describe how to transform the video... Use @Video1 to reference the clip.'}
+            />
+            <MentionDropdown
+              isOpen={singleMention.isOpen}
+              options={singleMention.options}
+              selectedIndex={singleMention.selectedIndex}
+              position={singleMention.position}
+              onSelect={singleMention.onSelect}
+            />
+          </div>
         )}
       </div>
 

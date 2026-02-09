@@ -7,6 +7,8 @@ import VideoTrimmerModal from './video-trimmer-modal';
 import VideoReferenceModal from './video-reference-modal';
 import PromptGenerator from './prompt-generator';
 import Kling3OmniPanel from './kling3-omni-panel';
+import { useMentionAutocomplete, MentionOption } from '../hooks/use-mention-autocomplete';
+import MentionDropdown from './mention-dropdown';
 
 interface LeftPanelProps {
   prompts: PromptItem[];
@@ -846,6 +848,12 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
                 setVideoSettings({ ...videoSettings, kling3MultiPrompt: multiPrompt.filter((_, i) => i !== idx) } as any);
               };
 
+              // Aspect ratio for preview frames
+              const kling3Aspect = (videoSettings as any).kling3AspectRatio || '16:9';
+              const kling3AspectClass = kling3Aspect === '9:16' ? 'aspect-[9/16]'
+                : kling3Aspect === '1:1' ? 'aspect-square'
+                : 'aspect-video';
+
               return (
               <>
                 {/* 1. Shot Mode Toggle */}
@@ -891,8 +899,8 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
                         <div className="flex-1">
                           <span className="text-[10px] text-gray-500 mb-1 block">Start Frame</span>
                           {startImg ? (
-                            <div className="relative group rounded-lg overflow-hidden border border-emerald-500/40 aspect-video bg-gray-900">
-                              <img src={startImg.previewUrl} alt="Start frame" className="w-full h-full object-cover" />
+                            <div className={`relative group rounded-lg overflow-hidden border border-emerald-500/40 ${kling3AspectClass} bg-gray-900`}>
+                              <img src={startImg.previewUrl} alt="Start frame" className="w-full h-full object-contain bg-black" />
                               <button
                                 onClick={() => setVideoSettings({ ...videoSettings, kling3StartImage: undefined } as any)}
                                 className="absolute top-1 right-1 w-5 h-5 bg-black/70 rounded-full flex items-center justify-center text-gray-300 hover:text-white opacity-0 group-hover:opacity-100 transition-opacity"
@@ -902,7 +910,7 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
                             </div>
                           ) : (
                             <label
-                              className="flex flex-col items-center justify-center aspect-video rounded-lg border-2 border-dashed border-gray-700 hover:border-emerald-500/50 bg-gray-900/50 cursor-pointer transition-colors"
+                              className={`flex flex-col items-center justify-center ${kling3AspectClass} rounded-lg border-2 border-dashed border-gray-700 hover:border-emerald-500/50 bg-gray-900/50 cursor-pointer transition-colors`}
                               onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add('border-emerald-400', 'bg-gray-800/60'); }}
                               onDragLeave={(e) => { e.preventDefault(); e.currentTarget.classList.remove('border-emerald-400', 'bg-gray-800/60'); }}
                               onDrop={async (e) => { e.preventDefault(); e.currentTarget.classList.remove('border-emerald-400', 'bg-gray-800/60'); await handleFrameUpload(e.dataTransfer.files, 'kling3StartImage'); }}
@@ -922,8 +930,8 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
                         <div className="flex-1">
                           <span className="text-[10px] text-gray-500 mb-1 block">End Frame</span>
                           {endImg ? (
-                            <div className="relative group rounded-lg overflow-hidden border border-emerald-500/40 aspect-video bg-gray-900">
-                              <img src={endImg.previewUrl} alt="End frame" className="w-full h-full object-cover" />
+                            <div className={`relative group rounded-lg overflow-hidden border border-emerald-500/40 ${kling3AspectClass} bg-gray-900`}>
+                              <img src={endImg.previewUrl} alt="End frame" className="w-full h-full object-contain bg-black" />
                               <button
                                 onClick={() => setVideoSettings({ ...videoSettings, kling3EndImage: undefined } as any)}
                                 className="absolute top-1 right-1 w-5 h-5 bg-black/70 rounded-full flex items-center justify-center text-gray-300 hover:text-white opacity-0 group-hover:opacity-100 transition-opacity"
@@ -933,7 +941,7 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
                             </div>
                           ) : (
                             <label
-                              className="flex flex-col items-center justify-center aspect-video rounded-lg border-2 border-dashed border-gray-700 hover:border-emerald-500/50 bg-gray-900/50 cursor-pointer transition-colors"
+                              className={`flex flex-col items-center justify-center ${kling3AspectClass} rounded-lg border-2 border-dashed border-gray-700 hover:border-emerald-500/50 bg-gray-900/50 cursor-pointer transition-colors`}
                               onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add('border-emerald-400', 'bg-gray-800/60'); }}
                               onDragLeave={(e) => { e.preventDefault(); e.currentTarget.classList.remove('border-emerald-400', 'bg-gray-800/60'); }}
                               onDrop={async (e) => { e.preventDefault(); e.currentTarget.classList.remove('border-emerald-400', 'bg-gray-800/60'); await handleFrameUpload(e.dataTransfer.files, 'kling3EndImage'); }}
