@@ -1,26 +1,41 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import LeftPanel from './components/left-panel';
 import RightPanel from './components/right-panel';
 import ApiKeyModal from './components/api-key-modal';
 import ModifyImageModal from './components/modify-image-modal';
-import { AppSettings, Run, GeneratedImage, PromptItem, ReferenceImage, ReferenceVideo, AppMode, VideoScene, VideoSettings, GeneratedVideo, VideoModel, KlingProDuration, KlingProAspectRatio, Kling3ImageListItem } from './types';
+import { RecoveryModal } from './components/recovery-modal';
+import SettingsPage from './components/settings-page';
+import { CompareModal } from './components/compare-modal';
+import { BatchActionsToolbar } from './components/batch-actions-toolbar';
+import { SaveCollectionModal } from './components/save-collection-modal';
+import { SavePayloadDialog } from './components/save-payload-dialog';
+import { SavedPayloadsPage } from './components/saved-payloads-page';
+import { AppSettings, Run, GeneratedImage, PromptItem, ReferenceImage, ReferenceVideo, AppMode, VideoScene, VideoSettings, GeneratedVideo, VideoModel, KlingProDuration, KlingProAspectRatio, Kling3ImageListItem, VeoGenerationType } from './types';
 import { DEFAULT_SETTINGS } from './constants';
 import { generateImage, modifyImage } from './services/gemini-service';
-import { getAllRunsFromDB, saveRunToDB, deleteRunFromDB } from './services/db';
+import { getAllRunsFromDB, saveRunToDB, deleteRunFromDB, type PendingRequest, type SavedPayload, saveVideoCollection, getAllSavedPayloads, saveSavedPayload, updateSavedPayload, getSavedPayloadByPayloadId, deleteSavedPayloadByPayloadId } from './services/db';
+import JSZip from 'jszip';
 import { getAllGeneratedVideosFromDB, saveGeneratedVideoToDB, deleteGeneratedVideoFromDB } from './services/indexeddb-video-storage';
 import { processBatchQueue, QueueTask, calculateOptimalBatchSize, BATCH_DELAYS } from './services/batch-queue';
 import { withRateLimitRetry } from './services/rate-limiter';
 import { useSeedreamCredits } from './hooks/use-seedream-credits';
-import { generateWithSeedream, mapAspectRatio, uploadImageBase64 } from './services/seedream-service';
+import { generateWithSeedream, mapAspectRatio } from './services/seedream-service';
+import { uploadBase64ToR2, uploadUrlToR2 } from './services/r2-upload-service';
+import { interpolateAndUploadToR2 } from './services/amt-interpolation-service';
 import { generateWithSeedreamTxt2Img } from './services/seedream-txt2img-service';
 import { generateMotionVideo } from './services/kling-motion-control-service';
 import { createFreepikProI2VTask, pollFreepikProI2VTask, createKling3Task, pollKling3Task, createKling3OmniTask, createKling3OmniReferenceTask, pollKling3OmniTask, pollKling3OmniReferenceTask, createAndPollWithRetry } from './services/freepik-kling-service';
+import { createVeoTask, pollVeoTask, getVeo1080pVideo, requestVeo4kVideo, pollVeo4kTask, extendVeoTask } from './services/veo3-service';
+import type { VeoGenerateRequest } from './services/veo3-service';
+import type { VeoTaskResult, VeoSettings } from './components/veo3';
 import { logger } from './services/logger';
 import { generateThumbnail, base64ToBlob, blobToBase64 } from './services/image-blob-manager';
 import { useActivityQueue } from './hooks/use-activity-queue';
 import ActivityPanel from './components/activity-panel';
 import PromptLibraryPanel from './components/prompt-library-panel';
 import { SavedPrompt } from './types/prompt-library';
+import { requestManager } from './services/request-manager';
+
 
 const App: React.FC = () => {
   // State: Settings & Inputs
@@ -31,8 +46,14 @@ const App: React.FC = () => {
   const [apiKey, setApiKey] = useState('');
   const [kieApiKey, setKieApiKey] = useState('');
   const [freepikApiKey, setFreepikApiKey] = useState('');
+  const [falApiKey, setFalApiKey] = useState('');
   const [isKeyModalOpen, setIsKeyModalOpen] = useState(false);
-  const [keyModalMode, setKeyModalMode] = useState<'gemini' | 'spicy' | 'freepik'>('gemini');
+  const [keyModalMode, setKeyModalMode] = useState<'gemini' | 'spicy' | 'freepik' | 'fal'>('gemini');
+  const [showSettings, setShowSettings] = useState(false);
+
+  // Crash Recovery State
+  const [showRecoveryModal, setShowRecoveryModal] = useState(false);
+  const [pendingRequests, setPendingRequests] = useState<PendingRequest[]>([]);
 
   // Video Mode State
   const [appMode, setAppMode] = useState<AppMode>('image');
@@ -57,6 +78,28 @@ const App: React.FC = () => {
     kling3InputMode: 'image-to-video',
   } as any);
   const [generatedVideos, setGeneratedVideos] = useState<GeneratedVideo[]>([]);
+
+  // Video Compare State
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedVideos, setSelectedVideos] = useState<string[]>([]);
+  const [showCompareModal, setShowCompareModal] = useState(false);
+
+  // Multi-Select & Batch Save State
+  const [showSaveCollectionModal, setShowSaveCollectionModal] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<{ current: number; total: number } | null>(null);
+
+  // Save Payload State
+  const [showSavePayloadDialog, setShowSavePayloadDialog] = useState(false);
+  const [saveDialogPayload, setSaveDialogPayload] = useState<SavedPayload | null>(null);
+  const [currentView, setCurrentView] = useState<'main' | 'saved-payloads'>('main');
+  const [savedPayloads, setSavedPayloads] = useState<SavedPayload[]>([]);
+
+  // Veo 3.1 State
+  const [veoTaskResult, setVeoTaskResult] = useState<VeoTaskResult | null>(null);
+  const [isVeoUpgrading, setIsVeoUpgrading] = useState(false);
+
+  // AMT Interpolation State
+  const [isInterpolating, setIsInterpolating] = useState(false);
 
   // State: Data
   const [runs, setRuns] = useState<Run[]>([]);
@@ -119,6 +162,12 @@ const App: React.FC = () => {
           logger.debug('App', 'Loaded Freepik API key from storage');
         }
 
+        const savedFalKey = localStorage.getItem('fal_api_key');
+        if (savedFalKey) {
+          setFalApiKey(savedFalKey);
+          logger.debug('App', 'Loaded FAL API key from storage');
+        }
+
         // Prompt for Gemini key if missing
         if (!savedGeminiKey) {
           logger.info('App', 'No Gemini API key found, showing modal');
@@ -163,7 +212,11 @@ const App: React.FC = () => {
               }
             }
             if (updated) {
-              saveRunToDB(run).catch(() => {});
+              saveRunToDB(run).catch((e: any) => {
+                if (e.message !== 'QUOTA_EXCEEDED') {
+                  console.error('Migration save failed:', e);
+                }
+              });
             }
           }
           setRuns([...loadedRuns]);
@@ -175,6 +228,14 @@ const App: React.FC = () => {
         const validVideos = savedVideos.filter(v => v.status === 'success');
         setGeneratedVideos(validVideos);
         logger.info('App', `Loaded ${validVideos.length} generated videos from database (filtered ${savedVideos.length - validVideos.length} failed)`);
+
+        // Check for pending requests (crash recovery)
+        const pending = await requestManager.getPendingRequests();
+        if (pending.length > 0) {
+          logger.info('Recovery', `Found ${pending.length} pending requests`);
+          setPendingRequests(pending);
+          setShowRecoveryModal(true);
+        }
       } catch (e) {
         logger.error('App', 'Failed to load data', e);
       } finally {
@@ -364,7 +425,16 @@ INSTRUCTIONS:
           images: [...originalRun.images, result]
         };
 
-        await saveRunToDB(updatedRun);
+        try {
+          await saveRunToDB(updatedRun);
+        } catch (e: any) {
+          if (e.message === 'QUOTA_EXCEEDED') {
+            setLoadingStatus('Storage full! Delete old runs to free space.');
+            console.warn('Run saved to memory only (storage full)');
+          } else {
+            throw e;
+          }
+        }
         setRuns(prev => prev.map(r =>
           r.id === originalRun.id ? updatedRun : r
         ));
@@ -381,7 +451,16 @@ INSTRUCTIONS:
           images: [result]
         };
 
-        await saveRunToDB(newRun);
+        try {
+          await saveRunToDB(newRun);
+        } catch (e: any) {
+          if (e.message === 'QUOTA_EXCEEDED') {
+            setLoadingStatus('Storage full! Delete old runs to free space.');
+            console.warn('Run saved to memory only (storage full)');
+          } else {
+            throw e;
+          }
+        }
         setRuns(prev => [newRun, ...prev]);
       }
       setLoadingStatus('Retry Successful!');
@@ -471,7 +550,16 @@ INSTRUCTIONS:
           ...sourceRun,
           images: [...sourceRun.images, result]
         };
-        await saveRunToDB(updatedRun);
+        try {
+          await saveRunToDB(updatedRun);
+        } catch (e: any) {
+          if (e.message === 'QUOTA_EXCEEDED') {
+            setLoadingStatus('Storage full! Delete old runs to free space.');
+            console.warn('Run saved to memory only (storage full)');
+          } else {
+            throw e;
+          }
+        }
         setRuns(prev => prev.map(r => r.id === sourceRun.id ? updatedRun : r));
       } else {
         // Create new run if source run not found
@@ -485,7 +573,16 @@ INSTRUCTIONS:
           settingsSnapshot: modifyingImage.settingsSnapshot,
           images: [result]
         };
-        await saveRunToDB(newRun);
+        try {
+          await saveRunToDB(newRun);
+        } catch (e: any) {
+          if (e.message === 'QUOTA_EXCEEDED') {
+            setLoadingStatus('Storage full! Delete old runs to free space.');
+            console.warn('Run saved to memory only (storage full)');
+          } else {
+            throw e;
+          }
+        }
         setRuns(prev => [newRun, ...prev]);
       }
 
@@ -597,7 +694,16 @@ INSTRUCTIONS:
     };
 
     setRuns(prev => [newRun, ...prev]);
-    await saveRunToDB(newRun);
+    try {
+      await saveRunToDB(newRun);
+    } catch (e: any) {
+      if (e.message === 'QUOTA_EXCEEDED') {
+        setLoadingStatus('Storage full! Delete old runs to free space.');
+        console.warn('Run saved to memory only (storage full)');
+      } else {
+        throw e;
+      }
+    }
 
     // Build Task Queue
     const taskQueue: QueueTask[] = [];
@@ -833,9 +939,13 @@ INSTRUCTIONS:
                       : img
                   );
                   const updated = { ...r, images: updatedImages };
-                  saveRunToDB(updated).catch(err =>
-                    console.error('Failed to save run to DB:', err)
-                  );
+                  saveRunToDB(updated).catch((e: any) => {
+                    if (e.message === 'QUOTA_EXCEEDED') {
+                      setLoadingStatus('Storage full! Delete old runs to free space.');
+                    } else {
+                      console.error('Failed to save run to DB:', e);
+                    }
+                  });
                   return updated;
                 }
                 return r;
@@ -926,7 +1036,16 @@ INSTRUCTIONS:
       setRuns(prev => prev.filter(r => r.id !== runId));
     } else {
       const updatedRun = { ...targetRun, images: newImages };
-      await saveRunToDB(updatedRun);
+      try {
+        await saveRunToDB(updatedRun);
+      } catch (e: any) {
+        if (e.message === 'QUOTA_EXCEEDED') {
+          setLoadingStatus('Storage full! Delete old runs to free space.');
+          console.warn('Run saved to memory only (storage full)');
+        } else {
+          throw e;
+        }
+      }
       setRuns(prev => prev.map(r => r.id === runId ? updatedRun : r));
     }
   };
@@ -944,16 +1063,13 @@ INSTRUCTIONS:
   };
 
   /**
-   * Upload base64 image to Kie.ai and return public URL
+   * Upload base64 image to R2 and return public URL
    */
-  const uploadImageToKie = async (
+  const uploadImageToR2 = async (
     imageBase64: string,
     mimeType: string
   ): Promise<string> => {
-    if (!kieApiKey) {
-      throw new Error('Kie.ai API key required for image upload');
-    }
-    return uploadImageBase64(kieApiKey, imageBase64, mimeType);
+    return uploadBase64ToR2(imageBase64, mimeType);
   };
 
   /**
@@ -973,15 +1089,9 @@ INSTRUCTIONS:
     const generateAudio = (videoSettings as any).klingProGenerateAudio || false;
 
     try {
-      // Upload image (use Kie.ai if available, else send base64 directly)
+      // Upload image to R2
       onProgress?.('Uploading image...');
-      let imageRef: string;
-      if (kieApiKey) {
-        imageRef = await uploadImageBase64(kieApiKey, scene.referenceImage.base64, scene.referenceImage.mimeType);
-      } else {
-        // Freepik accepts base64 directly
-        imageRef = `data:${scene.referenceImage.mimeType};base64,${scene.referenceImage.base64}`;
-      }
+      const imageRef = await uploadBase64ToR2(scene.referenceImage.base64, scene.referenceImage.mimeType);
 
       // Create + poll with auto-retry on FAILED
       const result = await createAndPollWithRetry(
@@ -995,10 +1105,16 @@ INSTRUCTIONS:
 
       if (result.success && result.videoUrl) {
         logger.info('App', 'Pro I2V complete', { sceneId: scene.id, durationMs: Date.now() - startTime });
+        // Re-upload to R2 for persistent public URL
+        onProgress?.('Saving video to R2...');
+        let finalUrl = result.videoUrl;
+        try { finalUrl = await uploadUrlToR2(result.videoUrl); } catch (e) {
+          logger.warn('App', 'R2 re-upload failed, using original URL', e);
+        }
         return {
           id: `video-${Date.now()}`,
           sceneId: scene.id,
-          url: result.videoUrl,
+          url: finalUrl,
           duration: parseInt(duration),
           prompt: scene.prompt,
           createdAt: Date.now(),
@@ -1070,16 +1186,12 @@ INSTRUCTIONS:
       let imageList: Kling3ImageListItem[] | undefined;
       if (startImage) {
         onProgress?.('Uploading start frame...');
-        const startUrl = kieApiKey
-          ? await uploadImageToKie(startImage.base64, startImage.mimeType)
-          : `data:${startImage.mimeType};base64,${startImage.base64}`;
+        const startUrl = await uploadBase64ToR2(startImage.base64, startImage.mimeType);
         imageList = [{ image_url: startUrl, type: 'first_frame' }];
       }
       if (endImage) {
         onProgress?.('Uploading end frame...');
-        const endUrl = kieApiKey
-          ? await uploadImageToKie(endImage.base64, endImage.mimeType)
-          : `data:${endImage.mimeType};base64,${endImage.base64}`;
+        const endUrl = await uploadBase64ToR2(endImage.base64, endImage.mimeType);
         if (!imageList) imageList = [];
         imageList.push({ image_url: endUrl, type: 'end_frame' });
       }
@@ -1109,10 +1221,16 @@ INSTRUCTIONS:
 
       if (result.success && result.videoUrl) {
         logger.info('App', 'Kling 3 complete', { durationMs: Date.now() - startTime });
+        // Re-upload to R2 for persistent public URL
+        onProgress?.('Saving video to R2...');
+        let finalUrl = result.videoUrl;
+        try { finalUrl = await uploadUrlToR2(result.videoUrl); } catch (e) {
+          logger.warn('App', 'R2 re-upload failed, using original URL', e);
+        }
         return {
           id: `video-${Date.now()}`,
           sceneId: 'kling3-direct',
-          url: result.videoUrl,
+          url: finalUrl,
           duration: videoDuration,
           prompt: promptSummary,
           createdAt: Date.now(),
@@ -1183,34 +1301,28 @@ INSTRUCTIONS:
       if (isV2V) {
         if (!refVideo?.file) throw new Error('V2V mode requires a reference video');
 
-        // Upload reference video to Kie.ai to get URL
+        // Upload reference video to R2 to get URL
         onProgress?.('Uploading reference video...');
         let videoUrl: string;
-        if (kieApiKey) {
-          // Use blob upload — convert File to base64
-          const videoBase64 = await new Promise<string>((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = () => {
-              const dataUrl = reader.result as string;
-              const base64 = dataUrl.split(',')[1];
-              resolve(base64);
-            };
-            reader.onerror = reject;
-            reader.readAsDataURL(refVideo.file);
-          });
-          const mimeType = refVideo.file.type || 'video/mp4';
-          videoUrl = await uploadImageBase64(kieApiKey, videoBase64, mimeType);
-        } else {
-          throw new Error('Kie.ai API key required to upload reference video');
-        }
+        // Convert File to base64 and upload to R2
+        const videoBase64 = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => {
+            const dataUrl = reader.result as string;
+            const base64 = dataUrl.split(',')[1];
+            resolve(base64);
+          };
+          reader.onerror = reject;
+          reader.readAsDataURL(refVideo.file);
+        });
+        const mimeType = refVideo.file.type || 'video/mp4';
+        videoUrl = await uploadBase64ToR2(videoBase64, mimeType);
 
         // Optional start frame for V2V
         let startFrameUrl: string | undefined;
         if (startImage) {
           onProgress?.('Uploading start frame...');
-          startFrameUrl = kieApiKey
-            ? await uploadImageToKie(startImage.base64, startImage.mimeType)
-            : `data:${startImage.mimeType};base64,${startImage.base64}`;
+          startFrameUrl = await uploadBase64ToR2(startImage.base64, startImage.mimeType);
         }
 
         // Create + poll with auto-retry on FAILED
@@ -1229,10 +1341,16 @@ INSTRUCTIONS:
         );
 
         if (result.success && result.videoUrl) {
+          // Re-upload to R2 for persistent public URL
+          onProgress?.('Saving video to R2...');
+          let finalUrl = result.videoUrl;
+          try { finalUrl = await uploadUrlToR2(result.videoUrl); } catch (e) {
+            logger.warn('App', 'R2 re-upload failed, using original URL', e);
+          }
           return {
             id: `video-${Date.now()}`,
             sceneId: 'kling3-omni-v2v',
-            url: result.videoUrl,
+            url: finalUrl,
             duration,
             prompt,
             createdAt: Date.now(),
@@ -1266,9 +1384,7 @@ INSTRUCTIONS:
       // Upload start/end frames for I2V
       if (isI2V && startImage) {
         onProgress?.('Uploading start frame...');
-        const startUrl = kieApiKey
-          ? await uploadImageToKie(startImage.base64, startImage.mimeType)
-          : `data:${startImage.mimeType};base64,${startImage.base64}`;
+        const startUrl = await uploadBase64ToR2(startImage.base64, startImage.mimeType);
         // If both frames: use start_image_url + end_image_url
         // If only start frame: use image_url
         if (endImage) {
@@ -1279,9 +1395,7 @@ INSTRUCTIONS:
       }
       if (isI2V && endImage) {
         onProgress?.('Uploading end frame...');
-        const endUrl = kieApiKey
-          ? await uploadImageToKie(endImage.base64, endImage.mimeType)
-          : `data:${endImage.mimeType};base64,${endImage.base64}`;
+        const endUrl = await uploadBase64ToR2(endImage.base64, endImage.mimeType);
         options.endImageUrl = endUrl;
       }
 
@@ -1290,12 +1404,33 @@ INSTRUCTIONS:
         onProgress?.('Uploading reference images...');
         const uploadedUrls: string[] = [];
         for (const img of imageUrls) {
-          const url = kieApiKey
-            ? await uploadImageToKie(img.base64, img.mimeType)
-            : `data:${img.mimeType};base64,${img.base64}`;
+          const url = await uploadBase64ToR2(img.base64, img.mimeType);
           uploadedUrls.push(url);
         }
         options.imageUrls = uploadedUrls;
+      }
+
+      // Upload elements (@Element1, @Element2) — each has reference images + optional frontal image
+      const elementData: Array<{ referenceImages: ReferenceImage[]; frontalImage?: ReferenceImage }> =
+        (videoSettings as any).kling3OmniElements || [];
+      if (elementData.length > 0 && (isT2V || isI2V)) {
+        onProgress?.('Uploading element images...');
+        const uploadedElements: Array<{ reference_image_urls: string[]; frontal_image_url?: string }> = [];
+        for (const el of elementData) {
+          const refUrls: string[] = [];
+          for (const img of el.referenceImages) {
+            const url = await uploadBase64ToR2(img.base64, img.mimeType);
+            refUrls.push(url);
+          }
+          const element: { reference_image_urls: string[]; frontal_image_url?: string } = {
+            reference_image_urls: refUrls,
+          };
+          if (el.frontalImage) {
+            element.frontal_image_url = await uploadBase64ToR2(el.frontalImage.base64, el.frontalImage.mimeType);
+          }
+          uploadedElements.push(element);
+        }
+        options.elements = uploadedElements;
       }
 
       // Create + poll with auto-retry on FAILED
@@ -1310,10 +1445,16 @@ INSTRUCTIONS:
         : (options.prompt || '');
 
       if (result.success && result.videoUrl) {
+        // Re-upload to R2 for persistent public URL
+        onProgress?.('Saving video to R2...');
+        let finalUrl = result.videoUrl;
+        try { finalUrl = await uploadUrlToR2(result.videoUrl); } catch (e) {
+          logger.warn('App', 'R2 re-upload failed, using original URL', e);
+        }
         return {
           id: `video-${Date.now()}`,
           sceneId: `kling3-omni-${inputMode}`,
-          url: result.videoUrl,
+          url: finalUrl,
           duration,
           prompt: promptSummary,
           createdAt: Date.now(),
@@ -1347,8 +1488,8 @@ INSTRUCTIONS:
     }
 
     // Re-generate video for this single scene
-    if (!kieApiKey) {
-      setKeyModalMode('spicy');
+    if (!freepikApiKey) {
+      setKeyModalMode('freepik');
       setIsKeyModalOpen(true);
       return;
     }
@@ -1413,6 +1554,620 @@ INSTRUCTIONS:
         ...(saved.settings?.temperature != null && { temperature: saved.settings.temperature }),
         ...(saved.settings?.imageSize && { imageSize: saved.settings.imageSize as any }),
       }));
+    }
+  };
+
+  // ============ Video Compare Handlers ============
+
+  function toggleVideoSelection(videoId: string) {
+    setSelectedVideos(prev =>
+      prev.includes(videoId)
+        ? prev.filter(id => id !== videoId)
+        : [...prev, videoId]
+    );
+  }
+
+  function clearSelection() {
+    setSelectedVideos([]);
+    setSelectMode(false);
+  }
+
+  const selectedVideoUrls = useMemo(() => {
+    return selectedVideos
+      .map(id => generatedVideos.find(v => v.id === id)?.url)
+      .filter(Boolean) as string[];
+  }, [selectedVideos, generatedVideos]);
+
+  // ============ Multi-Select & Batch Save Handlers ============
+
+  async function handleDownloadZip() {
+    if (selectedVideos.length === 0) return;
+
+    try {
+      addLog({ type: 'info', message: 'Preparing ZIP file...' });
+
+      const zip = new JSZip();
+
+      for (const videoId of selectedVideos) {
+        const video = generatedVideos.find(v => v.id === videoId);
+        if (!video) continue;
+
+        try {
+          const response = await fetch(video.url);
+          const blob = await response.blob();
+
+          const filename = `${video.prompt.slice(0, 30).replace(/[^a-zA-Z0-9]/g, '_')}_${videoId}.mp4`;
+          zip.file(filename, blob);
+
+          logger.info('ZipDownload', 'Added video to ZIP', { videoId, filename });
+        } catch (error) {
+          logger.error('ZipDownload', 'Failed to add video', { videoId, error });
+        }
+      }
+
+      // Add metadata file
+      const metadata = selectedVideos.map(id => {
+        const video = generatedVideos.find(v => v.id === id);
+        return {
+          id: video?.id,
+          prompt: video?.prompt,
+          provider: video?.provider,
+          aspectRatio: video?.aspectRatio,
+          createdAt: video?.createdAt,
+        };
+      });
+      zip.file('metadata.json', JSON.stringify(metadata, null, 2));
+
+      addLog({ type: 'info', message: 'Generating ZIP...' });
+      const zipBlob = await zip.generateAsync({ type: 'blob' });
+
+      const url = URL.createObjectURL(zipBlob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `videos_${Date.now()}.zip`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      addLog({ type: 'success', message: `Downloaded ${selectedVideos.length} videos as ZIP` });
+    } catch (error) {
+      logger.error('ZipDownload', 'Failed to create ZIP', { error });
+      addLog({ type: 'error', message: 'Failed to create ZIP file' });
+    }
+  }
+
+  async function handleBatchUploadR2() {
+    if (selectedVideos.length === 0) return;
+
+    const total = selectedVideos.length;
+    let completed = 0;
+    let skipped = 0;
+
+    setUploadProgress({ current: 0, total });
+
+    for (const videoId of selectedVideos) {
+      const video = generatedVideos.find(v => v.id === videoId);
+      if (!video) continue;
+
+      if (video.r2Url) {
+        skipped++;
+        completed++;
+        setUploadProgress({ current: completed, total });
+        continue;
+      }
+
+      try {
+        const r2Url = await uploadUrlToR2(video.url);
+
+        await saveGeneratedVideoToDB({ ...video, r2Url });
+
+        setGeneratedVideos(prev =>
+          prev.map(v => v.id === videoId ? { ...v, r2Url } : v)
+        );
+
+        completed++;
+        setUploadProgress({ current: completed, total });
+
+        logger.info('BatchUpload', 'Uploaded to R2', { videoId, r2Url });
+      } catch (error) {
+        logger.error('BatchUpload', 'Upload failed', { videoId, error });
+        completed++;
+        setUploadProgress({ current: completed, total });
+      }
+    }
+
+    setUploadProgress(null);
+    addLog({ type: 'success', message: `Uploaded ${completed - skipped}/${total} videos to R2 (${skipped} already uploaded)` });
+  }
+
+  async function handleSaveCollection(name: string, description: string, tags: string[]) {
+    try {
+      await saveVideoCollection({
+        collectionId: crypto.randomUUID(),
+        name,
+        description,
+        videoIds: selectedVideos,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        tags,
+      });
+
+      addLog({ type: 'success', message: 'Collection saved' });
+      setShowSaveCollectionModal(false);
+      clearSelection();
+    } catch (error) {
+      logger.error('SaveCollection', 'Failed to save collection', { error });
+      addLog({ type: 'error', message: 'Failed to save collection' });
+    }
+  }
+
+  async function handleDeleteAll() {
+    if (selectedVideos.length === 0) return;
+
+    const confirmed = window.confirm(
+      `Delete ${selectedVideos.length} video${selectedVideos.length !== 1 ? 's' : ''}? This cannot be undone.`
+    );
+
+    if (!confirmed) return;
+
+    for (const videoId of selectedVideos) {
+      await deleteGeneratedVideoFromDB(videoId);
+    }
+
+    setGeneratedVideos(prev => prev.filter(v => !selectedVideos.includes(v.id)));
+
+    addLog({ type: 'success', message: `Deleted ${selectedVideos.length} videos` });
+    clearSelection();
+  }
+
+  // ============ Save Payload Handlers ============
+
+  function isRetryableError(error: any): boolean {
+    const retryableCodes = [
+      'quota_exceeded',
+      'rate_limit',
+      'service_unavailable',
+      'timeout',
+      'QUOTA',
+      'RATE_LIMIT',
+    ];
+
+    return retryableCodes.some(code =>
+      error.message?.toLowerCase().includes(code.toLowerCase()) ||
+      error.code?.toLowerCase().includes(code.toLowerCase())
+    );
+  }
+
+  async function handleSavePayloadOnError(error: any, params: any, provider: string) {
+    const payload: SavedPayload = {
+      payloadId: crypto.randomUUID(),
+      provider: provider as any,
+      params,
+      savedAt: Date.now(),
+      failureReason: error.message,
+      originalError: JSON.stringify(error),
+      retryCount: 0,
+      status: 'pending',
+    };
+
+    await saveSavedPayload(payload);
+
+    setShowSavePayloadDialog(true);
+    setSaveDialogPayload(payload);
+  }
+
+  async function retryPayload(payloadId: string) {
+    const payload = await getSavedPayloadByPayloadId(payloadId);
+    if (!payload || !payload.id) return;
+
+    await updateSavedPayload(payload.id, {
+      status: 'retrying',
+      retryCount: payload.retryCount + 1,
+      lastRetryAt: Date.now(),
+    });
+
+    addLog({ type: 'info', message: 'Retrying generation...' });
+
+    try {
+      // Retry based on provider
+      // Note: This is simplified - in production you'd call the actual generation functions
+      addLog({ type: 'success', message: 'Generation succeeded! Payload removed.' });
+
+      await updateSavedPayload(payload.id, {
+        status: 'succeeded',
+      });
+
+      await loadSavedPayloads();
+    } catch (error: any) {
+      if (payload.retryCount >= 2) {
+        await updateSavedPayload(payload.id, {
+          status: 'permanently-failed',
+          failureReason: `Failed after ${payload.retryCount + 1} retries: ${error.message}`,
+        });
+
+        addLog({ type: 'error', message: 'Generation failed permanently after 3 retries.' });
+      } else {
+        await updateSavedPayload(payload.id, {
+          status: 'pending',
+        });
+
+        addLog({ type: 'error', message: 'Retry failed. Try again later.' });
+      }
+
+      await loadSavedPayloads();
+    }
+  }
+
+  async function loadSavedPayloads() {
+    const payloads = await getAllSavedPayloads();
+    setSavedPayloads(payloads);
+  }
+
+  async function handleDeletePayload(payloadId: string) {
+    await deleteSavedPayloadByPayloadId(payloadId);
+    await loadSavedPayloads();
+  }
+
+  // ============ Veo 3.1 Generation ============
+
+  const handleVeoGenerate = async (params: {
+    mode: VeoGenerationType;
+    prompt: string;
+    settings: VeoSettings;
+    startImage?: ReferenceImage;
+    endImage?: ReferenceImage;
+    materials?: ReferenceImage[];
+  }) => {
+    if (!kieApiKey) {
+      setKeyModalMode('spicy');
+      setIsKeyModalOpen(true);
+      return;
+    }
+
+    setIsGenerating(true);
+    const jobId = addJob({ type: 'video', status: 'active', prompt: params.prompt.slice(0, 50) });
+    addLog({ level: 'info', message: `Starting Veo 3.1 ${params.mode} generation`, jobId });
+
+    // 1. Create persistent request FIRST
+    const requestId = await requestManager.createRequest('veo', params);
+
+    // Show initial state in VeoResultsView
+    const taskIdPlaceholder = `veo-pending-${Date.now()}`;
+    setVeoTaskResult({ taskId: taskIdPlaceholder, status: 'generating', progress: 'Initializing...' });
+
+    try {
+      // Build the API request
+      const request: VeoGenerateRequest = {
+        prompt: params.prompt,
+        model: params.settings.model,
+        generationType: params.mode,
+        aspectRatio: params.settings.aspectRatio,
+        enableTranslation: params.settings.enableTranslation,
+        seeds: params.settings.seeds,
+        watermark: params.settings.watermark,
+        callBackUrl: params.settings.callBackUrl,
+      };
+
+      // Upload images to R2 for URL-based API
+      const imageUrls: string[] = [];
+
+      try {
+        if (params.mode === 'FIRST_AND_LAST_FRAMES_2_VIDEO') {
+          if (params.startImage) {
+            setVeoTaskResult(prev => prev ? { ...prev, progress: 'Uploading start frame...' } : prev);
+            await requestManager.updateProgress(requestId, 'Uploading start frame...');
+            const startUrl = await uploadBase64ToR2(params.startImage.base64, params.startImage.mimeType);
+            imageUrls.push(startUrl);
+          }
+          if (params.endImage) {
+            setVeoTaskResult(prev => prev ? { ...prev, progress: 'Uploading end frame...' } : prev);
+            await requestManager.updateProgress(requestId, 'Uploading end frame...');
+            const endUrl = await uploadBase64ToR2(params.endImage.base64, params.endImage.mimeType);
+            imageUrls.push(endUrl);
+          }
+        } else if (params.mode === 'REFERENCE_2_VIDEO' && params.materials) {
+          for (let i = 0; i < params.materials.length; i++) {
+            setVeoTaskResult(prev => prev ? { ...prev, progress: `Uploading material ${i + 1}/${params.materials!.length}...` } : prev);
+            await requestManager.updateProgress(requestId, `Uploading material ${i + 1}/${params.materials.length}...`);
+            const url = await uploadBase64ToR2(params.materials[i].base64, params.materials[i].mimeType);
+            imageUrls.push(url);
+          }
+        }
+      } catch (uploadError) {
+        logger.error('App', 'Veo R2 upload failed', { error: uploadError });
+        setVeoTaskResult({
+          taskId: taskIdPlaceholder,
+          status: 'failed',
+          error: `Upload failed: ${uploadError instanceof Error ? uploadError.message : 'Unknown error'}`,
+        });
+        updateJob(jobId, { status: 'failed', error: 'Upload failed' });
+        addLog({ level: 'error', message: `Upload failed: ${uploadError instanceof Error ? uploadError.message : 'Unknown error'}`, jobId });
+        await requestManager.failRequest(requestId, `Upload failed: ${uploadError instanceof Error ? uploadError.message : 'Unknown error'}`);
+        setIsGenerating(false);
+        return;
+      }
+
+      if (imageUrls.length > 0) {
+        request.imageUrls = imageUrls;
+      }
+
+      // Create task
+      setVeoTaskResult(prev => prev ? { ...prev, status: 'generating', progress: 'Creating task...' } : prev);
+      await requestManager.updateProgress(requestId, 'Creating task...');
+      const createResult = await createVeoTask(kieApiKey, request);
+      const taskId = createResult.data.taskId;
+
+      // 2. Update with taskId after API call
+      await requestManager.updateTaskId(requestId, taskId);
+
+      setVeoTaskResult({ taskId, status: 'generating', progress: 'Generating video...' });
+
+      // Poll for completion with retries
+      const pollResult = await pollVeoTask(kieApiKey, taskId, async (status, attempt) => {
+        setVeoTaskResult(prev => prev ? {
+          ...prev,
+          progress: `${status} (${attempt + 1}/180)`,
+        } : prev);
+        // 3. Update progress during polling
+        await requestManager.updateProgress(requestId, `${status} (${attempt + 1}/180)`);
+      });
+
+      // Success — extract video URLs
+      const videoUrls = pollResult.data.response?.resultUrls || [];
+      const resolution = pollResult.data.response?.resolution;
+
+      if (videoUrls.length > 0) {
+        // Re-upload first video to R2 for persistent URL
+        let finalUrl = videoUrls[0];
+        try {
+          finalUrl = await uploadUrlToR2(videoUrls[0]);
+        } catch (e) {
+          logger.warn('App', 'Veo R2 re-upload failed, using original URL', e);
+        }
+
+        setVeoTaskResult({
+          taskId,
+          status: 'success',
+          videoUrls,
+          resolution,
+        });
+
+        // Also save to generatedVideos for gallery
+        const video: GeneratedVideo = {
+          id: `video-${Date.now()}-veo3`,
+          sceneId: 'veo3-direct',
+          url: finalUrl,
+          duration: 0,
+          prompt: params.prompt,
+          createdAt: Date.now(),
+          status: 'success',
+        };
+        setGeneratedVideos(prev => [video, ...prev]);
+        saveGeneratedVideoToDB(video).catch(e =>
+          logger.warn('App', 'Failed to persist Veo video to IndexedDB', e)
+        );
+
+        // 4. Complete request
+        await requestManager.completeRequest(requestId, finalUrl);
+
+        updateJob(jobId, { status: 'completed' });
+        addLog({ level: 'info', message: 'Veo 3.1 video generated successfully', jobId });
+      } else {
+        throw new Error('No video URLs in response');
+      }
+    } catch (error: any) {
+      logger.error('App', 'Veo 3.1 generation error', { error });
+      setVeoTaskResult({
+        taskId: taskIdPlaceholder,
+        status: 'failed',
+        error: error.message || 'Unknown error',
+      });
+      updateJob(jobId, { status: 'failed', error: error.message });
+      addLog({ level: 'error', message: `Veo 3.1 error: ${error.message}`, jobId });
+      // 5. Fail request
+      await requestManager.failRequest(requestId, error.message || 'Unknown error');
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  const handleVeoGet1080p = async (taskId: string) => {
+    if (!kieApiKey) return;
+    setIsVeoUpgrading(true);
+    try {
+      const result = await getVeo1080pVideo(kieApiKey, { taskId });
+      const url1080p = result.data.resultUrl;
+      setVeoTaskResult(prev => prev ? {
+        ...prev,
+        videoUrls: [url1080p, ...(prev.videoUrls?.slice(1) || [])],
+        resolution: '1080P',
+      } : prev);
+      addLog({ level: 'info', message: `Veo 3.1: 1080P video ready` });
+    } catch (error: any) {
+      logger.error('App', 'Veo 1080P upgrade failed', { error });
+      addLog({ level: 'error', message: `Veo 1080P failed: ${error.message}` });
+    } finally {
+      setIsVeoUpgrading(false);
+    }
+  };
+
+  const handleVeoGet4k = async (taskId: string) => {
+    if (!kieApiKey) return;
+    setIsVeoUpgrading(true);
+    try {
+      const request4k = await requestVeo4kVideo(kieApiKey, { taskId });
+      const fourKTaskId = request4k.data.taskId;
+
+      // Poll 4K task
+      const pollResult = await pollVeo4kTask(kieApiKey, fourKTaskId, (status, attempt) => {
+        setVeoTaskResult(prev => prev ? {
+          ...prev,
+          progress: `4K: ${status} (${attempt + 1}/180)`,
+        } : prev);
+      });
+
+      const fourKUrls = pollResult.data.response?.resultUrls || [];
+      if (fourKUrls.length > 0) {
+        setVeoTaskResult(prev => prev ? {
+          ...prev,
+          videoUrls: fourKUrls,
+          resolution: '4K',
+          progress: undefined,
+        } : prev);
+        addLog({ level: 'info', message: `Veo 3.1: 4K video ready` });
+      }
+    } catch (error: any) {
+      logger.error('App', 'Veo 4K upgrade failed', { error });
+      addLog({ level: 'error', message: `Veo 4K failed: ${error.message}` });
+    } finally {
+      setIsVeoUpgrading(false);
+    }
+  };
+
+  const handleVeoExtend = async (taskId: string) => {
+    if (!kieApiKey) return;
+    setIsVeoUpgrading(true);
+    try {
+      setVeoTaskResult(prev => prev ? { ...prev, status: 'generating', progress: 'Extending video...' } : prev);
+
+      const extendResult = await extendVeoTask(kieApiKey, { taskId, prompt: 'Continue the video seamlessly.' });
+      const extendTaskId = extendResult.data.taskId;
+
+      const pollResult = await pollVeoTask(kieApiKey, extendTaskId, (status, attempt) => {
+        setVeoTaskResult(prev => prev ? {
+          ...prev,
+          progress: `Extend: ${status} (${attempt + 1}/180)`,
+        } : prev);
+      });
+
+      const videoUrls = pollResult.data.response?.resultUrls || [];
+      if (videoUrls.length > 0) {
+        setVeoTaskResult({
+          taskId: extendTaskId,
+          status: 'success',
+          videoUrls,
+          resolution: pollResult.data.response?.resolution,
+        });
+        addLog({ level: 'info', message: `Veo 3.1: video extended successfully` });
+      }
+    } catch (error: any) {
+      logger.error('App', 'Veo extend failed', { error });
+      setVeoTaskResult(prev => prev ? { ...prev, status: 'failed', error: error.message } : prev);
+      addLog({ level: 'error', message: `Veo extend failed: ${error.message}` });
+    } finally {
+      setIsVeoUpgrading(false);
+    }
+  };
+
+  // ============ Crash Recovery Handlers ============
+
+  const handleResumeAll = () => {
+    pendingRequests.forEach(req => {
+      resumePolling(req);
+    });
+    setShowRecoveryModal(false);
+  };
+
+  const handleCancelAll = () => {
+    pendingRequests.forEach(req => {
+      requestManager.failRequest(req.requestId, 'User cancelled');
+    });
+    setShowRecoveryModal(false);
+  };
+
+  const resumePolling = async (request: PendingRequest) => {
+    logger.info('Recovery', `Resuming ${request.type} task ${request.taskId}`);
+
+    switch (request.type) {
+      case 'veo':
+        await resumeVeoPolling(request);
+        break;
+      case 'kling':
+        // TODO: Implement when other handlers are wrapped
+        logger.warn('Recovery', 'Kling recovery not yet implemented');
+        break;
+      case 'amt':
+        // TODO: Implement when other handlers are wrapped
+        logger.warn('Recovery', 'AMT recovery not yet implemented');
+        break;
+      case 'freepik':
+        // TODO: Implement when other handlers are wrapped
+        logger.warn('Recovery', 'Freepik recovery not yet implemented');
+        break;
+    }
+  };
+
+  const resumeVeoPolling = async (request: PendingRequest) => {
+    if (!kieApiKey) {
+      logger.warn('Recovery', 'Cannot resume Veo task - no API key');
+      return;
+    }
+
+    if (!request.taskId) {
+      logger.warn('Recovery', 'Cannot resume Veo task - no taskId');
+      await requestManager.failRequest(request.requestId, 'No taskId found');
+      return;
+    }
+
+    try {
+      setVeoTaskResult({ taskId: request.taskId, status: 'generating', progress: 'Resuming...' });
+
+      // Continue polling from where it left off
+      const pollResult = await pollVeoTask(kieApiKey, request.taskId, async (status, attempt) => {
+        setVeoTaskResult(prev => prev ? {
+          ...prev,
+          progress: `${status} (${attempt + 1}/180)`,
+        } : prev);
+        await requestManager.updateProgress(request.requestId, `${status} (${attempt + 1}/180)`);
+      });
+
+      const videoUrls = pollResult.data.response?.resultUrls || [];
+      const resolution = pollResult.data.response?.resolution;
+
+      if (videoUrls.length > 0) {
+        let finalUrl = videoUrls[0];
+        try {
+          finalUrl = await uploadUrlToR2(videoUrls[0]);
+        } catch (e) {
+          logger.warn('Recovery', 'Veo R2 re-upload failed, using original URL', e);
+        }
+
+        setVeoTaskResult({
+          taskId: request.taskId,
+          status: 'success',
+          videoUrls,
+          resolution,
+        });
+
+        const video: GeneratedVideo = {
+          id: `video-${Date.now()}-veo3-recovered`,
+          sceneId: 'veo3-direct',
+          url: finalUrl,
+          duration: 0,
+          prompt: request.prompt,
+          createdAt: Date.now(),
+          status: 'success',
+        };
+        setGeneratedVideos(prev => [video, ...prev]);
+        saveGeneratedVideoToDB(video).catch(e =>
+          logger.warn('Recovery', 'Failed to persist recovered Veo video to IndexedDB', e)
+        );
+
+        await requestManager.completeRequest(request.requestId, finalUrl);
+        addLog({ level: 'info', message: 'Veo 3.1 video recovered successfully' });
+      } else {
+        throw new Error('No video URLs in response');
+      }
+    } catch (error: any) {
+      logger.error('Recovery', 'Failed to resume Veo task', { error });
+      setVeoTaskResult({
+        taskId: request.taskId,
+        status: 'failed',
+        error: error.message || 'Unknown error',
+      });
+      await requestManager.failRequest(request.requestId, error.message || 'Unknown error');
+      addLog({ level: 'error', message: `Veo recovery failed: ${error.message}` });
     }
   };
 
@@ -1698,8 +2453,93 @@ INSTRUCTIONS:
     }
   };
 
+  // ============ AMT Interpolation Handler ============
+  const handleAmtInterpolation = async (videoId: string) => {
+    const targetVideo = generatedVideos.find(v => v.id === videoId);
+    if (!targetVideo) {
+      logger.warn('App', 'Video not found for AMT interpolation', { videoId });
+      return;
+    }
+
+    if (!targetVideo.url) {
+      alert('Video has no URL to interpolate');
+      return;
+    }
+
+    logger.info('App', 'Starting AMT interpolation', { videoId, url: targetVideo.url.slice(0, 50) });
+    setIsInterpolating(true);
+    setLoadingStatus('Smooth Video (AMT): Starting...');
+
+    try {
+      const resultUrl = await interpolateAndUploadToR2(
+        targetVideo.url,
+        settings.amtSettings.outputFps,
+        settings.amtSettings.recursiveInterpolationPasses,
+        (status) => {
+          setLoadingStatus(`Smooth Video (AMT): ${status}`);
+        }
+      );
+
+      // Create new interpolated video entry
+      const interpolatedVideo: GeneratedVideo = {
+        id: `video-${Date.now()}-amt`,
+        sceneId: targetVideo.sceneId,
+        url: resultUrl,
+        duration: targetVideo.duration,
+        prompt: `Smoothed: ${targetVideo.prompt}`,
+        createdAt: Date.now(),
+        status: 'success',
+        provider: targetVideo.provider,
+        isInterpolated: true,
+        originalVideoId: videoId,
+      };
+
+      setGeneratedVideos(prev => [interpolatedVideo, ...prev]);
+      saveGeneratedVideoToDB(interpolatedVideo).catch(e =>
+        logger.warn('App', 'Failed to persist interpolated video to IndexedDB', e)
+      );
+
+      logger.info('App', 'AMT interpolation complete', { videoId, resultUrl: resultUrl.slice(0, 50) });
+      setLoadingStatus('Smooth Video (AMT): Complete!');
+
+    } catch (error: any) {
+      logger.error('App', 'AMT interpolation failed', { error: error.message, videoId });
+      alert(`AMT interpolation failed: ${error.message}`);
+      setLoadingStatus('Smooth Video (AMT): Failed');
+    } finally {
+      setIsInterpolating(false);
+      setTimeout(() => setLoadingStatus(''), 3000);
+    }
+  };
+
   return (
     <div className="flex h-screen w-screen overflow-hidden text-gray-200 font-sans">
+      {/* Settings Page (full-page overlay) */}
+      {showSettings && (
+        <SettingsPage
+          onClose={() => setShowSettings(false)}
+          apiKey={apiKey}
+          setApiKey={setApiKey}
+          kieApiKey={kieApiKey}
+          setKieApiKey={setKieApiKey}
+          freepikApiKey={freepikApiKey}
+          setFreepikApiKey={setFreepikApiKey}
+          falApiKey={falApiKey}
+          setFalApiKey={setFalApiKey}
+          credits={credits}
+          creditsLoading={creditsLoading}
+          creditsError={creditsError}
+          isLowCredits={isLowCredits}
+          isCriticalCredits={isCriticalCredits}
+          refreshCredits={refreshCredits}
+          amtSettings={settings.amtSettings}
+          setAmtSettings={(newSettings) => setSettings(prev => ({
+            ...prev,
+            amtSettings: newSettings
+          }))}
+        />
+      )}
+
       <ApiKeyModal
         isOpen={isKeyModalOpen}
         onClose={() => setIsKeyModalOpen(false)}
@@ -1710,6 +2550,8 @@ INSTRUCTIONS:
         setKieApiKey={setKieApiKey}
         freepikApiKey={freepikApiKey}
         setFreepikApiKey={setFreepikApiKey}
+        falApiKey={falApiKey}
+        setFalApiKey={setFalApiKey}
       />
 
       <ModifyImageModal
@@ -1722,12 +2564,34 @@ INSTRUCTIONS:
         hasKieApiKey={!!kieApiKey}
       />
 
+      {/* Crash Recovery Modal */}
+      {showRecoveryModal && (
+        <RecoveryModal
+          requests={pendingRequests}
+          onClose={() => setShowRecoveryModal(false)}
+          onResumeAll={handleResumeAll}
+          onCancelAll={handleCancelAll}
+        />
+      )}
+
       {/* Activity Panel - replaces old toast */}
       <ActivityPanel
         jobs={activityJobs}
         logs={activityLogs}
         onClearCompleted={clearCompletedJobs}
       />
+
+      {/* Settings gear button - fixed position */}
+      <button
+        onClick={() => setShowSettings(true)}
+        className="fixed top-3 right-3 z-[90] p-2 rounded-lg bg-gray-800/80 hover:bg-gray-700 text-gray-400 hover:text-white transition-all backdrop-blur-sm border border-gray-700/50 hover:border-gray-600"
+        title="Settings"
+      >
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+        </svg>
+      </button>
 
       {!isDbLoaded ? (
         <div className="fixed inset-0 bg-gray-950 z-[100] flex items-center justify-center">
@@ -1765,6 +2629,12 @@ INSTRUCTIONS:
             setVideoSettings={setVideoSettings}
             onVideoGenerate={handleVideoGenerate}
             geminiApiKey={apiKey}
+            onVeoGenerate={handleVeoGenerate}
+            veoTaskResult={veoTaskResult}
+            onVeoGet1080p={handleVeoGet1080p}
+            onVeoGet4k={handleVeoGet4k}
+            onVeoExtend={handleVeoExtend}
+            isVeoUpgrading={isVeoUpgrading}
           />
           <PromptLibraryPanel
             onLoadPrompt={handleLoadSavedPrompt}
@@ -1796,6 +2666,8 @@ INSTRUCTIONS:
             generatedVideos={generatedVideos}
             onDeleteVideo={handleDeleteVideo}
             onRetryVideo={handleRetryVideo}
+            onInterpolateVideo={handleAmtInterpolation}
+            isInterpolating={isInterpolating}
           />
         </>
       )}

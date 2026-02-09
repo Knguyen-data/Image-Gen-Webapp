@@ -175,4 +175,4 @@ const ImageCard: React.FC<ImageCardProps> = ({ image, selected, onToggleSelect, 
   );
 };
 
-export default ImageCard;
+export default React.memo(ImageCard);

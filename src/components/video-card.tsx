@@ -1,5 +1,5 @@
-import React from 'react';
-import { GeneratedVideo, KlingProvider } from '../types';
+import React, { useState } from 'react';
+import { GeneratedVideo } from '../types';
 
 interface VideoCardProps {
   video: GeneratedVideo;
@@ -7,9 +7,26 @@ interface VideoCardProps {
   onDelete: () => void;
   onOpen?: () => void;
   onSaveAndReveal?: () => void;
+  onInterpolate?: (videoId: string) => void;
+  isInterpolating?: boolean;
+  // Selection mode props
+  selectable?: boolean;
+  selected?: boolean;
+  onSelect?: (videoId: string) => void;
 }
 
-const VideoCard: React.FC<VideoCardProps> = ({ video, onDownload, onDelete, onOpen, onSaveAndReveal }) => {
+const VideoCard: React.FC<VideoCardProps> = ({
+  video,
+  onDownload,
+  onDelete,
+  onOpen,
+  onSaveAndReveal,
+  onInterpolate,
+  isInterpolating = false,
+  selectable = false,
+  selected = false,
+  onSelect
+}) => {
   const formatDuration = (seconds: number): string => {
     const mins = Math.floor(seconds / 60);
     const secs = Math.floor(seconds % 60);
@@ -17,7 +34,20 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onDownload, onDelete, onOp
   };
 
   return (
-    <div className="relative group rounded-xl overflow-hidden bg-gray-900 border border-gray-800 hover:border-gray-600 transition-all duration-200">
+    <div className={`relative group rounded-xl overflow-hidden bg-gray-900 border transition-all duration-200 ${selected ? 'border-emerald-500 ring-2 ring-emerald-500/50' : 'border-gray-800 hover:border-gray-600'}`}>
+      {/* Selection checkbox */}
+      {selectable && (
+        <div className="absolute top-2 left-2 z-20">
+          <input
+            type="checkbox"
+            checked={selected}
+            onChange={() => onSelect?.(video.id)}
+            className="w-5 h-5 rounded border-2 border-gray-400 bg-gray-800 checked:bg-emerald-600 checked:border-emerald-600 cursor-pointer"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
+
       {/* Fixed 9:16 aspect ratio container */}
       <div className="relative w-full aspect-[9/16] bg-gray-950 rounded overflow-hidden cursor-pointer">
         {video.status === 'generating' || video.status === 'pending' ? (
@@ -70,6 +100,12 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onDownload, onDelete, onOp
                 {video.provider === 'freepik' ? 'Freepik' : 'Kie.ai'}
               </span>
             )}
+            {/* Interpolated badge */}
+            {video.isInterpolated && (
+              <span className="absolute top-1 right-1 text-[10px] px-1.5 py-0.5 rounded font-medium text-white bg-cyan-500/80 z-10">
+                Smooth
+              </span>
+            )}
           </>
         )}
 
@@ -106,6 +142,23 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onDownload, onDelete, onOp
                   </svg>
                 </button>
               )}
+              {/* Smooth Video (AMT) button */}
+              {onInterpolate && !video.isInterpolated && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); onInterpolate(video.id); }}
+                  disabled={isInterpolating}
+                  className="p-2 bg-cyan-600/80 hover:bg-cyan-500/80 rounded-full text-white backdrop-blur-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                  title={isInterpolating ? 'Interpolating...' : 'Smooth Video (AMT)'}
+                >
+                  {isInterpolating ? (
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                    </svg>
+                  )}
+                </button>
+              )}
               <button
                 onClick={(e) => { e.stopPropagation(); onDelete(); }}
                 className="p-2 bg-red-900/80 hover:bg-red-600/80 rounded-full text-red-200 hover:text-white backdrop-blur-sm"
@@ -133,4 +186,4 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onDownload, onDelete, onOp
   );
 };
 
-export default VideoCard;
+export default React.memo(VideoCard);

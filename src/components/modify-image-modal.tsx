@@ -24,12 +24,14 @@ const ModifyImageModal: React.FC<ModifyImageModalProps> = ({
   const [additionalRefs, setAdditionalRefs] = useState<ReferenceImage[]>([]);
   const [isDragging, setIsDragging] = useState(false);
   const [selectedModel, setSelectedModel] = useState<'gemini' | 'seedream'>('gemini');
+  const [validationError, setValidationError] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (isOpen) {
       setModifyPrompt('');
       setAdditionalRefs([]);
+      setValidationError('');
       // Default based on source image model if available
       if (sourceImage?.generatedBy?.startsWith('seedream')) {
         setSelectedModel('seedream');
@@ -99,7 +101,7 @@ const ModifyImageModal: React.FC<ModifyImageModalProps> = ({
 
   const handleSubmitClick = () => {
     if (!modifyPrompt.trim()) {
-      alert('Please enter a modification prompt');
+      setValidationError('Please enter a modification prompt');
       return;
     }
     onSubmit(modifyPrompt, additionalRefs, selectedModel);
@@ -163,11 +165,17 @@ const ModifyImageModal: React.FC<ModifyImageModalProps> = ({
                 <textarea
                   autoFocus
                   value={modifyPrompt}
-                  onChange={(e) => setModifyPrompt(e.target.value)}
+                  onChange={(e) => {
+                    setModifyPrompt(e.target.value);
+                    setValidationError('');
+                  }}
                   disabled={isLoading}
                   placeholder="E.g., Change the background to a sunset, add a rainbow, make it vintage style..."
                   className="w-full h-32 bg-gray-950 border border-gray-800 rounded-lg p-3 text-sm text-gray-200 focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none resize-none disabled:opacity-50"
                 />
+                {validationError && (
+                  <p className="text-xs text-red-400 mt-1">{validationError}</p>
+                )}
               </div>
 
               {/* Model Selector */}

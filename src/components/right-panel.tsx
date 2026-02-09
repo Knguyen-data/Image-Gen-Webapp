@@ -20,6 +20,8 @@ interface RightPanelProps {
   generatedVideos?: GeneratedVideo[];
   onDeleteVideo?: (videoId: string) => void;
   onRetryVideo?: (video: GeneratedVideo) => void;
+  onInterpolateVideo?: (videoId: string) => void;
+  isInterpolating?: boolean;
 }
 
 const RightPanel: React.FC<RightPanelProps> = ({
@@ -35,7 +37,9 @@ const RightPanel: React.FC<RightPanelProps> = ({
   setAppMode,
   generatedVideos = [],
   onDeleteVideo = (_videoId: string) => {},
-  onRetryVideo = (_video: GeneratedVideo) => {}
+  onRetryVideo = (_video: GeneratedVideo) => {},
+  onInterpolateVideo = (_videoId: string) => {},
+  isInterpolating = false
 }) => {
   const [selectedImageIds, setSelectedImageIds] = useState<Set<string>>(new Set());
   const [compareMode, setCompareMode] = useState(false);
@@ -541,13 +545,20 @@ const RightPanel: React.FC<RightPanelProps> = ({
                       style={{ gridTemplateColumns: `repeat(${columnCount}, minmax(0, 1fr))` }}
                     >
                       {allImages.map((img) => (
-                        <ImageCard
+                        <div
                           key={img.id}
-                          image={img}
-                          onRetry={onRetryImage}
-                          onDelete={() => onDeleteImage(img.runId, img.id)}
-                          appMode={appMode}
-                        />
+                          style={{
+                            contentVisibility: 'auto',
+                            containIntrinsicSize: '0 300px',
+                          }}
+                        >
+                          <ImageCard
+                            image={img}
+                            onRetry={onRetryImage}
+                            onDelete={() => onDeleteImage(img.runId, img.id)}
+                            appMode={appMode}
+                          />
+                        </div>
                       ))}
                     </div>
                   )}
@@ -596,14 +607,23 @@ const RightPanel: React.FC<RightPanelProps> = ({
                   style={{ gridTemplateColumns: `repeat(${videoColumnCount}, minmax(0, 1fr))` }}
                 >
                   {generatedVideos.map((video) => (
-                    <VideoCard
+                    <div
                       key={video.id}
-                      video={video}
-                      onDownload={() => handleDownloadVideo(video)}
-                      onDelete={() => onDeleteVideo(video.id)}
-                      onOpen={() => setLightboxVideo(video)}
-                      onSaveAndReveal={() => handleSaveAndRevealVideo(video)}
-                    />
+                      style={{
+                        contentVisibility: 'auto',
+                        containIntrinsicSize: '0 400px',
+                      }}
+                    >
+                      <VideoCard
+                        video={video}
+                        onDownload={() => handleDownloadVideo(video)}
+                        onDelete={() => onDeleteVideo(video.id)}
+                        onOpen={() => setLightboxVideo(video)}
+                        onSaveAndReveal={() => handleSaveAndRevealVideo(video)}
+                        onInterpolate={onInterpolateVideo}
+                        isInterpolating={isInterpolating}
+                      />
+                    </div>
                   ))}
                 </div>
               )}
@@ -652,17 +672,24 @@ const RightPanel: React.FC<RightPanelProps> = ({
 
                   <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
                     {run.images.map(img => (
-                      <ImageCard
+                      <div
                         key={img.id}
-                        image={img}
-                        selected={selectedImageIds.has(img.id)}
-                        onToggleSelect={() => handleToggleSelect(img.id)}
-                        onOpen={() => setLightboxImage(img)}
-                        onDelete={() => onDeleteImage(run.id, img.id)}
-                        onRetry={() => onRetryImage(img)}
-                        onModify={() => onModifyImage(img)}
-                        appMode={appMode}
-                      />
+                        style={{
+                          contentVisibility: 'auto',
+                          containIntrinsicSize: '0 300px',
+                        }}
+                      >
+                        <ImageCard
+                          image={img}
+                          selected={selectedImageIds.has(img.id)}
+                          onToggleSelect={() => handleToggleSelect(img.id)}
+                          onOpen={() => setLightboxImage(img)}
+                          onDelete={() => onDeleteImage(run.id, img.id)}
+                          onRetry={() => onRetryImage(img)}
+                          onModify={() => onModifyImage(img)}
+                          appMode={appMode}
+                        />
+                      </div>
                     ))}
                   </div>
                 </div>
