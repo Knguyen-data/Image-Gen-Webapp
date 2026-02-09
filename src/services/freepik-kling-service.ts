@@ -22,7 +22,7 @@ const FREEPIK_PROXY_URL = import.meta.env.DEV
   : 'https://freepik-proxy.tnguyen633.workers.dev';
 
 const BASE_URL = `${FREEPIK_PROXY_URL}/v1/ai`;
-const MAX_POLL_ATTEMPTS = 120; // 10 min at 5s intervals per attempt
+const MAX_POLL_ATTEMPTS = 360; // 30 min at 5s intervals per attempt
 const POLL_INTERVAL_MS = 5000;
 const MAX_TASK_RETRIES = 3; // Retry entire create+poll cycle on FAILED status
 
@@ -102,7 +102,7 @@ export const pollFreepikTask = async (
     }
   }
 
-  return { success: false, error: 'Freepik: polling timeout (10 minutes)' };
+  return { success: false, error: 'Freepik: polling timeout (30 minutes)' };
 };
 
 /**
