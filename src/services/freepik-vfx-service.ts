@@ -15,11 +15,8 @@ import type {
   VfxTaskStatus,
 } from '../types/vfx';
 
-const FREEPIK_PROXY_URL = import.meta.env.DEV
-  ? '/api/freepik'
-  : 'https://freepik-proxy.tnguyen633.workers.dev';
-
-const VFX_BASE = `${FREEPIK_PROXY_URL}/v1/ai/video/vfx`;
+const FREEPIK_API_URL = 'https://api.freepik.com';
+const VFX_BASE = `${FREEPIK_API_URL}/v1/ai/video/vfx`;
 
 const LOG_CTX = 'FreepikVFX';
 

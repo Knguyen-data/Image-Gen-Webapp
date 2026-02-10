@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { GeneratedVideo } from '../types';
 import { applyVfxEffect } from '../services/freepik-vfx-service';
+import { uploadUrlToR2, uploadBlobToR2 } from '../services/r2-upload-service';
 import { VFX_FILTERS, VFX_FPS_OPTIONS, type VfxFilterType, type VfxApplyOptions, type VfxFps } from '../types/vfx';
 
 interface VideoCardProps {
@@ -61,12 +62,32 @@ const VideoCard: React.FC<VideoCardProps> = ({
 
     setVfxProcessing(true);
     setVfxError(null);
-    setVfxProgress('Starting…');
+    setVfxProgress('Preparing video…');
 
-    const options: VfxApplyOptions = {
-      filter_type: vfxSelectedFilter,
-      fps: vfxFps,
-    };
+    try {
+      // Ensure we have a publicly accessible URL for the Freepik API
+      let publicUrl = video.url;
+      
+      if (publicUrl.startsWith('blob:') || publicUrl.startsWith('data:')) {
+        // Blob/data URLs need to be uploaded to R2 first
+        setVfxProgress('Uploading video for processing…');
+        try {
+          const resp = await fetch(publicUrl);
+          const blob = await resp.blob();
+          publicUrl = await uploadBlobToR2(blob, `vfx-input-${Date.now()}.mp4`);
+        } catch (uploadErr) {
+          throw new Error(`Cannot process: video must be publicly accessible. Upload failed: ${uploadErr instanceof Error ? uploadErr.message : 'unknown'}`);
+        }
+      } else if (!publicUrl.startsWith('http://') && !publicUrl.startsWith('https://')) {
+        throw new Error('Video URL must be a public HTTP(S) URL for VFX processing');
+      }
+
+      console.log('[VFX] Using video URL:', publicUrl);
+
+      const options: VfxApplyOptions = {
+        filter_type: vfxSelectedFilter,
+        fps: vfxFps,
+      };
 
     if (vfxSelectedFilter === 7) {
       options.bloom_filter_contrast = vfxBloomContrast;
@@ -76,8 +97,8 @@ const VideoCard: React.FC<VideoCardProps> = ({
       options.motion_filter_decay_factor = vfxMotionDecay;
     }
 
-    try {
-      const result = await applyVfxEffect(video.url, options, (status) => {
+      setVfxProgress('Starting VFX…');
+      const result = await applyVfxEffect(publicUrl, options, (status) => {
         setVfxProgress(status);
       });
 
