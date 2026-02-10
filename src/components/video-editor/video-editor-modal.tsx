@@ -13,6 +13,22 @@ import TransitionPicker from './transition-picker';
 import StockGallery from '../stock-gallery/stock-gallery';
 import { logger } from '../../services/logger';
 
+// Suppress known non-critical errors from Diffusion Studio Core
+// Blob URLs don't support HEAD requests - this is a browser limitation
+const suppressCoreErrors = () => {
+  const originalError = console.error;
+  console.error = (...args: any[]) => {
+    const message = String(args[0] || '');
+    if (message.includes('ERR_METHOD_NOT_SUPPORTED') || message.includes('blob:')) {
+      return; // Suppress known non-critical error
+    }
+    originalError.apply(console, args);
+  };
+  return () => {
+    console.error = originalError;
+  };
+};
+
 interface VideoEditorModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -65,6 +81,9 @@ const VideoEditorModal: React.FC<VideoEditorModalProps> = ({
   useEffect(() => {
     if (!isOpen) return;
 
+    // Suppress known non-critical errors from Diffusion Studio Core
+    const restoreConsole = suppressCoreErrors();
+
     const init = async () => {
       setIsLoading(true);
       setLoadingMessage('Initializing editor...');
@@ -112,6 +131,7 @@ const VideoEditorModal: React.FC<VideoEditorModalProps> = ({
     return () => {
       cancelAnimationFrame(animFrameRef.current);
       videoEditorService.destroy();
+      restoreConsole();
     };
   }, [isOpen]);
 

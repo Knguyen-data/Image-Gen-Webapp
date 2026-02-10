@@ -207,7 +207,17 @@ class VideoEditorService {
     }
 
     const layer = this.composition.layers[layerIndex];
-    const source = await Source.from(videoUrl);
+    
+    // Source.from() does a HEAD request which fails on blob URLs (browser limitation)
+    // The clip still works, we just can't get metadata beforehand
+    let source: Source;
+    try {
+      source = await Source.from(videoUrl);
+    } catch (e) {
+      // Fallback: create source without metadata (blob URLs don't support HEAD)
+      source = await Source.from(videoUrl, { noMetadata: true } as any);
+    }
+    
     const clip = new VideoClip(source as any, range ? {
       range: [range[0], range[1]],
     } : undefined);
