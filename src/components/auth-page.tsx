@@ -197,15 +197,26 @@ const AuthPage: React.FC<AuthPageProps> = ({ onAuthenticated }) => {
               className="absolute w-20 h-20 rounded-full"
               style={{
                 background: 'radial-gradient(circle, rgba(34, 197, 94, 0.3) 0%, transparent 70%)',
-                animation: 'pulse 3s ease-in-out infinite',
+                animation: 'pulse 3s ease-in-out infinite, glowColorShift 4s ease-in-out infinite',
               }}
             />
-            <div className="relative w-16 h-16 rounded-2xl overflow-hidden border border-dash-500/30">
-              <img src="/logo-higfails.png" alt="Higfails" className="w-full h-full object-cover" />
+            <div
+              className="relative w-16 h-16 rounded-2xl overflow-hidden"
+              style={{
+                animation: 'borderColorShift 4s ease-in-out infinite',
+                border: '1.5px solid rgba(134, 239, 172, 0.3)',
+              }}
+            >
+              <img
+                src="/logo-higfails.png"
+                alt="Higfails"
+                className="w-full h-full object-cover"
+                style={{ animation: 'logoHueShift 4s ease-in-out infinite' }}
+              />
             </div>
           </div>
-          <h1 className="text-3xl font-bold text-white tracking-tight">
-            Hig<span className="text-dash-400">fails</span>
+          <h1 className="text-3xl font-bold tracking-tight" style={{ animation: 'textColorShift 4s ease-in-out infinite' }}>
+            Hig<span style={{ animation: 'accentColorShift 4s ease-in-out infinite' }}>fails</span>
           </h1>
           <p className="text-sm text-gray-500 mt-2 font-light tracking-wide">
             AI-Powered Creative Suite
@@ -451,6 +462,26 @@ const AuthPage: React.FC<AuthPageProps> = ({ onAuthenticated }) => {
         @keyframes fadeSlideIn {
           from { opacity: 0; transform: translateY(-4px); }
           to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes glowColorShift {
+          0%, 100% { background: radial-gradient(circle, rgba(34, 197, 94, 0.3) 0%, transparent 70%); }
+          50% { background: radial-gradient(circle, rgba(250, 204, 21, 0.3) 0%, transparent 70%); }
+        }
+        @keyframes borderColorShift {
+          0%, 100% { border-color: rgba(134, 239, 172, 0.3); }
+          50% { border-color: rgba(250, 204, 21, 0.4); }
+        }
+        @keyframes logoHueShift {
+          0%, 100% { filter: hue-rotate(0deg) brightness(1); }
+          50% { filter: hue-rotate(-60deg) brightness(1.1); }
+        }
+        @keyframes textColorShift {
+          0%, 100% { color: #ffffff; }
+          50% { color: #fef9c3; }
+        }
+        @keyframes accentColorShift {
+          0%, 100% { color: #4ade80; }
+          50% { color: #facc15; }
         }
       `}</style>
     </div>
