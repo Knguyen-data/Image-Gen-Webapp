@@ -54,6 +54,7 @@ release-manifest.json
 # Screenshots and images
 *.png
 !src/**/*.png
+!public/**/*.png
 
 # Windows null file
 nul
