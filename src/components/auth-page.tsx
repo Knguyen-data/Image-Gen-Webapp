@@ -39,8 +39,7 @@ const AuthPage: React.FC<AuthPageProps> = ({ onAuthenticated }) => {
     }
   }, [isAuthenticated, onAuthenticated]);
 
-  // (Canvas animation handled by AnimatedBackground component);
-  }, []);
+  // (Canvas animation handled by AnimatedBackground component)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
