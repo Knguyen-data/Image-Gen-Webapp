@@ -24,6 +24,27 @@ async function getUserFolder(): Promise<string> {
 }
 
 /**
+ * Get the user's country from their Supabase profile metadata,
+ * or detect via locale. Falls back to 'unknown'.
+ */
+async function getUserCountry(): Promise<string> {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    const country = user?.user_metadata?.country;
+    if (country) return country.toLowerCase();
+  } catch { /* ignore */ }
+
+  // Fallback: use browser locale to guess country
+  try {
+    const locale = navigator.language || navigator.languages?.[0] || '';
+    const parts = locale.split('-');
+    if (parts.length >= 2) return parts[1].toLowerCase();
+  } catch { /* ignore */ }
+
+  return 'unknown';
+}
+
+/**
  * Derive a file extension from a MIME type.
  */
 function extFromMime(mimeType: string): string {
@@ -41,17 +62,18 @@ function extFromMime(mimeType: string): string {
 }
 
 /**
- * Build the storage path: {userId}/{year-month}/{uuid}.{ext}
+ * Build the storage path: {country}/{userId}/{year-month}/{uuid}.{ext}
  */
 async function buildPath(mimeType: string, filename?: string): Promise<string> {
   const userId = await getUserFolder();
+  const country = await getUserCountry();
   const now = new Date();
   const yearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   const ext = filename
     ? (filename.includes('.') ? filename.split('.').pop()! : extFromMime(mimeType))
     : extFromMime(mimeType);
   const uniqueName = `${crypto.randomUUID()}.${ext}`;
-  return `${userId}/${yearMonth}/${uniqueName}`;
+  return `${country}/${userId}/${yearMonth}/${uniqueName}`;
 }
 
 /**
