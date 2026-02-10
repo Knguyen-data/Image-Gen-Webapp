@@ -14,6 +14,7 @@ interface EditorToolbarProps {
   onAddTrack: () => void;
   onImportBroll: (files: FileList) => void;
   onImportUrl: (url: string) => void;
+  onOpenStockGallery: () => void;
 }
 
 const EditorToolbar: React.FC<EditorToolbarProps> = ({
@@ -30,6 +31,7 @@ const EditorToolbar: React.FC<EditorToolbarProps> = ({
   onAddTrack,
   onImportBroll,
   onImportUrl,
+  onOpenStockGallery,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [showUrlInput, setShowUrlInput] = useState(false);
@@ -152,6 +154,13 @@ const EditorToolbar: React.FC<EditorToolbarProps> = ({
             className="px-3 py-1.5 rounded-lg bg-blue-900/30 hover:bg-blue-800/40 text-blue-300 text-xs transition-all border border-blue-500/20"
           >
             📎 B-Roll
+          </button>
+
+          <button
+            onClick={onOpenStockGallery}
+            className="px-3 py-1.5 rounded-lg bg-dash-900/30 hover:bg-dash-800/40 text-dash-300 text-xs transition-all border border-dash-500/20"
+          >
+            📁 Stock
           </button>
 
           <button

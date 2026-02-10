@@ -10,6 +10,7 @@ import { uploadBase64ToR2 } from '../../services/supabase-storage-service';
 import EditorToolbar from './editor-toolbar';
 import TimelineTrack from './timeline-track';
 import TransitionPicker from './transition-picker';
+import StockGallery from '../stock-gallery/stock-gallery';
 import { logger } from '../../services/logger';
 
 interface VideoEditorModalProps {
@@ -54,6 +55,9 @@ const VideoEditorModal: React.FC<VideoEditorModalProps> = ({
     position: { x: number; y: number };
     currentType?: TransitionType;
   } | null>(null);
+
+  // Stock Gallery state
+  const [showStockGallery, setShowStockGallery] = useState(false);
 
   const pixelsPerSecond = 80 * zoom;
 
@@ -281,6 +285,28 @@ const VideoEditorModal: React.FC<VideoEditorModalProps> = ({
     } catch (e: any) {
       logger.error('VideoEditor', 'Failed to import URL', e);
       alert(`Failed to import: ${e.message}`);
+    }
+
+    setIsLoading(false);
+  };
+
+  // --- Stock Gallery handler ---
+  const handleStockVideoSelect = async (video: { url: string; name: string }) => {
+    setShowStockGallery(false);
+    setIsLoading(true);
+    setLoadingMessage(`Adding ${video.name}...`);
+
+    let targetLayerIndex = layers.findIndex(l => l.clips.length === 0);
+    if (targetLayerIndex < 0) {
+      targetLayerIndex = await videoEditorService.addLayer('SEQUENTIAL');
+    }
+
+    try {
+      await videoEditorService.addClip(targetLayerIndex, video.url, undefined, 'stock');
+      refreshLayers();
+    } catch (e: any) {
+      logger.error('VideoEditor', 'Failed to add stock video', e);
+      alert(`Failed to add stock video: ${e.message}`);
     }
 
     setIsLoading(false);
@@ -515,7 +541,16 @@ const VideoEditorModal: React.FC<VideoEditorModalProps> = ({
         onAddTrack={handleAddTrack}
         onImportBroll={handleImportBroll}
         onImportUrl={handleImportUrl}
+        onOpenStockGallery={() => setShowStockGallery(true)}
       />
+
+      {/* Stock Gallery Modal */}
+      {showStockGallery && (
+        <StockGallery
+          onSelectVideo={handleStockVideoSelect}
+          onClose={() => setShowStockGallery(false)}
+        />
+      )}
 
       {/* Timeline area */}
       <div className="h-[30vh] min-h-[150px] bg-gray-900/60 border-t border-gray-800/50 overflow-y-auto">
