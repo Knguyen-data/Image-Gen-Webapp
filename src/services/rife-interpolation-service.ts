@@ -345,8 +345,16 @@ async function extractFrames(
 }
 
 /**
- * Encode frames to video using MediaRecorder + canvas with precise timing.
- * Uses requestAnimationFrame with real-time playback to ensure correct FPS.
+ * Encode frames to video using MediaRecorder + canvas.
+ *
+ * Strategy: captureStream(0) for manual frame control + requestFrame() to push
+ * each frame. We write all frames as fast as possible (no real-time pacing),
+ * then fix the WebM duration using ts-ebml-style duration patching so the
+ * output plays at the correct FPS.
+ *
+ * Since MediaRecorder doesn't let us set frame duration directly, we
+ * post-process the WebM blob to set the correct duration in the Segment/Info
+ * header, which makes the browser play it at the right speed.
  */
 async function encodeToVideo(
   frames: ImageData[],
@@ -370,8 +378,7 @@ async function encodeToVideo(
       mimeType = 'video/webm';
     }
 
-    // Use captureStream with target FPS for proper timing metadata
-    const stream = canvas.captureStream(fps);
+    const stream = canvas.captureStream(0); // manual frame control
     const recorder = new MediaRecorder(stream, {
       mimeType,
       videoBitsPerSecond: 10_000_000,
@@ -382,48 +389,92 @@ async function encodeToVideo(
       if (e.data.size > 0) chunks.push(e.data);
     };
 
-    recorder.onstop = () => {
-      const blob = new Blob(chunks, { type: 'video/webm' });
-      const url = URL.createObjectURL(blob);
+    recorder.onstop = async () => {
+      const rawBlob = new Blob(chunks, { type: 'video/webm' });
+
+      // Fix duration in the WebM container
+      const expectedDuration = (frames.length / fps) * 1000; // ms
+      const fixedBlob = await fixWebMDuration(rawBlob, expectedDuration);
+
+      const url = URL.createObjectURL(fixedBlob);
       resolve(url);
     };
 
     recorder.onerror = () => reject(new Error('MediaRecorder error'));
 
-    recorder.start();
+    // Use timeslice to get data periodically (helps with large videos)
+    recorder.start(1000);
     onProgress?.('Encoding video...');
 
+    const track = stream.getVideoTracks()[0] as any;
     let frameIdx = 0;
-    const frameDuration = 1000 / fps;
-    const startTime = performance.now();
 
-    const drawNext = () => {
+    // Write frames with a small interval to give the encoder breathing room
+    // but fast enough that encoding doesn't take forever
+    const interval = setInterval(() => {
+      // Process a batch of frames per tick for speed
+      const batchSize = 4;
+      for (let b = 0; b < batchSize && frameIdx < frames.length; b++) {
+        ctx.putImageData(frames[frameIdx], 0, 0);
+
+        if (track && typeof track.requestFrame === 'function') {
+          track.requestFrame();
+        }
+
+        frameIdx++;
+      }
+
+      if (frameIdx % 20 < batchSize) {
+        onProgress?.(`Encoding: ${frameIdx}/${frames.length} frames`);
+      }
+
       if (frameIdx >= frames.length) {
-        // Small delay to let last frame register
+        clearInterval(interval);
+        // Give encoder time to process final frames
         setTimeout(() => {
           recorder.stop();
           stream.getTracks().forEach((t) => t.stop());
-        }, frameDuration * 2);
-        return;
+        }, 200);
       }
+    }, 16); // ~60 ticks/sec, processing 4 frames each = ~240 frames/sec throughput
+  });
+}
 
-      const expectedTime = startTime + frameIdx * frameDuration;
-      const now = performance.now();
+/**
+ * Fix WebM duration metadata.
+ * MediaRecorder with captureStream(0) doesn't set proper duration/timestamps.
+ * This patches the Segment>Info>Duration field in the EBML header.
+ */
+async function fixWebMDuration(blob: Blob, durationMs: number): Promise<Blob> {
+  try {
+    const buffer = await blob.arrayBuffer();
+    const view = new DataView(buffer);
 
-      if (now >= expectedTime) {
-        ctx.putImageData(frames[frameIdx], 0, 0);
-        frameIdx++;
+    // Search for the Duration element in WebM (EBML ID 0x4489)
+    // Duration is a float64 in the Segment>Info section
+    for (let i = 0; i < Math.min(buffer.byteLength, 1000); i++) {
+      if (view.getUint8(i) === 0x44 && view.getUint8(i + 1) === 0x89) {
+        // Found Duration element ID
+        const sizeBytePos = i + 2;
+        const sizeByte = view.getUint8(sizeBytePos);
 
-        if (frameIdx % 20 === 0) {
-          onProgress?.(`Encoding: ${frameIdx}/${frames.length} frames`);
+        // Check for 8-byte float (size marker 0x88 = 8 bytes)
+        if (sizeByte === 0x88) {
+          // Write the correct duration as float64 at offset + 3
+          view.setFloat64(i + 3, durationMs);
+          logger.info('RIFE', `Fixed WebM duration to ${(durationMs / 1000).toFixed(2)}s`);
+          return new Blob([buffer], { type: 'video/webm' });
         }
       }
+    }
 
-      requestAnimationFrame(drawNext);
-    };
-
-    requestAnimationFrame(drawNext);
-  });
+    // If we can't find the duration field, return original
+    logger.warn('RIFE', 'Could not find WebM duration field, video timing may be off');
+    return blob;
+  } catch (err) {
+    logger.warn('RIFE', 'Failed to fix WebM duration', err);
+    return blob;
+  }
 }
 
 // ─── Main Entry Point ────────────────────────────────────────────────────────
