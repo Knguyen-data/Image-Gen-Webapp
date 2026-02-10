@@ -201,11 +201,11 @@ const AuthPage: React.FC<AuthPageProps> = ({ onAuthenticated }) => {
               }}
             />
             <div className="relative w-16 h-16 rounded-2xl overflow-hidden border border-dash-500/30">
-              <img src="/logo-higgfields.png" alt="Higgfields" className="w-full h-full object-cover" />
+              <img src="/logo-higfails.png" alt="Higfails" className="w-full h-full object-cover" />
             </div>
           </div>
           <h1 className="text-3xl font-bold text-white tracking-tight">
-            Higg<span className="text-dash-400">fields</span>
+            Hig<span className="text-dash-400">fails</span>
           </h1>
           <p className="text-sm text-gray-500 mt-2 font-light tracking-wide">
             AI-Powered Creative Suite

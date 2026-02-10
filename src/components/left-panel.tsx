@@ -412,8 +412,8 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
         <div className="p-6 pb-4 flex justify-between items-start">
           <header className="flex-shrink-0 min-w-[140px]">
             <h1 className="text-xl font-bold text-white tracking-tight flex items-center gap-2">
-              <span className="w-3 h-3 bg-dash-300 rounded-full animate-pulse"></span>
-              RAW Studio
+              <img src="/logo-higfails.png" alt="Higfails" className="w-7 h-7 rounded-lg" />
+              Hig<span className="text-dash-300">fails</span>
             </h1>
             <p className="text-xs text-gray-500 mt-1 font-mono">
               {getSubtitleText()}
