@@ -61,7 +61,7 @@ const VeoSettingsPanel: React.FC<VeoSettingsPanelProps> = ({
                 disabled={disabled}
                 className={`flex-1 py-2 rounded-lg text-xs font-medium transition-all ${
                   settings.model === opt.value
-                    ? 'bg-dash-700 text-white ring-1 ring-dash-400'
+                    ? 'bg-dash-600/25 backdrop-blur-sm text-dash-200 ring-1 ring-dash-400/50 shadow-[0_0_12px_rgba(34,197,94,0.15)]'
                     : disabled
                     ? 'bg-gray-800/50 text-gray-600 cursor-not-allowed border border-gray-800'
                     : 'bg-gray-800 text-gray-400 hover:bg-gray-700 border border-gray-700'
@@ -90,7 +90,7 @@ const VeoSettingsPanel: React.FC<VeoSettingsPanelProps> = ({
               onClick={() => onUpdate({ ...settings, aspectRatio: opt.value })}
               className={`flex-1 py-2 rounded-lg text-xs font-medium transition-all ${
                 settings.aspectRatio === opt.value
-                  ? 'bg-dash-700 text-white ring-1 ring-dash-400'
+                  ? 'bg-dash-600/25 backdrop-blur-sm text-dash-200 ring-1 ring-dash-400/50 shadow-[0_0_12px_rgba(34,197,94,0.15)]'
                   : 'bg-gray-800 text-gray-400 hover:bg-gray-700 border border-gray-700'
               }`}
             >

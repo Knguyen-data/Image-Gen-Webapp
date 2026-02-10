@@ -319,7 +319,7 @@ const PromptGenerator: React.FC<PromptGeneratorProps> = ({
                 onClick={() => handleModeChange('storyboard')}
                 className={`flex-1 py-2 px-2 rounded-md text-xs font-medium transition-all ${
                   mode === 'storyboard'
-                    ? 'bg-dash-700 text-white ring-1 ring-dash-400'
+                    ? 'bg-dash-600/25 backdrop-blur-sm text-dash-200 ring-1 ring-dash-400/50 shadow-[0_0_12px_rgba(34,197,94,0.15)]'
                     : 'text-gray-400 hover:text-white hover:bg-gray-700/50'
                 }`}
               >
@@ -330,7 +330,7 @@ const PromptGenerator: React.FC<PromptGeneratorProps> = ({
                 onClick={() => handleModeChange('photoset')}
                 className={`flex-1 py-2 px-2 rounded-md text-xs font-medium transition-all ${
                   mode === 'photoset'
-                    ? 'bg-dash-700 text-white ring-1 ring-dash-400'
+                    ? 'bg-dash-600/25 backdrop-blur-sm text-dash-200 ring-1 ring-dash-400/50 shadow-[0_0_12px_rgba(34,197,94,0.15)]'
                     : 'text-gray-400 hover:text-white hover:bg-gray-700/50'
                 }`}
               >

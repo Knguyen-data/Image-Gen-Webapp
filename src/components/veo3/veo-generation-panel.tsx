@@ -246,7 +246,7 @@ const VeoGenerationPanel: React.FC<VeoGenerationPanelProps> = ({
               onClick={() => handleModeChange(tab.value)}
               className={`flex-1 py-2.5 rounded-lg text-sm font-medium transition-all ${
                 mode === tab.value
-                  ? "bg-dash-700 text-white ring-1 ring-dash-400"
+                  ? "bg-dash-600/25 backdrop-blur-sm text-dash-200 ring-1 ring-dash-400/50 shadow-[0_0_12px_rgba(34,197,94,0.15)]"
                   : "bg-gray-800 text-gray-400 hover:bg-gray-700 border border-gray-700"
               }`}
             >

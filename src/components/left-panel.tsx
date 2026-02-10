@@ -406,7 +406,7 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
         }}
       />
 
-      <div className="flex flex-col h-full bg-gray-900 border-r border-gray-800 p-0 overflow-y-auto w-full md:w-[450px] shrink-0 custom-scrollbar relative">
+      <div className="flex flex-col h-full bg-gray-900/80 backdrop-blur-xl border-r border-gray-800/50 p-0 overflow-y-auto w-full md:w-[450px] shrink-0 custom-scrollbar relative">
 
         {/* Header */}
         <div className="p-6 pb-4 flex justify-between items-start">
@@ -614,7 +614,7 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
                       onClick={() => handleModelSelect(opt.value)}
                       className={`py-2 px-2.5 rounded-lg text-xs font-medium transition-all ${
                         selectedVideoModel === opt.value
-                          ? 'bg-dash-600/20 text-dash-300 ring-1 ring-dash-500/30 shadow-[0_0_6px_rgba(74,222,128,0.06)]'
+                          ? 'bg-dash-600/25 backdrop-blur-sm text-dash-200 ring-1 ring-dash-400/50 shadow-[0_0_12px_rgba(34,197,94,0.15)] shadow-[0_0_6px_rgba(74,222,128,0.06)]'
                           : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800/50'
                       }`}
                     >
@@ -627,7 +627,7 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
                       onClick={() => handleModelSelect('veo-3.1')}
                       className={`py-2 px-2.5 rounded-lg text-xs font-medium transition-all ${
                         selectedVideoModel === 'veo-3.1'
-                          ? 'bg-dash-600/20 text-dash-300 ring-1 ring-dash-500/30 shadow-[0_0_6px_rgba(74,222,128,0.06)]'
+                          ? 'bg-dash-600/25 backdrop-blur-sm text-dash-200 ring-1 ring-dash-400/50 shadow-[0_0_12px_rgba(34,197,94,0.15)] shadow-[0_0_6px_rgba(74,222,128,0.06)]'
                           : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800/50'
                       }`}
                     >
@@ -675,7 +675,7 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
         
                         className={`flex-1 py-2 px-3 rounded-lg text-xs font-medium transition-all ${
                           videoSettings.orientation === 'image'
-                            ? 'bg-dash-700 text-white ring-1 ring-dash-400'
+                            ? 'bg-dash-600/25 backdrop-blur-sm text-dash-200 ring-1 ring-dash-400/50 shadow-[0_0_12px_rgba(34,197,94,0.15)]'
                             : 'bg-gray-800 text-gray-400 hover:bg-gray-700 border border-gray-700'
                         }`}
                       >
@@ -687,7 +687,7 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
         
                         className={`flex-1 py-2 px-3 rounded-lg text-xs font-medium transition-all ${
                           videoSettings.orientation === 'video'
-                            ? 'bg-dash-700 text-white ring-1 ring-dash-400'
+                            ? 'bg-dash-600/25 backdrop-blur-sm text-dash-200 ring-1 ring-dash-400/50 shadow-[0_0_12px_rgba(34,197,94,0.15)]'
                             : 'bg-gray-800 text-gray-400 hover:bg-gray-700 border border-gray-700'
                         }`}
                       >
@@ -706,7 +706,7 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
 
                         className={`flex-1 py-2 rounded-lg text-xs font-medium transition-all ${
                           videoSettings.resolution === '720p'
-                            ? 'bg-dash-700 text-white ring-1 ring-dash-400'
+                            ? 'bg-dash-600/25 backdrop-blur-sm text-dash-200 ring-1 ring-dash-400/50 shadow-[0_0_12px_rgba(34,197,94,0.15)]'
                             : 'bg-gray-800 text-gray-400 hover:bg-gray-700 border border-gray-700'
                         }`}
                       >
@@ -717,7 +717,7 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
 
                         className={`flex-1 py-2 rounded-lg text-xs font-medium transition-all ${
                           videoSettings.resolution === '1080p'
-                            ? 'bg-dash-700 text-white ring-1 ring-dash-400'
+                            ? 'bg-dash-600/25 backdrop-blur-sm text-dash-200 ring-1 ring-dash-400/50 shadow-[0_0_12px_rgba(34,197,94,0.15)]'
                             : 'bg-gray-800 text-gray-400 hover:bg-gray-700 border border-gray-700'
                         }`}
                       >
@@ -734,7 +734,7 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
                         onClick={() => setVideoSettings({ ...videoSettings, klingProvider: 'freepik' })}
                         className={`flex-1 py-2 rounded-lg text-xs font-medium transition-all ${
                           (videoSettings.klingProvider || 'freepik') === 'freepik'
-                            ? 'bg-dash-700 text-white ring-1 ring-dash-400'
+                            ? 'bg-dash-600/25 backdrop-blur-sm text-dash-200 ring-1 ring-dash-400/50 shadow-[0_0_12px_rgba(34,197,94,0.15)]'
                             : 'bg-gray-800 text-gray-400 hover:bg-gray-700 border border-gray-700'
                         }`}
                       >
@@ -744,7 +744,7 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
                         onClick={() => setVideoSettings({ ...videoSettings, klingProvider: 'kieai' })}
                         className={`flex-1 py-2 rounded-lg text-xs font-medium transition-all ${
                           videoSettings.klingProvider === 'kieai'
-                            ? 'bg-dash-700 text-white ring-1 ring-dash-400'
+                            ? 'bg-dash-600/25 backdrop-blur-sm text-dash-200 ring-1 ring-dash-400/50 shadow-[0_0_12px_rgba(34,197,94,0.15)]'
                             : 'bg-gray-800 text-gray-400 hover:bg-gray-700 border border-gray-700'
                         }`}
                       >
@@ -822,7 +822,7 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
                           onClick={() => setVideoSettings({ ...videoSettings, klingProDuration: dur } as any)}
                           className={`flex-1 py-2 rounded-lg text-xs font-medium transition-all ${
                             ((videoSettings as any).klingProDuration || '5') === dur
-                              ? 'bg-dash-700 text-white ring-1 ring-dash-400'
+                              ? 'bg-dash-600/25 backdrop-blur-sm text-dash-200 ring-1 ring-dash-400/50 shadow-[0_0_12px_rgba(34,197,94,0.15)]'
                               : 'bg-gray-800 text-gray-400 hover:bg-gray-700 border border-gray-700'
                           }`}
                         >
@@ -846,7 +846,7 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
                           onClick={() => setVideoSettings({ ...videoSettings, klingProAspectRatio: opt.value } as any)}
                           className={`flex-1 py-2 rounded-lg text-xs font-medium transition-all ${
                             ((videoSettings as any).klingProAspectRatio || 'widescreen_16_9') === opt.value
-                              ? 'bg-dash-700 text-white ring-1 ring-dash-400'
+                              ? 'bg-dash-600/25 backdrop-blur-sm text-dash-200 ring-1 ring-dash-400/50 shadow-[0_0_12px_rgba(34,197,94,0.15)]'
                               : 'bg-gray-800 text-gray-400 hover:bg-gray-700 border border-gray-700'
                           }`}
                         >
@@ -994,7 +994,7 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
                         onClick={() => setVideoSettings({ ...videoSettings, kling3ShotType: opt.value } as any)}
                         className={`flex-1 py-2.5 rounded-lg text-sm font-medium transition-all ${
                           shotType === opt.value
-                            ? 'bg-dash-700 text-white ring-1 ring-dash-400'
+                            ? 'bg-dash-600/25 backdrop-blur-sm text-dash-200 ring-1 ring-dash-400/50 shadow-[0_0_12px_rgba(34,197,94,0.15)]'
                             : 'bg-gray-800 text-gray-400 hover:bg-gray-700 border border-gray-700'
                         }`}
                       >
@@ -1192,7 +1192,7 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
                           onClick={() => setVideoSettings({ ...videoSettings, kling3Tier: opt.value } as any)}
                           className={`flex-1 py-2 rounded-lg text-xs font-medium transition-all ${
                             ((videoSettings as any).kling3Tier || 'pro') === opt.value
-                              ? 'bg-dash-700 text-white ring-1 ring-dash-400'
+                              ? 'bg-dash-600/25 backdrop-blur-sm text-dash-200 ring-1 ring-dash-400/50 shadow-[0_0_12px_rgba(34,197,94,0.15)]'
                               : 'bg-gray-800 text-gray-400 hover:bg-gray-700 border border-gray-700'
                           }`}
                         >
@@ -1216,7 +1216,7 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
                           onClick={() => setVideoSettings({ ...videoSettings, kling3AspectRatio: opt.value } as any)}
                           className={`flex-1 py-2 rounded-lg text-xs font-medium transition-all ${
                             ((videoSettings as any).kling3AspectRatio || '16:9') === opt.value
-                              ? 'bg-dash-700 text-white ring-1 ring-dash-400'
+                              ? 'bg-dash-600/25 backdrop-blur-sm text-dash-200 ring-1 ring-dash-400/50 shadow-[0_0_12px_rgba(34,197,94,0.15)]'
                               : 'bg-gray-800 text-gray-400 hover:bg-gray-700 border border-gray-700'
                           }`}
                         >
