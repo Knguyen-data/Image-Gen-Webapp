@@ -347,14 +347,9 @@ async function extractFrames(
 /**
  * Encode frames to video using MediaRecorder + canvas.
  *
- * Strategy: captureStream(0) for manual frame control + requestFrame() to push
- * each frame. We write all frames as fast as possible (no real-time pacing),
- * then fix the WebM duration using ts-ebml-style duration patching so the
- * output plays at the correct FPS.
- *
- * Since MediaRecorder doesn't let us set frame duration directly, we
- * post-process the WebM blob to set the correct duration in the Segment/Info
- * header, which makes the browser play it at the right speed.
+ * Each frame is paced at the exact target interval (1000/fps ms) so that
+ * MediaRecorder's internal timestamps match the desired playback rate.
+ * This produces correct WebM cluster timestamps without post-processing.
  */
 async function encodeToVideo(
   frames: ImageData[],
@@ -392,7 +387,7 @@ async function encodeToVideo(
     recorder.onstop = async () => {
       const rawBlob = new Blob(chunks, { type: 'video/webm' });
 
-      // Fix duration in the WebM container
+      // Fix duration in the WebM container for players that need it
       const expectedDuration = (frames.length / fps) * 1000; // ms
       const fixedBlob = await fixWebMDuration(rawBlob, expectedDuration);
 
@@ -401,42 +396,46 @@ async function encodeToVideo(
     };
 
     recorder.onerror = () => reject(new Error('MediaRecorder error'));
-
-    // Use timeslice to get data periodically (helps with large videos)
     recorder.start(1000);
     onProgress?.('Encoding video...');
 
     const track = stream.getVideoTracks()[0] as any;
+    const frameIntervalMs = 1000 / fps; // e.g. 48fps → 20.83ms per frame
     let frameIdx = 0;
 
-    // Write frames with a small interval to give the encoder breathing room
-    // but fast enough that encoding doesn't take forever
-    const interval = setInterval(() => {
-      // Process a batch of frames per tick for speed
-      const batchSize = 4;
-      for (let b = 0; b < batchSize && frameIdx < frames.length; b++) {
-        ctx.putImageData(frames[frameIdx], 0, 0);
+    // Pace frames at the correct FPS interval using precise timing
+    const startTime = performance.now();
 
-        if (track && typeof track.requestFrame === 'function') {
-          track.requestFrame();
-        }
-
-        frameIdx++;
-      }
-
-      if (frameIdx % 20 < batchSize) {
-        onProgress?.(`Encoding: ${frameIdx}/${frames.length} frames`);
-      }
-
+    function writeNextFrame() {
       if (frameIdx >= frames.length) {
-        clearInterval(interval);
-        // Give encoder time to process final frames
+        // All frames written — give encoder time to flush, then stop
         setTimeout(() => {
           recorder.stop();
           stream.getTracks().forEach((t) => t.stop());
         }, 200);
+        return;
       }
-    }, 16); // ~60 ticks/sec, processing 4 frames each = ~240 frames/sec throughput
+
+      ctx.putImageData(frames[frameIdx], 0, 0);
+      if (track && typeof track.requestFrame === 'function') {
+        track.requestFrame();
+      }
+
+      if (frameIdx % 20 === 0) {
+        onProgress?.(`Encoding: ${frameIdx + 1}/${frames.length} frames`);
+      }
+
+      frameIdx++;
+
+      // Schedule next frame at the correct wall-clock time
+      // This ensures MediaRecorder timestamps each frame at the right interval
+      const nextFrameTime = startTime + frameIdx * frameIntervalMs;
+      const delay = Math.max(0, nextFrameTime - performance.now());
+      setTimeout(writeNextFrame, delay);
+    }
+
+    // Start writing frames
+    writeNextFrame();
   });
 }
 
