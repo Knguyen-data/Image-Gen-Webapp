@@ -52,7 +52,13 @@ export async function listFolderContents(
   );
 
   if (!response.ok) {
-    throw new Error(`Drive API error: ${response.status}`);
+    const status = response.status;
+    if (status === 403) {
+      // Permission denied - likely OAuth scope issue or folder not accessible
+      console.warn('[GoogleDrive] 403 Forbidden - folder may require specific permissions or be restricted');
+      return { files: [], nextPageToken: undefined };
+    }
+    throw new Error(`Drive API error: ${status}`);
   }
 
   const data = await response.json();

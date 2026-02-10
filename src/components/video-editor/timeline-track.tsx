@@ -1,6 +1,6 @@
 import React from 'react';
 import ClipBar from './clip-bar';
-import type { EditorLayerInfo, TransitionType } from '../../services/video-editor-service';
+import type { EditorLayerInfo } from '../../services/video-editor-service';
 
 interface TimelineTrackProps {
   layer: EditorLayerInfo;
@@ -17,6 +17,8 @@ interface TimelineTrackProps {
   onDragStart: (clipId: string) => void;
   onDragOver: (clipId: string) => void;
   onDragEnd: () => void;
+  // Waveform display
+  showWaveforms?: boolean;
 }
 
 const TimelineTrack: React.FC<TimelineTrackProps> = ({
@@ -33,35 +35,15 @@ const TimelineTrack: React.FC<TimelineTrackProps> = ({
   onDragStart,
   onDragOver,
   onDragEnd,
+  showWaveforms = true,
 }) => {
   return (
-    <div className="group/track">
-      {/* Track header */}
-      <div className="flex items-center gap-2 px-3 py-1.5 border-b border-gray-800/50">
-        <div className="flex items-center gap-2 min-w-[100px]">
-          <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">
-            Track {layer.index + 1}
-          </span>
-          <span className="text-[9px] text-gray-600 bg-gray-800 px-1.5 py-0.5 rounded">
-            {layer.mode === 'SEQUENTIAL' ? 'SEQ' : 'STACK'}
-          </span>
-        </div>
-        <div className="flex-1" />
-        {layer.clips.length === 0 && (
-          <button
-            onClick={() => onRemoveTrack(layer.index)}
-            className="text-[10px] text-gray-600 hover:text-red-400 transition-colors opacity-0 group-hover/track:opacity-100"
-          >
-            Remove
-          </button>
-        )}
-      </div>
-
-      {/* Clips */}
-      <div className="flex items-center px-3 py-2 min-h-[60px] overflow-x-visible">
+    <div className="flex items-center h-10 border-b border-gray-800/30 relative group/track">
+      {/* Clips container */}
+      <div className="flex-1 flex items-center min-w-0 relative">
         {layer.clips.length === 0 ? (
-          <div className="text-xs text-gray-600 italic select-none pl-1">
-            Empty track — drag clips here or import B-roll
+          <div className="flex items-center h-full pl-2">
+            <span className="text-xs text-gray-700 select-none">Empty</span>
           </div>
         ) : (
           layer.clips.map((clip, i) => (
@@ -79,9 +61,14 @@ const TimelineTrack: React.FC<TimelineTrackProps> = ({
               onDragStart={onDragStart}
               onDragOver={onDragOver}
               onDragEnd={onDragEnd}
-              isDragOver={dragOverClipId === clip.id}
+              showWaveform={showWaveforms}
             />
           ))
+        )}
+
+        {/* Drop indicator when dragging */}
+        {dragOverClipId && (
+          <div className="absolute top-0 bottom-0 w-0.5 bg-dash-500 animate-pulse z-10" />
         )}
       </div>
     </div>
