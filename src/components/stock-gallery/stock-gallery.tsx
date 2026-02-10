@@ -7,16 +7,16 @@ interface StockGalleryProps {
   onClose: () => void;
 }
 
-// Categories for luxury stock footage
+// Categories from actual Google Drive folder structure
 const CATEGORIES = [
-  { id: 'luxury', name: 'Luxury', icon: '💎' },
-  { id: 'cars', name: 'Cars', icon: '🚗' },
-  { id: 'yachts', name: 'Yachts', icon: '🛥️' },
-  { id: 'planes', name: 'Planes', icon: '✈️' },
-  { id: 'watches', name: 'Watches', icon: '⌚' },
-  { id: 'property', name: 'Property', icon: '🏠' },
-  { id: 'lifestyle', name: 'Lifestyle', icon: '✨' },
-  { id: 'abstract', name: 'Abstract', icon: '🎨' },
+  { id: 'luxury', name: 'Luxury', icon: '💎', searchTerm: 'Luxury' },
+  { id: 'cars', name: 'Cars', icon: '🚗', searchTerm: 'Car' },
+  { id: 'city', name: 'City', icon: '🏙️', searchTerm: 'City' },
+  { id: 'nature', name: 'Nature', icon: '🌿', searchTerm: 'Nature' },
+  { id: 'animal', name: 'Animals', icon: '🐆', searchTerm: 'Animal' },
+  { id: 'aesthetic', name: 'Aesthetic', icon: '🎬', searchTerm: 'Aesthetic' },
+  { id: 'travel', name: 'Travel', icon: '✈️', searchTerm: 'Travel' },
+  { id: 'lifestyle', name: 'Lifestyle', icon: '✨', searchTerm: 'Lifestyle' },
 ];
 
 const StockGallery: React.FC<StockGalleryProps> = ({ onSelectVideo, onClose }) => {
@@ -55,7 +55,9 @@ const StockGallery: React.FC<StockGalleryProps> = ({ onSelectVideo, onClose }) =
       if (searchQuery.trim()) {
         results = await searchVideos(searchQuery, folderId);
       } else if (selectedCategory) {
-        results = await searchVideos(selectedCategory, folderId);
+        const category = CATEGORIES.find(c => c.id === selectedCategory);
+        const searchTerm = category?.searchTerm || selectedCategory;
+        results = await searchVideos(searchTerm, folderId);
       } else {
         const data = await listFolderContents(folderId);
         results = data.files;
