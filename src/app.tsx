@@ -2668,6 +2668,7 @@ INSTRUCTIONS:
             selectMode={selectMode}
             selectedVideos={selectedVideos}
             onSelectVideo={toggleVideoSelection}
+            onOpenSettings={() => setShowSettings(true)}
           />
 
           {/* Video Compare Modal */}
