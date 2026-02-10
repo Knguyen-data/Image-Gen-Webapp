@@ -3,6 +3,8 @@ import LeftPanel from './components/left-panel';
 import RightPanel from './components/right-panel';
 import ApiKeyModal from './components/api-key-modal';
 import ModifyImageModal from './components/modify-image-modal';
+import AuthPage from './components/auth-page';
+import { useAuth } from './hooks/use-auth';
 import { RecoveryModal } from './components/recovery-modal';
 import SettingsPage from './components/settings-page';
 import { CompareModal } from './components/compare-modal';
@@ -37,7 +39,8 @@ import { SavedPrompt } from './types/prompt-library';
 import { requestManager } from './services/request-manager';
 
 
-const App: React.FC = () => {
+// Inner app component with all hooks
+const AppInner: React.FC = () => {
   // State: Settings & Inputs
   const [prompts, setPrompts] = useState<PromptItem[]>([
     { id: crypto.randomUUID(), text: '', referenceImages: [] }
@@ -2743,6 +2746,27 @@ INSTRUCTIONS:
       )}
     </div>
   );
+};
+
+// Wrapper component that handles auth gate
+const App: React.FC = () => {
+  const { isAuthenticated, loading: authLoading } = useAuth();
+
+  // Show loading spinner during auth check
+  if (authLoading) {
+    return (
+      <div className="fixed inset-0 bg-gray-950 flex items-center justify-center">
+        <div className="w-8 h-8 border-2 border-dash-400 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  // Show auth page if not authenticated
+  if (!isAuthenticated) {
+    return <AuthPage onAuthenticated={() => {}} />;
+  }
+
+  return <AppInner />;
 };
 
 export default App;
