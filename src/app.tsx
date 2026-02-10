@@ -1978,6 +1978,7 @@ INSTRUCTIONS:
   const handleVeoGet1080p = async (taskId: string) => {
     if (!kieApiKey) return;
     setIsVeoUpgrading(true);
+    const jobId = addJob({ type: 'video', status: 'active', prompt: 'Veo 3.1: Upgrading to 1080P' });
     try {
       const result = await getVeo1080pVideo(kieApiKey, { taskId });
       const url1080p = result.data.resultUrl;
@@ -1986,10 +1987,12 @@ INSTRUCTIONS:
         videoUrls: [url1080p, ...(prev.videoUrls?.slice(1) || [])],
         resolution: '1080P',
       } : prev);
-      addLog({ level: 'info', message: `Veo 3.1: 1080P video ready` });
+      updateJob(jobId, { status: 'completed' });
+      addLog({ level: 'info', message: `Veo 3.1: 1080P video ready`, jobId });
     } catch (error: any) {
       logger.error('App', 'Veo 1080P upgrade failed', { error });
-      addLog({ level: 'error', message: `Veo 1080P failed: ${error.message}` });
+      updateJob(jobId, { status: 'failed', error: error.message });
+      addLog({ level: 'error', message: `Veo 1080P failed: ${error.message}`, jobId });
     } finally {
       setIsVeoUpgrading(false);
     }
@@ -1998,6 +2001,7 @@ INSTRUCTIONS:
   const handleVeoGet4k = async (taskId: string) => {
     if (!kieApiKey) return;
     setIsVeoUpgrading(true);
+    const jobId = addJob({ type: 'video', status: 'active', prompt: 'Veo 3.1: Upgrading to 4K' });
     try {
       const request4k = await requestVeo4kVideo(kieApiKey, { taskId });
       const fourKTaskId = request4k.data.taskId;
@@ -2018,11 +2022,13 @@ INSTRUCTIONS:
           resolution: '4K',
           progress: undefined,
         } : prev);
-        addLog({ level: 'info', message: `Veo 3.1: 4K video ready` });
+        updateJob(jobId, { status: 'completed' });
+        addLog({ level: 'info', message: `Veo 3.1: 4K video ready`, jobId });
       }
     } catch (error: any) {
       logger.error('App', 'Veo 4K upgrade failed', { error });
-      addLog({ level: 'error', message: `Veo 4K failed: ${error.message}` });
+      updateJob(jobId, { status: 'failed', error: error.message });
+      addLog({ level: 'error', message: `Veo 4K failed: ${error.message}`, jobId });
     } finally {
       setIsVeoUpgrading(false);
     }
@@ -2469,6 +2475,8 @@ INSTRUCTIONS:
       return;
     }
 
+    const jobId = addJob({ type: 'video', status: 'active', prompt: `RIFE Smooth: ${(targetVideo.prompt || videoId).slice(0, 40)}` });
+    addLog({ level: 'info', message: 'Starting RIFE interpolation', jobId });
     logger.info('App', 'Starting RIFE interpolation', { videoId, url: targetVideo.url.slice(0, 50) });
     setIsInterpolating(true);
     setLoadingStatus('Smooth Video: Starting...');
@@ -2502,10 +2510,14 @@ INSTRUCTIONS:
         logger.warn('App', 'Failed to persist interpolated video to IndexedDB', e)
       );
 
+      updateJob(jobId, { status: 'completed' });
+      addLog({ level: 'info', message: 'RIFE interpolation complete', jobId });
       logger.info('App', 'RIFE interpolation complete', { videoId, resultUrl: resultUrl.slice(0, 50) });
       setLoadingStatus('Smooth Video: Complete!');
 
     } catch (error: any) {
+      updateJob(jobId, { status: 'failed', error: error.message });
+      addLog({ level: 'error', message: `RIFE interpolation failed: ${error.message}`, jobId });
       logger.error('App', 'RIFE interpolation failed', { error: error.message, videoId });
       alert(`Interpolation failed: ${error.message}`);
       setLoadingStatus('Smooth Video: Failed');
