@@ -25,6 +25,7 @@ interface RightPanelProps {
   selectedVideos?: string[];
   onSelectVideo?: (videoId: string) => void;
   onOpenSettings?: () => void;
+  onOpenVideoEditor?: () => void;
 }
 
 const RightPanel: React.FC<RightPanelProps> = ({
@@ -44,7 +45,8 @@ const RightPanel: React.FC<RightPanelProps> = ({
   selectMode = false,
   selectedVideos = [],
   onSelectVideo = (_videoId: string) => {},
-  onOpenSettings
+  onOpenSettings,
+  onOpenVideoEditor,
 }) => {
   const [selectedImageIds, setSelectedImageIds] = useState<Set<string>>(new Set());
   const [compareMode, setCompareMode] = useState(false);
@@ -603,9 +605,16 @@ const RightPanel: React.FC<RightPanelProps> = ({
                     🎬 Videos <span className="text-gray-500 font-normal">({generatedVideos.length})</span>
                   </h3>
 
-                  {/* Video column slider */}
+                  {/* Video column slider + Edit button */}
                   {generatedVideos.length > 0 && (
                     <div className="flex items-center gap-2">
+                      <button
+                        onClick={onOpenVideoEditor}
+                        className="px-2.5 py-1 rounded-lg bg-dash-600/20 hover:bg-dash-600/35 text-dash-300 text-xs font-medium transition-all duration-200 border border-dash-500/20 flex items-center gap-1.5"
+                        title="Open Video Editor"
+                      >
+                        ✂️ Edit
+                      </button>
                       <label className="text-xs text-gray-500">Size:</label>
                       <input
                         type="range"
