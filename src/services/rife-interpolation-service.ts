@@ -261,12 +261,12 @@ async function interpolateFramePair(
   const feeds: Record<string, ort.Tensor> = {
     img0: tensor0,
     img1: tensor1,
+    timestep: new ort.Tensor('float32', new Float32Array([0.5]), [1]),
   };
 
   const results = await session.run(feeds);
 
-  // The output tensor name varies — try common names
-  const outputTensor = results.output || results.mid || Object.values(results)[0];
+  const outputTensor = results.output || Object.values(results)[0];
   if (!outputTensor) {
     throw new Error('No output tensor from RIFE model');
   }
@@ -344,7 +344,8 @@ async function extractFrames(
 }
 
 /**
- * Encode frames to video using MediaRecorder + canvas
+ * Encode frames to video using MediaRecorder + canvas with precise timing.
+ * Uses requestAnimationFrame with real-time playback to ensure correct FPS.
  */
 async function encodeToVideo(
   frames: ImageData[],
@@ -368,10 +369,11 @@ async function encodeToVideo(
       mimeType = 'video/webm';
     }
 
-    const stream = canvas.captureStream(0); // 0 = manual frame capture
+    // Use captureStream with target FPS for proper timing metadata
+    const stream = canvas.captureStream(fps);
     const recorder = new MediaRecorder(stream, {
       mimeType,
-      videoBitsPerSecond: 10_000_000, // 10 Mbps for quality
+      videoBitsPerSecond: 10_000_000,
     });
 
     const chunks: Blob[] = [];
@@ -391,33 +393,35 @@ async function encodeToVideo(
     onProgress?.('Encoding video...');
 
     let frameIdx = 0;
-    const frameInterval = 1000 / fps;
+    const frameDuration = 1000 / fps;
+    const startTime = performance.now();
 
     const drawNext = () => {
       if (frameIdx >= frames.length) {
-        recorder.stop();
-        stream.getTracks().forEach((t) => t.stop());
+        // Small delay to let last frame register
+        setTimeout(() => {
+          recorder.stop();
+          stream.getTracks().forEach((t) => t.stop());
+        }, frameDuration * 2);
         return;
       }
 
-      ctx.putImageData(frames[frameIdx], 0, 0);
+      const expectedTime = startTime + frameIdx * frameDuration;
+      const now = performance.now();
 
-      // Request a frame capture from the stream
-      const track = stream.getVideoTracks()[0];
-      if (track && 'requestFrame' in track) {
-        (track as any).requestFrame();
+      if (now >= expectedTime) {
+        ctx.putImageData(frames[frameIdx], 0, 0);
+        frameIdx++;
+
+        if (frameIdx % 20 === 0) {
+          onProgress?.(`Encoding: ${frameIdx}/${frames.length} frames`);
+        }
       }
 
-      frameIdx++;
-
-      if (frameIdx % 20 === 0) {
-        onProgress?.(`Encoding: ${frameIdx}/${frames.length} frames`);
-      }
-
-      setTimeout(drawNext, frameInterval);
+      requestAnimationFrame(drawNext);
     };
 
-    drawNext();
+    requestAnimationFrame(drawNext);
   });
 }
 
