@@ -27,6 +27,24 @@ export type ExportResult = {
 
 export type { TransitionType };
 
+/**
+ * Convert a blob URL to a data URL to avoid HEAD request issues
+ * Blob URLs trigger ERR_METHOD_NOT_SUPPORTED when Diffusion Studio Core tries to HEAD them
+ */
+async function blobUrlToDataUrl(blobUrl: string): Promise<string> {
+  if (!blobUrl.startsWith('blob:')) return blobUrl;
+  
+  const response = await fetch(blobUrl);
+  const blob = await response.blob();
+  
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
+
 export interface EditorClipInfo {
   id: string;
   layerIndex: number;
@@ -208,15 +226,10 @@ class VideoEditorService {
 
     const layer = this.composition.layers[layerIndex];
     
-    // Source.from() does a HEAD request which fails on blob URLs (browser limitation)
-    // The clip still works, we just can't get metadata beforehand
-    let source: Source;
-    try {
-      source = await Source.from(videoUrl);
-    } catch (e) {
-      // Fallback: create source without metadata (blob URLs don't support HEAD)
-      source = await Source.from(videoUrl, { noMetadata: true } as any);
-    }
+    // Convert blob URLs to data URLs to avoid HEAD request errors
+    // Diffusion Studio Core tries to HEAD blob URLs which browsers don't support
+    const safeUrl = await blobUrlToDataUrl(videoUrl);
+    const source = await Source.from(safeUrl);
     
     const clip = new VideoClip(source as any, range ? {
       range: [range[0], range[1]],
