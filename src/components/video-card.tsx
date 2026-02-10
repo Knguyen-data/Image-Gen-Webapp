@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { GeneratedVideo } from '../types';
 import { applyVfxEffect } from '../services/freepik-vfx-service';
-import { uploadUrlToR2, uploadBlobToR2 } from '../services/r2-upload-service';
+import { supabase } from '../services/supabase';
 import { VFX_FILTERS, VFX_FPS_OPTIONS, type VfxFilterType, type VfxApplyOptions, type VfxFps } from '../types/vfx';
 
 interface VideoCardProps {
@@ -69,14 +69,26 @@ const VideoCard: React.FC<VideoCardProps> = ({
       let publicUrl = video.url;
       
       if (publicUrl.startsWith('blob:') || publicUrl.startsWith('data:')) {
-        // Blob/data URLs need to be uploaded to R2 first
-        setVfxProgress('Uploading video for processing…');
+        // Blob/data URLs need to be uploaded to Supabase Storage first
+        setVfxProgress('Uploading video to storage…');
         try {
           const resp = await fetch(publicUrl);
           const blob = await resp.blob();
-          publicUrl = await uploadBlobToR2(blob, `vfx-input-${Date.now()}.mp4`);
+          const fileName = `vfx-input/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.mp4`;
+          
+          const { data, error } = await supabase.storage
+            .from('videos')
+            .upload(fileName, blob, { contentType: 'video/mp4', upsert: true });
+          
+          if (error) throw new Error(error.message);
+          
+          const { data: urlData } = supabase.storage
+            .from('videos')
+            .getPublicUrl(data.path);
+          
+          publicUrl = urlData.publicUrl;
         } catch (uploadErr) {
-          throw new Error(`Cannot process: video must be publicly accessible. Upload failed: ${uploadErr instanceof Error ? uploadErr.message : 'unknown'}`);
+          throw new Error(`Upload failed: ${uploadErr instanceof Error ? uploadErr.message : 'unknown'}`);
         }
       } else if (!publicUrl.startsWith('http://') && !publicUrl.startsWith('https://')) {
         throw new Error('Video URL must be a public HTTP(S) URL for VFX processing');
