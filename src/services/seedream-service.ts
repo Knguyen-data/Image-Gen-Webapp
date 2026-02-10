@@ -6,7 +6,7 @@
 import { SeedreamSettings, SeedreamTask, SeedreamAspectRatio } from '../types';
 import { waitForSlot } from './unified-kie-rate-limiter';
 import { logger } from './logger';
-import { uploadBase64ToR2 } from './r2-upload-service';
+import { uploadBase64ToR2 } from './supabase-storage-service';
 
 const UPLOAD_URL = 'https://kieai.redpandaai.co/api/file-base64-upload';
 const CREATE_TASK_URL = 'https://api.kie.ai/api/v1/jobs/createTask';

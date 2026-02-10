@@ -6,7 +6,7 @@
 
 import { VideoScene, VideoSettings, GeneratedVideo, ReferenceVideo, KlingProvider } from '../types';
 import { pollForResult } from './seedream-service';
-import { uploadBase64ToR2, uploadBlobToR2 } from './r2-upload-service';
+import { uploadBase64ToR2, uploadBlobToR2 } from './supabase-storage-service';
 import { createFreepikMotionTask, pollFreepikMotionTask } from './freepik-kling-service';
 import { waitForSlot } from './unified-kie-rate-limiter';
 import { logger } from './logger';

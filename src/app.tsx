@@ -22,7 +22,7 @@ import { processBatchQueue, QueueTask, calculateOptimalBatchSize, BATCH_DELAYS }
 import { withRateLimitRetry } from './services/rate-limiter';
 import { useSeedreamCredits } from './hooks/use-seedream-credits';
 import { generateWithSeedream, mapAspectRatio } from './services/seedream-service';
-import { uploadBase64ToR2, uploadUrlToR2 } from './services/r2-upload-service';
+import { uploadBase64ToR2, uploadUrlToR2 } from './services/supabase-storage-service';
 // TODO: Implement client-side video interpolation (TensorFlow.js FILM or RIFE)
 import { generateWithSeedreamTxt2Img } from './services/seedream-txt2img-service';
 import { generateMotionVideo } from './services/kling-motion-control-service';

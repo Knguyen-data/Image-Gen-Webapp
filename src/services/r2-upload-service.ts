@@ -1,3 +1,5 @@
+/** @deprecated Use supabase-storage-service.ts instead. This file is kept for reference only. */
+
 /**
  * R2 Media Upload Service
  * Uploads files (base64, URL, blob) to Cloudflare R2 via the r2-media-upload Worker.
