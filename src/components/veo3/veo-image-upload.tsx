@@ -36,7 +36,7 @@ export const VeoFrameZones: React.FC<VeoFrameZoneProps> = ({
 
   const handleDrop = async (e: React.DragEvent, setter: (img: ReferenceImage | undefined) => void) => {
     e.preventDefault();
-    e.currentTarget.classList.remove('border-violet-400', 'bg-gray-800/60');
+    e.currentTarget.classList.remove('border-dash-400', 'bg-gray-800/60');
 
     // Try gallery drag (application/json) first
     const jsonData = e.dataTransfer.getData('application/json');
@@ -54,8 +54,8 @@ export const VeoFrameZones: React.FC<VeoFrameZoneProps> = ({
   };
 
   const dragHandlers = {
-    onDragOver: (e: React.DragEvent) => { e.preventDefault(); e.currentTarget.classList.add('border-violet-400', 'bg-gray-800/60'); },
-    onDragLeave: (e: React.DragEvent) => { e.preventDefault(); e.currentTarget.classList.remove('border-violet-400', 'bg-gray-800/60'); },
+    onDragOver: (e: React.DragEvent) => { e.preventDefault(); e.currentTarget.classList.add('border-dash-400', 'bg-gray-800/60'); },
+    onDragLeave: (e: React.DragEvent) => { e.preventDefault(); e.currentTarget.classList.remove('border-dash-400', 'bg-gray-800/60'); },
   };
 
   return (
@@ -68,7 +68,7 @@ export const VeoFrameZones: React.FC<VeoFrameZoneProps> = ({
         <div className="flex-1">
           <span className="text-[10px] text-gray-500 mb-1 block">First Frame</span>
           {startImage ? (
-            <div className="relative group rounded-lg overflow-hidden border border-violet-500/40 aspect-video bg-gray-900">
+            <div className="relative group rounded-lg overflow-hidden border border-dash-500/40 aspect-video bg-gray-900">
               <img src={startImage.previewUrl} alt="First frame" className="w-full h-full object-contain bg-black" />
               <button
                 onClick={() => onSetStartImage(undefined)}
@@ -77,7 +77,7 @@ export const VeoFrameZones: React.FC<VeoFrameZoneProps> = ({
             </div>
           ) : (
             <label
-              className="flex flex-col items-center justify-center aspect-video rounded-lg border-2 border-dashed border-gray-700 hover:border-violet-500/50 bg-gray-900/50 cursor-pointer transition-colors"
+              className="flex flex-col items-center justify-center aspect-video rounded-lg border-2 border-dashed border-gray-700 hover:border-dash-500/50 bg-gray-900/50 cursor-pointer transition-colors"
               {...dragHandlers}
               onDrop={(e) => handleDrop(e, onSetStartImage)}
             >
@@ -91,7 +91,7 @@ export const VeoFrameZones: React.FC<VeoFrameZoneProps> = ({
         <div className="flex-1">
           <span className="text-[10px] text-gray-500 mb-1 block">Last Frame (Optional)</span>
           {endImage ? (
-            <div className="relative group rounded-lg overflow-hidden border border-violet-500/40 aspect-video bg-gray-900">
+            <div className="relative group rounded-lg overflow-hidden border border-dash-500/40 aspect-video bg-gray-900">
               <img src={endImage.previewUrl} alt="Last frame" className="w-full h-full object-contain bg-black" />
               <button
                 onClick={() => onSetEndImage(undefined)}
@@ -100,7 +100,7 @@ export const VeoFrameZones: React.FC<VeoFrameZoneProps> = ({
             </div>
           ) : (
             <label
-              className="flex flex-col items-center justify-center aspect-video rounded-lg border-2 border-dashed border-gray-700 hover:border-violet-500/50 bg-gray-900/50 cursor-pointer transition-colors"
+              className="flex flex-col items-center justify-center aspect-video rounded-lg border-2 border-dashed border-gray-700 hover:border-dash-500/50 bg-gray-900/50 cursor-pointer transition-colors"
               {...dragHandlers}
               onDrop={(e) => handleDrop(e, onSetEndImage)}
             >
@@ -130,7 +130,7 @@ export const VeoMaterialZone: React.FC<VeoMaterialZoneProps> = ({
 
   const handleDrop = async (e: React.DragEvent) => {
     e.preventDefault();
-    e.currentTarget.classList.remove('border-violet-400', 'bg-gray-800/60');
+    e.currentTarget.classList.remove('border-dash-400', 'bg-gray-800/60');
     if (materials.length >= maxImages) return;
 
     const jsonData = e.dataTransfer.getData('application/json');
@@ -158,22 +158,22 @@ export const VeoMaterialZone: React.FC<VeoMaterialZoneProps> = ({
       </label>
       <div className="grid grid-cols-3 gap-2">
         {materials.map((img, idx) => (
-          <div key={img.id} className="relative group rounded-lg overflow-hidden border border-violet-500/40 aspect-square bg-gray-900">
+          <div key={img.id} className="relative group rounded-lg overflow-hidden border border-dash-500/40 aspect-square bg-gray-900">
             <img src={img.previewUrl} alt={`Material ${idx + 1}`} className="w-full h-full object-cover" />
             <button
               onClick={() => removeMaterial(idx)}
               className="absolute top-1 right-1 w-5 h-5 bg-black/70 rounded-full flex items-center justify-center text-gray-300 hover:text-white opacity-0 group-hover:opacity-100 transition-opacity"
             >&times;</button>
-            <span className="absolute bottom-1 left-1 text-[9px] bg-black/70 text-violet-300 px-1.5 py-0.5 rounded">
+            <span className="absolute bottom-1 left-1 text-[9px] bg-black/70 text-dash-300 px-1.5 py-0.5 rounded">
               Img {idx + 1}
             </span>
           </div>
         ))}
         {materials.length < maxImages && (
           <label
-            className="flex flex-col items-center justify-center aspect-square rounded-lg border-2 border-dashed border-gray-700 hover:border-violet-500/50 bg-gray-900/50 cursor-pointer transition-colors"
-            onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add('border-violet-400', 'bg-gray-800/60'); }}
-            onDragLeave={(e) => { e.preventDefault(); e.currentTarget.classList.remove('border-violet-400', 'bg-gray-800/60'); }}
+            className="flex flex-col items-center justify-center aspect-square rounded-lg border-2 border-dashed border-gray-700 hover:border-dash-500/50 bg-gray-900/50 cursor-pointer transition-colors"
+            onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add('border-dash-400', 'bg-gray-800/60'); }}
+            onDragLeave={(e) => { e.preventDefault(); e.currentTarget.classList.remove('border-dash-400', 'bg-gray-800/60'); }}
             onDrop={handleDrop}
           >
             <input type="file" accept="image/*" className="hidden" onChange={(e) => addMaterial(e.target.files)} />

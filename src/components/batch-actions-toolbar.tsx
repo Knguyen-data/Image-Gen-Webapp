@@ -41,7 +41,7 @@ export function BatchActionsToolbar({
           <button
             onClick={onCompare}
             disabled={selectedCount < 2}
-            className="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="px-4 py-2 bg-dash-600 text-white rounded hover:bg-dash-700 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             🔍 Compare
           </button>

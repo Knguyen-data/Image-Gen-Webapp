@@ -40,7 +40,7 @@ const VideoCard: React.FC<VideoCardProps> = ({
   };
 
   return (
-    <div className={`group relative overflow-hidden rounded-xl backdrop-blur-lg bg-white/10 dark:bg-gray-800/30 border border-white/20 hover:border-purple-500/50 transition-all duration-300 hover:scale-[1.02] ${selected ? 'border-emerald-500 ring-2 ring-emerald-500/50' : ''}`}>
+    <div className={`group relative overflow-hidden rounded-xl backdrop-blur-lg bg-white/10 dark:bg-gray-800/30 border border-white/20 hover:border-dash-500/50 transition-all duration-300 hover:scale-[1.02] ${selected ? 'border-emerald-500 ring-2 ring-emerald-500/50' : ''}`}>
       {/* Selection checkbox */}
       {selectable && (
         <div className="absolute top-2 left-2 z-20">
@@ -102,7 +102,7 @@ const VideoCard: React.FC<VideoCardProps> = ({
             </span>
             {/* Provider badge */}
             {video.provider && (
-              <span className={`absolute bottom-1 left-1 text-[10px] px-1.5 py-0.5 rounded font-medium text-white z-10 ${video.provider === 'freepik' ? 'bg-indigo-500/80' : 'bg-purple-500/80'}`}>
+              <span className={`absolute bottom-1 left-1 text-[10px] px-1.5 py-0.5 rounded font-medium text-white z-10 ${video.provider === 'freepik' ? 'bg-indigo-500/80' : 'bg-dash-500/80'}`}>
                 {video.provider === 'freepik' ? 'Freepik' : 'Kie.ai'}
               </span>
             )}

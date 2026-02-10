@@ -561,7 +561,7 @@ const PromptGenerator: React.FC<PromptGeneratorProps> = ({
                             <select
                               value={gp.cameraAngle || ''}
                               onChange={(e) => updatePromptMeta(gp.id, 'cameraAngle', e.target.value)}
-                              className="text-[10px] bg-gray-800 text-purple-400 px-1.5 py-0.5 rounded border border-gray-700 hover:border-purple-500/50 cursor-pointer outline-none"
+                              className="text-[10px] bg-gray-800 text-dash-400 px-1.5 py-0.5 rounded border border-gray-700 hover:border-dash-500/50 cursor-pointer outline-none"
                               title="Camera Angle"
                             >
                               <option value="">Camera Angle</option>
@@ -590,7 +590,7 @@ const PromptGenerator: React.FC<PromptGeneratorProps> = ({
                       {/* Meta tags */}
                       <div className="flex flex-wrap gap-1">
                         {gp.expression && (
-                          <span className="text-[9px] bg-purple-900/30 text-purple-300 px-1.5 py-0.5 rounded border border-purple-500/20">{gp.expression}</span>
+                          <span className="text-[9px] bg-dash-900/30 text-dash-300 px-1.5 py-0.5 rounded border border-dash-500/20">{gp.expression}</span>
                         )}
                         {gp.pose && (
                           <span className="text-[9px] bg-blue-900/30 text-blue-300 px-1.5 py-0.5 rounded border border-blue-500/20">{gp.pose}</span>

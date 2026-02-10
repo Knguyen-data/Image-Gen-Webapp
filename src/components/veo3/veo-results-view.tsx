@@ -33,7 +33,7 @@ const VeoResultsView: React.FC<VeoResultsViewProps> = ({
     return (
       <div className="bg-gray-900 rounded-lg p-6 border border-gray-800">
         <div className="flex flex-col items-center">
-          <div className="w-16 h-16 border-4 border-violet-500/30 border-t-violet-500 rounded-full animate-spin mb-4" />
+          <div className="w-16 h-16 border-4 border-dash-500/30 border-t-dash-500 rounded-full animate-spin mb-4" />
           <h3 className="text-lg font-medium text-white mb-2">
             Generating Video
           </h3>
@@ -75,7 +75,7 @@ const VeoResultsView: React.FC<VeoResultsViewProps> = ({
           {onRetry && (
             <button
               onClick={onRetry}
-              className="px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-lg transition-colors"
+              className="px-4 py-2 bg-dash-600 hover:bg-dash-700 text-white rounded-lg transition-colors"
             >
               ↻ Retry
             </button>
@@ -172,7 +172,7 @@ const VeoResultsView: React.FC<VeoResultsViewProps> = ({
           {onGet1080p && (
             <button
               onClick={onGet1080p}
-              className="flex items-center justify-center px-4 py-2 bg-violet-600/20 hover:bg-violet-600/30 text-violet-400 border border-violet-600/30 rounded-lg transition-colors text-sm"
+              className="flex items-center justify-center px-4 py-2 bg-dash-600/20 hover:bg-dash-600/30 text-dash-400 border border-dash-600/30 rounded-lg transition-colors text-sm"
             >
               Get 1080P
             </button>
@@ -181,7 +181,7 @@ const VeoResultsView: React.FC<VeoResultsViewProps> = ({
           {onGet4k && (
             <button
               onClick={onGet4k}
-              className="flex items-center justify-center px-4 py-2 bg-violet-600/20 hover:bg-violet-600/30 text-violet-400 border border-violet-600/30 rounded-lg transition-colors text-sm"
+              className="flex items-center justify-center px-4 py-2 bg-dash-600/20 hover:bg-dash-600/30 text-dash-400 border border-dash-600/30 rounded-lg transition-colors text-sm"
             >
               Request 4K
             </button>

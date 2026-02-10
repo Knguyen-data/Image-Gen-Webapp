@@ -643,7 +643,7 @@ const VideoSceneQueue: React.FC<VideoSceneQueueProps> = ({
         {isKling3 && scenes.length > 0 && (
           <div className={`flex items-center justify-between px-3 py-2 rounded-lg border text-xs ${
             isKling3Omni
-              ? 'bg-violet-900/20 border-violet-500/40 text-violet-300'
+              ? 'bg-dash-900/20 border-dash-500/40 text-dash-300'
               : totalDuration > 15
                 ? 'bg-red-900/20 border-red-500/40 text-red-300'
                 : 'bg-emerald-900/20 border-emerald-500/40 text-emerald-300'
@@ -850,11 +850,11 @@ const VideoSceneQueue: React.FC<VideoSceneQueueProps> = ({
           <button
             onClick={() => setShowStylePicker(!showStylePicker)}
             disabled={isAutoMotion || isGenerating}
-            className="w-full py-2.5 font-medium rounded-lg transition-all flex items-center justify-center gap-2 border border-purple-500/50 bg-purple-500/10 hover:bg-purple-500/20 text-purple-300 disabled:opacity-50"
+            className="w-full py-2.5 font-medium rounded-lg transition-all flex items-center justify-center gap-2 border border-dash-500/50 bg-dash-500/10 hover:bg-dash-500/20 text-dash-300 disabled:opacity-50"
           >
             {isAutoMotion ? (
               <>
-                <div className="w-4 h-4 border-2 border-purple-400 border-t-transparent rounded-full animate-spin"></div>
+                <div className="w-4 h-4 border-2 border-dash-400 border-t-transparent rounded-full animate-spin"></div>
                 Generating motion prompts...
               </>
             ) : (

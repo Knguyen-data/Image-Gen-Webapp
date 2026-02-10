@@ -61,7 +61,7 @@ const VeoSettingsPanel: React.FC<VeoSettingsPanelProps> = ({
                 disabled={disabled}
                 className={`flex-1 py-2 rounded-lg text-xs font-medium transition-all ${
                   settings.model === opt.value
-                    ? 'bg-violet-700 text-white ring-1 ring-violet-400'
+                    ? 'bg-dash-700 text-white ring-1 ring-dash-400'
                     : disabled
                     ? 'bg-gray-800/50 text-gray-600 cursor-not-allowed border border-gray-800'
                     : 'bg-gray-800 text-gray-400 hover:bg-gray-700 border border-gray-700'
@@ -90,7 +90,7 @@ const VeoSettingsPanel: React.FC<VeoSettingsPanelProps> = ({
               onClick={() => onUpdate({ ...settings, aspectRatio: opt.value })}
               className={`flex-1 py-2 rounded-lg text-xs font-medium transition-all ${
                 settings.aspectRatio === opt.value
-                  ? 'bg-violet-700 text-white ring-1 ring-violet-400'
+                  ? 'bg-dash-700 text-white ring-1 ring-dash-400'
                   : 'bg-gray-800 text-gray-400 hover:bg-gray-700 border border-gray-700'
               }`}
             >
@@ -115,7 +115,7 @@ const VeoSettingsPanel: React.FC<VeoSettingsPanelProps> = ({
           onClick={() => onUpdate({ ...settings, enableTranslation: !settings.enableTranslation })}
           className={`w-10 h-5 rounded-full relative transition-colors ${
             settings.enableTranslation
-              ? 'bg-violet-700 ring-1 ring-violet-400'
+              ? 'bg-dash-700 ring-1 ring-dash-400'
               : 'bg-gray-700'
           }`}
         >
@@ -153,7 +153,7 @@ const VeoSettingsPanel: React.FC<VeoSettingsPanelProps> = ({
                     seeds: val === '' ? undefined : parseInt(val, 10),
                   });
                 }}
-                className="w-full bg-gray-950 border border-gray-700 rounded-lg p-2 text-xs text-gray-300 font-mono focus:ring-1 focus:ring-violet-400 focus:border-violet-500/50 transition-all placeholder:text-gray-600"
+                className="w-full bg-gray-950 border border-gray-700 rounded-lg p-2 text-xs text-gray-300 font-mono focus:ring-1 focus:ring-dash-400 focus:border-dash-500/50 transition-all placeholder:text-gray-600"
               />
             </div>
 
@@ -166,7 +166,7 @@ const VeoSettingsPanel: React.FC<VeoSettingsPanelProps> = ({
                 placeholder="Optional watermark text"
                 value={settings.watermark ?? ''}
                 onChange={(e) => onUpdate({ ...settings, watermark: e.target.value || undefined })}
-                className="w-full bg-gray-950 border border-gray-700 rounded-lg p-2 text-xs text-gray-300 focus:ring-1 focus:ring-violet-400 focus:border-violet-500/50 transition-all placeholder:text-gray-600"
+                className="w-full bg-gray-950 border border-gray-700 rounded-lg p-2 text-xs text-gray-300 focus:ring-1 focus:ring-dash-400 focus:border-dash-500/50 transition-all placeholder:text-gray-600"
               />
             </div>
 
@@ -178,7 +178,7 @@ const VeoSettingsPanel: React.FC<VeoSettingsPanelProps> = ({
                 placeholder="https://your-server.com/callback"
                 value={settings.callBackUrl ?? ''}
                 onChange={(e) => onUpdate({ ...settings, callBackUrl: e.target.value || undefined })}
-                className="w-full bg-gray-950 border border-gray-700 rounded-lg p-2 text-xs text-gray-300 font-mono focus:ring-1 focus:ring-violet-400 focus:border-violet-500/50 transition-all placeholder:text-gray-600"
+                className="w-full bg-gray-950 border border-gray-700 rounded-lg p-2 text-xs text-gray-300 font-mono focus:ring-1 focus:ring-dash-400 focus:border-dash-500/50 transition-all placeholder:text-gray-600"
               />
             </div>
           </div>

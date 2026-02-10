@@ -43,7 +43,7 @@ const Kling3OmniPanel: React.FC<Kling3OmniPanelProps> = ({
   // Handle drop from gallery (application/json) OR file system
   const handleFrameDrop = async (e: React.DragEvent, which: 'kling3OmniStartImage' | 'kling3OmniEndImage') => {
     e.preventDefault();
-    e.currentTarget.classList.remove('border-violet-400', 'bg-gray-800/60');
+    e.currentTarget.classList.remove('border-dash-400', 'bg-gray-800/60');
 
     // Try gallery drag (application/json) first
     const jsonData = e.dataTransfer.getData('application/json');
@@ -72,7 +72,7 @@ const Kling3OmniPanel: React.FC<Kling3OmniPanelProps> = ({
   };
   const handleRefImageDrop = async (e: React.DragEvent) => {
     e.preventDefault();
-    e.currentTarget.classList.remove('border-violet-400', 'bg-gray-800/60');
+    e.currentTarget.classList.remove('border-dash-400', 'bg-gray-800/60');
     if (refImages.length >= 4) return;
 
     // Try gallery drag first
@@ -245,7 +245,7 @@ const Kling3OmniPanel: React.FC<Kling3OmniPanelProps> = ({
               onClick={() => setVideoSettings({ ...videoSettings, kling3OmniInputMode: opt.value } as any)}
               className={`flex-1 py-2.5 rounded-lg text-sm font-medium transition-all ${
                 inputMode === opt.value
-                  ? 'bg-violet-700 text-white ring-1 ring-violet-400'
+                  ? 'bg-dash-700 text-white ring-1 ring-dash-400'
                   : 'bg-gray-800 text-gray-400 hover:bg-gray-700 border border-gray-700'
               }`}
             >
@@ -275,7 +275,7 @@ const Kling3OmniPanel: React.FC<Kling3OmniPanelProps> = ({
                 <div className="flex-1">
                   <span className="text-[10px] text-gray-500 mb-1 block">Start Frame</span>
                   {startImg ? (
-                    <div className={`relative group rounded-lg overflow-hidden border border-violet-500/40 ${aspectClass} bg-gray-900`}>
+                    <div className={`relative group rounded-lg overflow-hidden border border-dash-500/40 ${aspectClass} bg-gray-900`}>
                       <img src={startImg.previewUrl} alt="Start frame" className="w-full h-full object-contain bg-black" />
                       <button
                         onClick={() => setVideoSettings({ ...videoSettings, kling3OmniStartImage: undefined } as any)}
@@ -286,9 +286,9 @@ const Kling3OmniPanel: React.FC<Kling3OmniPanelProps> = ({
                     </div>
                   ) : (
                     <label
-                      className={`flex flex-col items-center justify-center ${aspectClass} rounded-lg border-2 border-dashed border-gray-700 hover:border-violet-500/50 bg-gray-900/50 cursor-pointer transition-colors`}
-                      onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add('border-violet-400', 'bg-gray-800/60'); }}
-                      onDragLeave={(e) => { e.preventDefault(); e.currentTarget.classList.remove('border-violet-400', 'bg-gray-800/60'); }}
+                      className={`flex flex-col items-center justify-center ${aspectClass} rounded-lg border-2 border-dashed border-gray-700 hover:border-dash-500/50 bg-gray-900/50 cursor-pointer transition-colors`}
+                      onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add('border-dash-400', 'bg-gray-800/60'); }}
+                      onDragLeave={(e) => { e.preventDefault(); e.currentTarget.classList.remove('border-dash-400', 'bg-gray-800/60'); }}
                       onDrop={(e) => handleFrameDrop(e, 'kling3OmniStartImage')}
                     >
                       <input type="file" accept="image/*" className="hidden" onChange={(e) => handleFrameUpload(e.target.files, 'kling3OmniStartImage')} />
@@ -306,7 +306,7 @@ const Kling3OmniPanel: React.FC<Kling3OmniPanelProps> = ({
                 <div className="flex-1">
                   <span className="text-[10px] text-gray-500 mb-1 block">End Frame</span>
                   {endImg ? (
-                    <div className={`relative group rounded-lg overflow-hidden border border-violet-500/40 ${aspectClass} bg-gray-900`}>
+                    <div className={`relative group rounded-lg overflow-hidden border border-dash-500/40 ${aspectClass} bg-gray-900`}>
                       <img src={endImg.previewUrl} alt="End frame" className="w-full h-full object-contain bg-black" />
                       <button
                         onClick={() => setVideoSettings({ ...videoSettings, kling3OmniEndImage: undefined } as any)}
@@ -317,9 +317,9 @@ const Kling3OmniPanel: React.FC<Kling3OmniPanelProps> = ({
                     </div>
                   ) : (
                     <label
-                      className={`flex flex-col items-center justify-center ${aspectClass} rounded-lg border-2 border-dashed border-gray-700 hover:border-violet-500/50 bg-gray-900/50 cursor-pointer transition-colors`}
-                      onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add('border-violet-400', 'bg-gray-800/60'); }}
-                      onDragLeave={(e) => { e.preventDefault(); e.currentTarget.classList.remove('border-violet-400', 'bg-gray-800/60'); }}
+                      className={`flex flex-col items-center justify-center ${aspectClass} rounded-lg border-2 border-dashed border-gray-700 hover:border-dash-500/50 bg-gray-900/50 cursor-pointer transition-colors`}
+                      onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add('border-dash-400', 'bg-gray-800/60'); }}
+                      onDragLeave={(e) => { e.preventDefault(); e.currentTarget.classList.remove('border-dash-400', 'bg-gray-800/60'); }}
                       onDrop={(e) => handleFrameDrop(e, 'kling3OmniEndImage')}
                     >
                       <input type="file" accept="image/*" className="hidden" onChange={(e) => handleFrameUpload(e.target.files, 'kling3OmniEndImage')} />
@@ -343,7 +343,7 @@ const Kling3OmniPanel: React.FC<Kling3OmniPanelProps> = ({
               Reference Video (Required)
             </label>
             {refVideo ? (
-              <div className="relative group rounded-lg overflow-hidden border border-violet-500/40 bg-gray-900">
+              <div className="relative group rounded-lg overflow-hidden border border-dash-500/40 bg-gray-900">
                 <video src={refVideo.previewUrl} className={`w-full ${aspectClass} object-contain bg-black`} controls />
                 <button
                   onClick={clearVideo}
@@ -354,13 +354,13 @@ const Kling3OmniPanel: React.FC<Kling3OmniPanelProps> = ({
               </div>
             ) : (
               <label
-                className={`flex flex-col items-center justify-center ${aspectClass} rounded-lg border-2 border-dashed border-violet-500/50 hover:border-violet-400 bg-gray-900/50 cursor-pointer transition-colors`}
-                onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add('border-violet-400', 'bg-gray-800/60'); }}
-                onDragLeave={(e) => { e.preventDefault(); e.currentTarget.classList.remove('border-violet-400', 'bg-gray-800/60'); }}
-                onDrop={async (e) => { e.preventDefault(); e.currentTarget.classList.remove('border-violet-400', 'bg-gray-800/60'); handleVideoUpload(e.dataTransfer.files); }}
+                className={`flex flex-col items-center justify-center ${aspectClass} rounded-lg border-2 border-dashed border-dash-500/50 hover:border-dash-400 bg-gray-900/50 cursor-pointer transition-colors`}
+                onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add('border-dash-400', 'bg-gray-800/60'); }}
+                onDragLeave={(e) => { e.preventDefault(); e.currentTarget.classList.remove('border-dash-400', 'bg-gray-800/60'); }}
+                onDrop={async (e) => { e.preventDefault(); e.currentTarget.classList.remove('border-dash-400', 'bg-gray-800/60'); handleVideoUpload(e.dataTransfer.files); }}
               >
                 <input type="file" accept="video/*" className="hidden" onChange={(e) => handleVideoUpload(e.target.files)} />
-                <span className="text-violet-400 text-3xl mb-2">🎥</span>
+                <span className="text-dash-400 text-3xl mb-2">🎥</span>
                 <span className="text-sm text-gray-400">Drop video or click to upload</span>
                 <span className="text-[10px] text-gray-600 mt-1">MP4, MOV, WebM</span>
               </label>
@@ -371,7 +371,7 @@ const Kling3OmniPanel: React.FC<Kling3OmniPanelProps> = ({
           <div>
             <span className="text-xs text-gray-500 mb-1 block">Start Frame (Optional)</span>
             {v2vStartImage ? (
-              <div className={`relative group rounded-lg overflow-hidden border border-violet-500/40 ${aspectClass} bg-gray-900`}>
+              <div className={`relative group rounded-lg overflow-hidden border border-dash-500/40 ${aspectClass} bg-gray-900`}>
                 <img src={v2vStartImage.previewUrl} alt="Start frame" className="w-full h-full object-contain bg-black" />
                 <button
                   onClick={() => setVideoSettings({ ...videoSettings, kling3OmniStartImage: undefined } as any)}
@@ -382,9 +382,9 @@ const Kling3OmniPanel: React.FC<Kling3OmniPanelProps> = ({
               </div>
             ) : (
               <label
-                className={`flex flex-col items-center justify-center ${aspectClass} rounded-lg border-2 border-dashed border-gray-700 hover:border-violet-500/50 bg-gray-900/50 cursor-pointer transition-colors`}
-                onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add('border-violet-400', 'bg-gray-800/60'); }}
-                onDragLeave={(e) => { e.preventDefault(); e.currentTarget.classList.remove('border-violet-400', 'bg-gray-800/60'); }}
+                className={`flex flex-col items-center justify-center ${aspectClass} rounded-lg border-2 border-dashed border-gray-700 hover:border-dash-500/50 bg-gray-900/50 cursor-pointer transition-colors`}
+                onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add('border-dash-400', 'bg-gray-800/60'); }}
+                onDragLeave={(e) => { e.preventDefault(); e.currentTarget.classList.remove('border-dash-400', 'bg-gray-800/60'); }}
                 onDrop={(e) => handleFrameDrop(e, 'kling3OmniStartImage')}
               >
                 <input type="file" accept="image/*" className="hidden" onChange={(e) => handleFrameUpload(e.target.files, 'kling3OmniStartImage')} />
@@ -404,7 +404,7 @@ const Kling3OmniPanel: React.FC<Kling3OmniPanelProps> = ({
           </label>
           <div className="grid grid-cols-2 gap-2">
             {refImages.map((img, idx) => (
-              <div key={img.id} className="relative group rounded-lg overflow-hidden border border-violet-500/40 aspect-square bg-gray-900">
+              <div key={img.id} className="relative group rounded-lg overflow-hidden border border-dash-500/40 aspect-square bg-gray-900">
                 <img src={img.previewUrl} alt={`Reference ${idx + 1}`} className="w-full h-full object-cover" />
                 <button
                   onClick={() => removeReferenceImage(idx)}
@@ -412,14 +412,14 @@ const Kling3OmniPanel: React.FC<Kling3OmniPanelProps> = ({
                 >
                   &times;
                 </button>
-                <span className="absolute bottom-1 left-1 text-[9px] bg-black/70 text-violet-300 px-1.5 py-0.5 rounded">@Image{idx + 1}</span>
+                <span className="absolute bottom-1 left-1 text-[9px] bg-black/70 text-dash-300 px-1.5 py-0.5 rounded">@Image{idx + 1}</span>
               </div>
             ))}
             {refImages.length < 4 && (
               <label
-                className="flex flex-col items-center justify-center aspect-square rounded-lg border-2 border-dashed border-gray-700 hover:border-violet-500/50 bg-gray-900/50 cursor-pointer transition-colors"
-                onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add('border-violet-400', 'bg-gray-800/60'); }}
-                onDragLeave={(e) => { e.preventDefault(); e.currentTarget.classList.remove('border-violet-400', 'bg-gray-800/60'); }}
+                className="flex flex-col items-center justify-center aspect-square rounded-lg border-2 border-dashed border-gray-700 hover:border-dash-500/50 bg-gray-900/50 cursor-pointer transition-colors"
+                onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add('border-dash-400', 'bg-gray-800/60'); }}
+                onDragLeave={(e) => { e.preventDefault(); e.currentTarget.classList.remove('border-dash-400', 'bg-gray-800/60'); }}
                 onDrop={handleRefImageDrop}
               >
                 <input type="file" accept="image/*" className="hidden" onChange={(e) => addReferenceImage(e.target.files)} />
@@ -450,7 +450,7 @@ const Kling3OmniPanel: React.FC<Kling3OmniPanelProps> = ({
             {elements.length < 2 && (
               <button
                 onClick={addElement}
-                className="text-[10px] font-medium text-violet-400 hover:text-violet-300 transition-colors"
+                className="text-[10px] font-medium text-dash-400 hover:text-dash-300 transition-colors"
               >+ Add Element</button>
             )}
           </div>
@@ -459,7 +459,7 @@ const Kling3OmniPanel: React.FC<Kling3OmniPanelProps> = ({
               {elements.map((el, elIdx) => (
                 <div key={elIdx} className="bg-gray-900/50 rounded-lg p-3 border border-gray-800 space-y-2">
                   <div className="flex items-center justify-between">
-                    <span className="text-xs text-violet-400 font-medium">@Element{elIdx + 1}</span>
+                    <span className="text-xs text-dash-400 font-medium">@Element{elIdx + 1}</span>
                     <button
                       onClick={() => removeElement(elIdx)}
                       className="text-gray-600 hover:text-red-400 text-xs transition-colors"
@@ -470,7 +470,7 @@ const Kling3OmniPanel: React.FC<Kling3OmniPanelProps> = ({
                     <span className="text-[10px] text-gray-500 block mb-1">Reference Images</span>
                     <div className="grid grid-cols-3 gap-1.5">
                       {el.referenceImages.map((img, imgIdx) => (
-                        <div key={img.id} className="relative group rounded overflow-hidden border border-violet-500/30 aspect-square bg-gray-900">
+                        <div key={img.id} className="relative group rounded overflow-hidden border border-dash-500/30 aspect-square bg-gray-900">
                           <img src={img.previewUrl} alt={`Ref ${imgIdx + 1}`} className="w-full h-full object-cover" />
                           <button
                             onClick={() => removeElementRefImage(elIdx, imgIdx)}
@@ -478,7 +478,7 @@ const Kling3OmniPanel: React.FC<Kling3OmniPanelProps> = ({
                           >&times;</button>
                         </div>
                       ))}
-                      <label className="flex flex-col items-center justify-center aspect-square rounded border-2 border-dashed border-gray-700 hover:border-violet-500/50 bg-gray-900/50 cursor-pointer transition-colors">
+                      <label className="flex flex-col items-center justify-center aspect-square rounded border-2 border-dashed border-gray-700 hover:border-dash-500/50 bg-gray-900/50 cursor-pointer transition-colors">
                         <input type="file" accept="image/*" className="hidden" onChange={(e) => addElementRefImage(e.target.files, elIdx)} />
                         <span className="text-gray-600 text-sm">+</span>
                       </label>
@@ -488,7 +488,7 @@ const Kling3OmniPanel: React.FC<Kling3OmniPanelProps> = ({
                   <div>
                     <span className="text-[10px] text-gray-500 block mb-1">Frontal Image (Optional)</span>
                     {el.frontalImage ? (
-                      <div className="relative group rounded overflow-hidden border border-violet-500/30 w-16 h-16 bg-gray-900">
+                      <div className="relative group rounded overflow-hidden border border-dash-500/30 w-16 h-16 bg-gray-900">
                         <img src={el.frontalImage.previewUrl} alt="Frontal" className="w-full h-full object-cover" />
                         <button
                           onClick={() => clearElementFrontalImage(elIdx)}
@@ -496,7 +496,7 @@ const Kling3OmniPanel: React.FC<Kling3OmniPanelProps> = ({
                         >&times;</button>
                       </div>
                     ) : (
-                      <label className="flex flex-col items-center justify-center w-16 h-16 rounded border-2 border-dashed border-gray-700 hover:border-violet-500/50 bg-gray-900/50 cursor-pointer transition-colors">
+                      <label className="flex flex-col items-center justify-center w-16 h-16 rounded border-2 border-dashed border-gray-700 hover:border-dash-500/50 bg-gray-900/50 cursor-pointer transition-colors">
                         <input type="file" accept="image/*" className="hidden" onChange={(e) => setElementFrontalImage(e.target.files, elIdx)} />
                         <span className="text-gray-600 text-sm">+</span>
                       </label>
@@ -524,7 +524,7 @@ const Kling3OmniPanel: React.FC<Kling3OmniPanelProps> = ({
             <button
               onClick={() => setVideoSettings({ ...videoSettings, kling3OmniMultiPromptEnabled: !multiPromptEnabled } as any)}
               className={`text-[10px] font-medium transition-colors ${
-                multiPromptEnabled ? 'text-violet-400 hover:text-violet-300' : 'text-gray-500 hover:text-gray-400'
+                multiPromptEnabled ? 'text-dash-400 hover:text-dash-300' : 'text-gray-500 hover:text-gray-400'
               }`}
             >
               {multiPromptEnabled ? 'Single Prompt' : 'Multi-Shot'}
@@ -537,11 +537,11 @@ const Kling3OmniPanel: React.FC<Kling3OmniPanelProps> = ({
             <div className="space-y-2">
               {multiPrompt.map((p, idx) => (
                 <div key={idx} className="flex items-start gap-2 bg-gray-900/50 rounded-lg p-2 border border-gray-800">
-                  <span className="text-[10px] font-mono text-violet-400/70 mt-2 w-4 text-right shrink-0">{idx + 1}</span>
+                  <span className="text-[10px] font-mono text-dash-400/70 mt-2 w-4 text-right shrink-0">{idx + 1}</span>
                   <div className="flex-1 relative">
                     <textarea
                       ref={multiRefs[idx]}
-                      className="w-full bg-gray-950 border border-gray-700 rounded p-2 text-xs text-gray-300 resize-y min-h-[36px] focus:ring-1 focus:ring-violet-400 focus:border-violet-500/50 transition-all placeholder:text-gray-600"
+                      className="w-full bg-gray-950 border border-gray-700 rounded p-2 text-xs text-gray-300 resize-y min-h-[36px] focus:ring-1 focus:ring-dash-400 focus:border-dash-500/50 transition-all placeholder:text-gray-600"
                       rows={2}
                       value={p}
                       onChange={(e) => {
@@ -571,7 +571,7 @@ const Kling3OmniPanel: React.FC<Kling3OmniPanelProps> = ({
             <button
               onClick={addPrompt}
               disabled={multiPrompt.length >= 6}
-              className="text-[10px] font-medium text-violet-400 hover:text-violet-300 disabled:text-gray-600 disabled:cursor-not-allowed transition-colors"
+              className="text-[10px] font-medium text-dash-400 hover:text-dash-300 disabled:text-gray-600 disabled:cursor-not-allowed transition-colors"
             >+ Add Shot</button>
             <p className="text-[10px] text-gray-600">
               Omni auto-distributes duration across shots. No per-shot timing needed.
@@ -581,7 +581,7 @@ const Kling3OmniPanel: React.FC<Kling3OmniPanelProps> = ({
           <div className="relative">
             <textarea
               ref={singlePromptRef}
-              className="w-full bg-gray-950 border border-gray-700 rounded-lg p-3 text-sm text-gray-200 resize-y min-h-[80px] focus:ring-1 focus:ring-violet-400 focus:border-violet-500/50 transition-all placeholder:text-gray-600"
+              className="w-full bg-gray-950 border border-gray-700 rounded-lg p-3 text-sm text-gray-200 resize-y min-h-[80px] focus:ring-1 focus:ring-dash-400 focus:border-dash-500/50 transition-all placeholder:text-gray-600"
               rows={3}
               value={singlePromptValue}
               onChange={(e) => {
@@ -609,7 +609,7 @@ const Kling3OmniPanel: React.FC<Kling3OmniPanelProps> = ({
         <button
           onClick={onVideoGenerate}
           disabled={isGenerating}
-          className="w-full py-3 rounded-lg text-sm font-semibold transition-all bg-violet-700 hover:bg-violet-600 text-white ring-1 ring-violet-400 disabled:opacity-50 disabled:cursor-not-allowed"
+          className="w-full py-3 rounded-lg text-sm font-semibold transition-all bg-dash-700 hover:bg-dash-600 text-white ring-1 ring-dash-400 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {isGenerating ? 'Generating...' : '🎬 Generate Video'}
         </button>
@@ -636,7 +636,7 @@ const Kling3OmniPanel: React.FC<Kling3OmniPanelProps> = ({
                 onClick={() => setVideoSettings({ ...videoSettings, kling3Tier: opt.value } as any)}
                 className={`flex-1 py-2 rounded-lg text-xs font-medium transition-all ${
                   ((videoSettings as any).kling3Tier || 'pro') === opt.value
-                    ? 'bg-violet-700 text-white ring-1 ring-violet-400'
+                    ? 'bg-dash-700 text-white ring-1 ring-dash-400'
                     : 'bg-gray-800 text-gray-400 hover:bg-gray-700 border border-gray-700'
                 }`}
               >
@@ -661,7 +661,7 @@ const Kling3OmniPanel: React.FC<Kling3OmniPanelProps> = ({
                 onClick={() => setVideoSettings({ ...videoSettings, kling3AspectRatio: opt.value } as any)}
                 className={`flex-1 py-2 rounded-lg text-xs font-medium transition-all ${
                   ((videoSettings as any).kling3AspectRatio || '16:9') === opt.value
-                    ? 'bg-violet-700 text-white ring-1 ring-violet-400'
+                    ? 'bg-dash-700 text-white ring-1 ring-dash-400'
                     : 'bg-gray-800 text-gray-400 hover:bg-gray-700 border border-gray-700'
                 }`}
               >
@@ -676,14 +676,14 @@ const Kling3OmniPanel: React.FC<Kling3OmniPanelProps> = ({
         <div className="space-y-2">
           <div className="flex justify-between">
             <span className="text-xs text-gray-500">Total Duration</span>
-            <span className="text-xs text-violet-400 font-mono">{((videoSettings as any).kling3Duration || 5)}s</span>
+            <span className="text-xs text-dash-400 font-mono">{((videoSettings as any).kling3Duration || 5)}s</span>
           </div>
           <input
             type="range"
             min="3"
             max="15"
             step="1"
-            className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-violet-400"
+            className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-dash-400"
             value={(videoSettings as any).kling3Duration || 5}
             onChange={(e) => setVideoSettings({ ...videoSettings, kling3Duration: parseInt(e.target.value) } as any)}
           />
@@ -701,7 +701,7 @@ const Kling3OmniPanel: React.FC<Kling3OmniPanelProps> = ({
               onClick={() => setVideoSettings({ ...videoSettings, kling3GenerateAudio: !(videoSettings as any).kling3GenerateAudio } as any)}
               className={`w-10 h-5 rounded-full relative transition-colors ${
                 (videoSettings as any).kling3GenerateAudio
-                  ? 'bg-violet-700 ring-1 ring-violet-400'
+                  ? 'bg-dash-700 ring-1 ring-dash-400'
                   : 'bg-gray-700'
               }`}
             >
@@ -717,14 +717,14 @@ const Kling3OmniPanel: React.FC<Kling3OmniPanelProps> = ({
           <div className="space-y-2">
             <div className="flex justify-between">
               <span className="text-xs text-gray-500">CFG Scale</span>
-              <span className="text-xs text-violet-400 font-mono">{((videoSettings as any).kling3CfgScale ?? 0.5).toFixed(2)}</span>
+              <span className="text-xs text-dash-400 font-mono">{((videoSettings as any).kling3CfgScale ?? 0.5).toFixed(2)}</span>
             </div>
             <input
               type="range"
               min="0"
               max="2"
               step="0.05"
-              className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-violet-400"
+              className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-dash-400"
               value={(videoSettings as any).kling3CfgScale ?? 0.5}
               onChange={(e) => setVideoSettings({ ...videoSettings, kling3CfgScale: parseFloat(e.target.value) } as any)}
             />
@@ -737,7 +737,7 @@ const Kling3OmniPanel: React.FC<Kling3OmniPanelProps> = ({
           <div className="space-y-2">
             <span className="text-xs text-gray-500">Negative Prompt</span>
             <textarea
-              className="w-full bg-gray-950 border border-gray-700 rounded-lg p-2 text-xs text-gray-300 font-mono resize-y min-h-[40px] focus:ring-1 focus:ring-violet-400 focus:border-violet-500/50 transition-all placeholder:text-gray-600"
+              className="w-full bg-gray-950 border border-gray-700 rounded-lg p-2 text-xs text-gray-300 font-mono resize-y min-h-[40px] focus:ring-1 focus:ring-dash-400 focus:border-dash-500/50 transition-all placeholder:text-gray-600"
               rows={2}
               value={(videoSettings as any).kling3NegativePrompt || 'blur, distort, and low quality'}
               onChange={(e) => setVideoSettings({ ...videoSettings, kling3NegativePrompt: e.target.value } as any)}
@@ -747,9 +747,9 @@ const Kling3OmniPanel: React.FC<Kling3OmniPanelProps> = ({
         )}
 
         {/* 6. Info Box */}
-        <div className="p-3 bg-violet-900/20 border border-violet-500/30 rounded-lg text-xs text-violet-300">
+        <div className="p-3 bg-dash-900/20 border border-dash-500/30 rounded-lg text-xs text-dash-300">
           <p className="font-medium mb-1">Kling 3 Omni — Multimodal</p>
-          <p className="text-violet-400/80">
+          <p className="text-dash-400/80">
             {isT2V ? 'Text-to-video with optional reference images and multi-shot control.'
              : isI2V ? 'Animate images with start/end frames, reference style, and multi-shot prompts.'
              : 'Video-to-video transformation with CFG scale and negative prompt control.'}

@@ -2515,7 +2515,7 @@ INSTRUCTIONS:
   };
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden text-gray-200 font-sans bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 dark:from-slate-950 dark:via-purple-950 dark:to-slate-950 transition-colors duration-300">
+    <div className="flex h-screen w-screen overflow-hidden text-gray-200 font-sans bg-gradient-to-br from-slate-900 via-gray-900 to-slate-900 dark:from-slate-950 dark:via-gray-950 dark:to-slate-950 transition-colors duration-300">
       {/* Settings Page (full-page overlay) */}
       {showSettings && (
         <SettingsPage

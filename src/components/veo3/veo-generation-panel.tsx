@@ -246,7 +246,7 @@ const VeoGenerationPanel: React.FC<VeoGenerationPanelProps> = ({
               onClick={() => handleModeChange(tab.value)}
               className={`flex-1 py-2.5 rounded-lg text-sm font-medium transition-all ${
                 mode === tab.value
-                  ? "bg-violet-700 text-white ring-1 ring-violet-400"
+                  ? "bg-dash-700 text-white ring-1 ring-dash-400"
                   : "bg-gray-800 text-gray-400 hover:bg-gray-700 border border-gray-700"
               }`}
             >
@@ -303,7 +303,7 @@ const VeoGenerationPanel: React.FC<VeoGenerationPanelProps> = ({
           Video Prompt
         </label>
         <textarea
-          className={`w-full bg-gray-950 border rounded-lg p-3 text-sm text-gray-200 resize-y min-h-[80px] focus:ring-1 focus:ring-violet-400 focus:border-violet-500/50 transition-all placeholder:text-gray-600 ${
+          className={`w-full bg-gray-950 border rounded-lg p-3 text-sm text-gray-200 resize-y min-h-[80px] focus:ring-1 focus:ring-dash-400 focus:border-dash-500/50 transition-all placeholder:text-gray-600 ${
             fieldError("prompt") ? "border-red-500/50" : "border-gray-700"
           }`}
           rows={3}
@@ -340,7 +340,7 @@ const VeoGenerationPanel: React.FC<VeoGenerationPanelProps> = ({
         <button
           onClick={handleSubmit}
           disabled={isGenerating}
-          className="w-full py-3 rounded-lg text-sm font-semibold transition-all bg-violet-700 hover:bg-violet-600 text-white ring-1 ring-violet-400 disabled:opacity-50 disabled:cursor-not-allowed"
+          className="w-full py-3 rounded-lg text-sm font-semibold transition-all bg-dash-700 hover:bg-dash-600 text-white ring-1 ring-dash-400 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {isGenerating ? "Generating..." : "Generate Video"}
         </button>
@@ -376,9 +376,9 @@ const VeoGenerationPanel: React.FC<VeoGenerationPanelProps> = ({
 
       {/* 7. Info Box */}
       <div className="px-6 py-4">
-        <div className="p-3 bg-violet-900/20 border border-violet-500/30 rounded-lg text-xs text-violet-300">
+        <div className="p-3 bg-dash-900/20 border border-dash-500/30 rounded-lg text-xs text-dash-300">
           <p className="font-medium mb-1">Veo 3.1 — Google AI Video</p>
-          <p className="text-violet-400/80">
+          <p className="text-dash-400/80">
             {mode === "TEXT_2_VIDEO"
               ? "Text-to-video generation with Quality or Fast models."
               : mode === "FIRST_AND_LAST_FRAMES_2_VIDEO"

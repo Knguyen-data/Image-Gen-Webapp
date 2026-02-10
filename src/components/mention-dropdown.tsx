@@ -38,7 +38,7 @@ const MentionDropdown: React.FC<MentionDropdownProps> = ({
             key={option.label}
             className={`w-full flex items-center gap-2 px-3 py-2 text-left text-xs transition-colors ${
               idx === selectedIndex
-                ? 'bg-violet-700/30 text-violet-200'
+                ? 'bg-dash-700/30 text-dash-200'
                 : 'text-gray-300 hover:bg-gray-700/50'
             }`}
             onMouseDown={(e) => {
