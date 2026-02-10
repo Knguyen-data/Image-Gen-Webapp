@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../hooks/use-auth';
+import AnimatedBackground from './animated-background';
 
 type AuthTab = 'signIn' | 'signUp';
 
@@ -25,7 +26,6 @@ const AuthPage: React.FC<AuthPageProps> = ({ onAuthenticated }) => {
   const [mounted, setMounted] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
   const videoRef = useRef<HTMLVideoElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
 
   // Mount animation
   useEffect(() => {
@@ -39,86 +39,7 @@ const AuthPage: React.FC<AuthPageProps> = ({ onAuthenticated }) => {
     }
   }, [isAuthenticated, onAuthenticated]);
 
-  // Animated gradient canvas background (fallback + overlay)
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d')!;
-    let animId: number;
-    let time = 0;
-
-    const resize = () => {
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
-    };
-    resize();
-    window.addEventListener('resize', resize);
-
-    const draw = () => {
-      time += 0.003;
-      const w = canvas.width;
-      const h = canvas.height;
-
-      // Dark base
-      ctx.fillStyle = '#030712';
-      ctx.fillRect(0, 0, w, h);
-
-      // Floating orbs
-      const orbs = [
-        { x: 0.3 + Math.sin(time * 0.7) * 0.15, y: 0.4 + Math.cos(time * 0.5) * 0.2, r: 0.4, color: 'rgba(34, 197, 94, 0.06)' },
-        { x: 0.7 + Math.cos(time * 0.6) * 0.1, y: 0.6 + Math.sin(time * 0.4) * 0.15, r: 0.35, color: 'rgba(74, 222, 128, 0.04)' },
-        { x: 0.5 + Math.sin(time * 0.8) * 0.2, y: 0.3 + Math.cos(time * 0.3) * 0.1, r: 0.3, color: 'rgba(134, 239, 172, 0.05)' },
-        { x: 0.2 + Math.cos(time * 0.5) * 0.1, y: 0.8 + Math.sin(time * 0.6) * 0.1, r: 0.25, color: 'rgba(16, 185, 129, 0.04)' },
-      ];
-
-      for (const orb of orbs) {
-        const grad = ctx.createRadialGradient(
-          orb.x * w, orb.y * h, 0,
-          orb.x * w, orb.y * h, orb.r * Math.min(w, h)
-        );
-        grad.addColorStop(0, orb.color);
-        grad.addColorStop(1, 'transparent');
-        ctx.fillStyle = grad;
-        ctx.fillRect(0, 0, w, h);
-      }
-
-      // Subtle grid overlay
-      ctx.strokeStyle = 'rgba(134, 239, 172, 0.02)';
-      ctx.lineWidth = 1;
-      const gridSize = 60;
-      for (let x = 0; x < w; x += gridSize) {
-        ctx.beginPath();
-        ctx.moveTo(x, 0);
-        ctx.lineTo(x, h);
-        ctx.stroke();
-      }
-      for (let y = 0; y < h; y += gridSize) {
-        ctx.beginPath();
-        ctx.moveTo(0, y);
-        ctx.lineTo(w, y);
-        ctx.stroke();
-      }
-
-      // Floating particles
-      for (let i = 0; i < 30; i++) {
-        const px = (Math.sin(time * 0.5 + i * 1.7) * 0.5 + 0.5) * w;
-        const py = (Math.cos(time * 0.3 + i * 2.1) * 0.5 + 0.5) * h;
-        const size = 1 + Math.sin(time + i) * 0.5;
-        const alpha = 0.15 + Math.sin(time * 2 + i * 0.8) * 0.1;
-        ctx.fillStyle = `rgba(134, 239, 172, ${alpha})`;
-        ctx.beginPath();
-        ctx.arc(px, py, size, 0, Math.PI * 2);
-        ctx.fill();
-      }
-
-      animId = requestAnimationFrame(draw);
-    };
-
-    draw();
-    return () => {
-      cancelAnimationFrame(animId);
-      window.removeEventListener('resize', resize);
-    };
+  // (Canvas animation handled by AnimatedBackground component);
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -146,13 +67,9 @@ const AuthPage: React.FC<AuthPageProps> = ({ onAuthenticated }) => {
   };
 
   return (
-    <div className="fixed inset-0 z-[300] overflow-hidden">
+    <div className="fixed inset-0 z-[300] overflow-hidden bg-gray-950">
       {/* Animated canvas background */}
-      <canvas
-        ref={canvasRef}
-        className="absolute inset-0 w-full h-full"
-        style={{ zIndex: 0 }}
-      />
+      <AnimatedBackground opacity={1} particleCount={30} speed={1} showGrid={true} />
 
       {/* Video background overlay (shows AI-generated content reel) */}
       <video

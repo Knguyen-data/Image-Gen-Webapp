@@ -4,6 +4,7 @@ import RightPanel from './components/right-panel';
 import ApiKeyModal from './components/api-key-modal';
 import ModifyImageModal from './components/modify-image-modal';
 import AuthPage from './components/auth-page';
+import AnimatedBackground from './components/animated-background';
 import { useAuth } from './hooks/use-auth';
 import { RecoveryModal } from './components/recovery-modal';
 import SettingsPage from './components/settings-page';
@@ -2515,7 +2516,10 @@ INSTRUCTIONS:
   };
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden text-gray-200 font-sans bg-gradient-to-br from-slate-900 via-gray-900 to-slate-900 dark:from-slate-950 dark:via-gray-950 dark:to-slate-950 transition-colors duration-300">
+    <div className="flex h-screen w-screen overflow-hidden text-gray-200 font-sans bg-gray-950 transition-colors duration-300 relative">
+      {/* Animated background */}
+      <AnimatedBackground opacity={0.35} particleCount={15} speed={0.8} showGrid={true} />
+      
       {/* Settings Page (full-page overlay) */}
       {showSettings && (
         <SettingsPage
