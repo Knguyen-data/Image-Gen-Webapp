@@ -1,11 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { logger } from '../services/logger';
-import { AMTSettings } from '../types';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
-type SettingsSection = 'api-keys' | 'credits' | 'interpolation' | 'about';
+type SettingsSection = 'api-keys' | 'credits' | 'about';
 
 interface ProviderStatus {
   configured: boolean;
@@ -25,9 +24,6 @@ interface SettingsPageProps {
   // Freepik
   freepikApiKey: string;
   setFreepikApiKey: (key: string) => void;
-  // FAL
-  falApiKey: string;
-  setFalApiKey: (key: string) => void;
   // Credits
   credits: number | null;
   creditsLoading: boolean;
@@ -35,9 +31,6 @@ interface SettingsPageProps {
   isLowCredits: boolean;
   isCriticalCredits: boolean;
   refreshCredits: () => Promise<void>;
-  // AMT Settings
-  amtSettings: AMTSettings;
-  setAmtSettings: (settings: AMTSettings) => void;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -247,8 +240,6 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
   isLowCredits,
   isCriticalCredits,
   refreshCredits,
-  amtSettings,
-  setAmtSettings,
 }) => {
   const [section, setSection] = useState<SettingsSection>('api-keys');
 
@@ -256,17 +247,12 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
   const [geminiInput, setGeminiInput] = useState(apiKey);
   const [kieInput, setKieInput] = useState(kieApiKey);
   const [freepikInput, setFreepikInput] = useState(freepikApiKey);
-  const [falInput, setFalInput] = useState(falApiKey);
   
-  // ── AMT Settings local state ───
-  const [amtOutputFps, setAmtOutputFps] = useState(amtSettings.outputFps);
-  const [amtPasses, setAmtPasses] = useState(amtSettings.recursiveInterpolationPasses);
 
   // ── Provider statuses ───
   const [geminiStatus, setGeminiStatus] = useState<ProviderStatus>({ configured: !!apiKey, validating: false, error: '' });
   const [kieStatus, setKieStatus] = useState<ProviderStatus>({ configured: !!kieApiKey, validating: false, error: '' });
   const [freepikStatus, setFreepikStatus] = useState<ProviderStatus>({ configured: !!freepikApiKey, validating: false, error: '' });
-  const [falStatus, setFalStatus] = useState<ProviderStatus>({ configured: !!falApiKey, validating: false, error: '' });
 
   // ── Credits timestamp ───
   const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null);
@@ -275,7 +261,6 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
   useEffect(() => { setGeminiStatus(s => ({ ...s, configured: !!apiKey })); }, [apiKey]);
   useEffect(() => { setKieStatus(s => ({ ...s, configured: !!kieApiKey })); }, [kieApiKey]);
   useEffect(() => { setFreepikStatus(s => ({ ...s, configured: !!freepikApiKey })); }, [freepikApiKey]);
-  useEffect(() => { setFalStatus(s => ({ ...s, configured: !!falApiKey })); }, [falApiKey]);
 
   // Set initial lastRefreshed
   useEffect(() => {
@@ -367,35 +352,11 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
     setFreepikStatus({ configured: true, validating: false, error: '' });
   }, [freepikInput, setFreepikApiKey]);
 
-  const handleSaveFal = useCallback(async () => {
-    const key = sanitizeKey(falInput);
-    if (!key) { setFalStatus(s => ({ ...s, error: 'Please enter an API key' })); return; }
-    if (key.length < 20) {
-      setFalStatus(s => ({ ...s, error: 'FAL API key appears too short' }));
-      return;
-    }
-
-    setFalApiKey(key);
-    localStorage.setItem('fal_api_key', key);
-    logger.info('Settings', 'FAL API key saved');
-    setFalStatus({ configured: true, validating: false, error: '' });
-  }, [falInput, setFalApiKey]);
 
   const handleRefreshCredits = useCallback(async () => {
     await refreshCredits();
     setLastRefreshed(new Date());
   }, [refreshCredits]);
-
-  // ── AMT Settings save handler ───
-  const handleSaveAmtSettings = useCallback(() => {
-    const newSettings: AMTSettings = {
-      outputFps: Math.max(10, Math.min(120, amtOutputFps)),
-      recursiveInterpolationPasses: Math.max(1, Math.min(5, amtPasses)),
-    };
-    setAmtSettings(newSettings);
-    localStorage.setItem('raw_studio_amt_settings', JSON.stringify(newSettings));
-    logger.info('Settings', 'AMT interpolation settings saved', newSettings);
-  }, [amtOutputFps, amtPasses, setAmtSettings]);
 
   // ── Count configured providers for badge ───
   const configuredCount = [!!apiKey, !!kieApiKey, !!freepikApiKey]
@@ -478,28 +439,6 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
           disabled={freepikStatus.validating}
         />
       </ProviderCard>
-
-      {/* FAL */}
-      <ProviderCard
-        name="FAL"
-        description="AMT video interpolation (frame boosting)"
-        icon={<span className="text-xl">⚡</span>}
-        accentColor="purple-400"
-        accentBorder="border-purple-500/20"
-        accentBg="bg-purple-900/60"
-        status={falStatus}
-        link={{ url: 'https://fal.ai/dashboard/keys', label: 'Get FAL API Key' }}
-        onSave={handleSaveFal}
-      >
-        <SecretInput
-          value={falInput}
-          onChange={(v) => { setFalInput(v); setFalStatus(s => ({ ...s, error: '' })); }}
-          placeholder="Enter FAL API key..."
-          accentColor="purple-400"
-          disabled={falStatus.validating}
-        />
-      </ProviderCard>
-
     </div>
   );
 
@@ -575,78 +514,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
     </div>
   );
 
-  const renderInterpolation = () => (
-    <div className="space-y-5">
-      <div>
-        <h2 className="text-lg font-bold text-white">AMT Interpolation</h2>
-        <p className="text-sm text-gray-500 mt-1">
-          Smooth video using AMT (Adaptive Motion Training) frame interpolation.
-        </p>
-      </div>
 
-      <div className="bg-gray-900/80 border border-gray-800 rounded-xl p-6 space-y-6">
-        {/* Output FPS */}
-        <div className="space-y-2">
-          <div className="flex justify-between items-center">
-            <label className="text-sm font-medium text-gray-300">
-              Output FPS
-            </label>
-            <span className="text-sm text-dash-300 font-mono">{amtOutputFps} fps</span>
-          </div>
-          <input
-            type="range"
-            min="10"
-            max="120"
-            step="5"
-            value={amtOutputFps}
-            onChange={(e) => setAmtOutputFps(parseInt(e.target.value, 10))}
-            className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-dash-500"
-          />
-          <p className="text-xs text-gray-500">
-            Higher FPS = smoother motion but larger file size (10-120)
-          </p>
-        </div>
-
-        {/* Interpolation Passes */}
-        <div className="space-y-2">
-          <div className="flex justify-between items-center">
-            <label className="text-sm font-medium text-gray-300">
-              Interpolation Passes
-            </label>
-            <span className="text-sm text-dash-300 font-mono">{amtPasses}x</span>
-          </div>
-          <input
-            type="range"
-            min="1"
-            max="5"
-            step="1"
-            value={amtPasses}
-            onChange={(e) => setAmtPasses(parseInt(e.target.value, 10))}
-            className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-dash-500"
-          />
-          <p className="text-xs text-gray-500">
-            More passes = higher quality interpolation (1-5)
-          </p>
-        </div>
-
-        {/* Save Button */}
-        <button
-          onClick={handleSaveAmtSettings}
-          className="w-full py-2.5 rounded-lg text-sm font-bold bg-dash-600 hover:bg-dash-500 text-white transition-colors"
-        >
-          Save AMT Settings
-        </button>
-
-        {/* Preview */}
-        <div className="pt-4 border-t border-gray-800">
-          <p className="text-xs text-gray-500">
-            <strong className="text-gray-300">Preview:</strong> At {amtOutputFps}fps with {amtPasses} pass(es), 
-            a 5-second video will be interpolated significantly for smoother motion.
-          </p>
-        </div>
-      </div>
-    </div>
-  );
 
   const renderAbout = () => (
     <div className="space-y-5">
@@ -732,12 +600,6 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
             }
           />
           <NavItem
-            label="Interpolation"
-            icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>}
-            active={section === 'interpolation'}
-            onClick={() => setSection('interpolation')}
-          />
-          <NavItem
             label="About"
             icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>}
             active={section === 'about'}
@@ -762,7 +624,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
         <div className="max-w-2xl mx-auto p-8">
           {section === 'api-keys' && renderApiKeys()}
           {section === 'credits' && renderCredits()}
-          {section === 'interpolation' && renderInterpolation()}
+
           {section === 'about' && renderAbout()}
         </div>
       </div>

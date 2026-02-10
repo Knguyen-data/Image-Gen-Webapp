@@ -21,7 +21,7 @@ import { withRateLimitRetry } from './services/rate-limiter';
 import { useSeedreamCredits } from './hooks/use-seedream-credits';
 import { generateWithSeedream, mapAspectRatio } from './services/seedream-service';
 import { uploadBase64ToR2, uploadUrlToR2 } from './services/r2-upload-service';
-import { interpolateAndUploadToR2 } from './services/amt-interpolation-service';
+// TODO: Implement client-side video interpolation (TensorFlow.js FILM or RIFE)
 import { generateWithSeedreamTxt2Img } from './services/seedream-txt2img-service';
 import { generateMotionVideo } from './services/kling-motion-control-service';
 import { createFreepikProI2VTask, pollFreepikProI2VTask, createKling3Task, pollKling3Task, createKling3OmniTask, createKling3OmniReferenceTask, pollKling3OmniTask, pollKling3OmniReferenceTask, createAndPollWithRetry } from './services/freepik-kling-service';
@@ -46,9 +46,8 @@ const App: React.FC = () => {
   const [apiKey, setApiKey] = useState('');
   const [kieApiKey, setKieApiKey] = useState('');
   const [freepikApiKey, setFreepikApiKey] = useState('');
-  const [falApiKey, setFalApiKey] = useState('');
   const [isKeyModalOpen, setIsKeyModalOpen] = useState(false);
-  const [keyModalMode, setKeyModalMode] = useState<'gemini' | 'spicy' | 'freepik' | 'fal'>('gemini');
+  const [keyModalMode, setKeyModalMode] = useState<'gemini' | 'spicy' | 'freepik'>('gemini');
   const [showSettings, setShowSettings] = useState(false);
 
   // Crash Recovery State
@@ -166,12 +165,6 @@ const App: React.FC = () => {
         if (savedFreepikKey) {
           setFreepikApiKey(savedFreepikKey);
           logger.debug('App', 'Loaded Freepik API key from storage');
-        }
-
-        const savedFalKey = localStorage.getItem('fal_api_key');
-        if (savedFalKey) {
-          setFalApiKey(savedFalKey);
-          logger.debug('App', 'Loaded FAL API key from storage');
         }
 
         // Prompt for Gemini key if missing
@@ -2459,11 +2452,11 @@ INSTRUCTIONS:
     }
   };
 
-  // ============ AMT Interpolation Handler ============
+  // ============ Video Interpolation Handler (Client-Side RIFE) ============
   const handleAmtInterpolation = async (videoId: string) => {
     const targetVideo = generatedVideos.find(v => v.id === videoId);
     if (!targetVideo) {
-      logger.warn('App', 'Video not found for AMT interpolation', { videoId });
+      logger.warn('App', 'Video not found for interpolation', { videoId });
       return;
     }
 
@@ -2472,27 +2465,27 @@ INSTRUCTIONS:
       return;
     }
 
-    logger.info('App', 'Starting AMT interpolation', { videoId, url: targetVideo.url.slice(0, 50) });
+    logger.info('App', 'Starting RIFE interpolation', { videoId, url: targetVideo.url.slice(0, 50) });
     setIsInterpolating(true);
-    setLoadingStatus('Smooth Video (AMT): Starting...');
+    setLoadingStatus('Smooth Video: Starting...');
 
     try {
-      const resultUrl = await interpolateAndUploadToR2(
+      const { interpolateVideo } = await import('./services/rife-interpolation-service');
+
+      const resultUrl = await interpolateVideo(
         targetVideo.url,
-        settings.amtSettings.outputFps,
-        settings.amtSettings.recursiveInterpolationPasses,
+        2,
         (status) => {
-          setLoadingStatus(`Smooth Video (AMT): ${status}`);
+          setLoadingStatus(`Smooth Video: ${status}`);
         }
       );
 
-      // Create new interpolated video entry
       const interpolatedVideo: GeneratedVideo = {
-        id: `video-${Date.now()}-amt`,
+        id: `video-${Date.now()}-interpolated`,
         sceneId: targetVideo.sceneId,
         url: resultUrl,
         duration: targetVideo.duration,
-        prompt: `Smoothed: ${targetVideo.prompt}`,
+        prompt: `Smoothed (2x RIFE): ${targetVideo.prompt}`,
         createdAt: Date.now(),
         status: 'success',
         provider: targetVideo.provider,
@@ -2505,13 +2498,13 @@ INSTRUCTIONS:
         logger.warn('App', 'Failed to persist interpolated video to IndexedDB', e)
       );
 
-      logger.info('App', 'AMT interpolation complete', { videoId, resultUrl: resultUrl.slice(0, 50) });
-      setLoadingStatus('Smooth Video (AMT): Complete!');
+      logger.info('App', 'RIFE interpolation complete', { videoId, resultUrl: resultUrl.slice(0, 50) });
+      setLoadingStatus('Smooth Video: Complete!');
 
     } catch (error: any) {
-      logger.error('App', 'AMT interpolation failed', { error: error.message, videoId });
-      alert(`AMT interpolation failed: ${error.message}`);
-      setLoadingStatus('Smooth Video (AMT): Failed');
+      logger.error('App', 'RIFE interpolation failed', { error: error.message, videoId });
+      alert(`Interpolation failed: ${error.message}`);
+      setLoadingStatus('Smooth Video: Failed');
     } finally {
       setIsInterpolating(false);
       setTimeout(() => setLoadingStatus(''), 3000);
@@ -2519,7 +2512,7 @@ INSTRUCTIONS:
   };
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden text-gray-200 font-sans">
+    <div className="flex h-screen w-screen overflow-hidden text-gray-200 font-sans bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 dark:from-slate-950 dark:via-purple-950 dark:to-slate-950 transition-colors duration-300">
       {/* Settings Page (full-page overlay) */}
       {showSettings && (
         <SettingsPage
@@ -2530,19 +2523,12 @@ INSTRUCTIONS:
           setKieApiKey={setKieApiKey}
           freepikApiKey={freepikApiKey}
           setFreepikApiKey={setFreepikApiKey}
-          falApiKey={falApiKey}
-          setFalApiKey={setFalApiKey}
           credits={credits}
           creditsLoading={creditsLoading}
           creditsError={creditsError}
           isLowCredits={isLowCredits}
           isCriticalCredits={isCriticalCredits}
           refreshCredits={refreshCredits}
-          amtSettings={settings.amtSettings}
-          setAmtSettings={(newSettings) => setSettings(prev => ({
-            ...prev,
-            amtSettings: newSettings
-          }))}
         />
       )}
 
@@ -2556,8 +2542,6 @@ INSTRUCTIONS:
         setKieApiKey={setKieApiKey}
         freepikApiKey={freepikApiKey}
         setFreepikApiKey={setFreepikApiKey}
-        falApiKey={falApiKey}
-        setFalApiKey={setFalApiKey}
       />
 
       <ModifyImageModal

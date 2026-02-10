@@ -17,10 +17,6 @@ export const DEFAULT_SETTINGS: AppSettings = {
     enabled: false,
     quality: 'basic',
     subMode: 'edit'
-  },
-  amtSettings: {
-    outputFps: 30,
-    recursiveInterpolationPasses: 2,
   }
 };
 

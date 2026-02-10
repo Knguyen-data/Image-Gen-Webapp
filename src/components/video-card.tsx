@@ -34,7 +34,7 @@ const VideoCard: React.FC<VideoCardProps> = ({
   };
 
   return (
-    <div className={`relative group rounded-xl overflow-hidden bg-gray-900 border transition-all duration-200 ${selected ? 'border-emerald-500 ring-2 ring-emerald-500/50' : 'border-gray-800 hover:border-gray-600'}`}>
+    <div className={`group relative overflow-hidden rounded-xl backdrop-blur-lg bg-white/10 dark:bg-gray-800/30 border border-white/20 hover:border-purple-500/50 transition-all duration-300 hover:scale-[1.02] ${selected ? 'border-emerald-500 ring-2 ring-emerald-500/50' : ''}`}>
       {/* Selection checkbox */}
       {selectable && (
         <div className="absolute top-2 left-2 z-20">
@@ -142,13 +142,13 @@ const VideoCard: React.FC<VideoCardProps> = ({
                   </svg>
                 </button>
               )}
-              {/* Smooth Video (AMT) button */}
+              {/* Smooth Video (RIFE) button */}
               {onInterpolate && !video.isInterpolated && (
                 <button
                   onClick={(e) => { e.stopPropagation(); onInterpolate(video.id); }}
                   disabled={isInterpolating}
                   className="p-2 bg-cyan-600/80 hover:bg-cyan-500/80 rounded-full text-white backdrop-blur-sm disabled:opacity-50 disabled:cursor-not-allowed"
-                  title={isInterpolating ? 'Interpolating...' : 'Smooth Video (AMT)'}
+                  title={isInterpolating ? 'Interpolating...' : 'Smooth Video (RIFE AI)'}
                 >
                   {isInterpolating ? (
                     <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />

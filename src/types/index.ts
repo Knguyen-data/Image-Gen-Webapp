@@ -33,12 +33,6 @@ export interface SpicyModeSettings {
   subMode: SpicySubMode;
 }
 
-// AMT Interpolation Settings
-export interface AMTSettings {
-  outputFps: number; // 10-120, default: 30
-  recursiveInterpolationPasses: number; // 1-5, default: 2
-}
-
 export interface AppSettings {
   temperature: number;
   outputCount: number; // 1-8
@@ -51,8 +45,6 @@ export interface AppSettings {
   safetyFilterEnabled: boolean; // Safety filter (true = enabled, false = BLOCK_NONE)
   // Spicy Mode (Seedream 4.5 Edit)
   spicyMode: SpicyModeSettings;
-  // AMT Interpolation Settings
-  amtSettings: AMTSettings;
 }
 
 export interface GeneratedImage {
