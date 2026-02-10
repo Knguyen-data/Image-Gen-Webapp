@@ -1,6 +1,5 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { GeneratedVideo } from '../types';
-import { getRIFECapability, type RIFECapability } from '../services/browser-capability-detector';
 import { applyVfxEffect } from '../services/freepik-vfx-service';
 import { VFX_FILTERS, VFX_FPS_OPTIONS, type VfxFilterType, type VfxApplyOptions, type VfxFps } from '../types/vfx';
 
@@ -10,8 +9,6 @@ interface VideoCardProps {
   onDelete: () => void;
   onOpen?: () => void;
   onSaveAndReveal?: () => void;
-  onInterpolate?: (videoId: string) => void;
-  isInterpolating?: boolean;
   // Selection mode props
   selectable?: boolean;
   selected?: boolean;
@@ -24,17 +21,10 @@ const VideoCard: React.FC<VideoCardProps> = ({
   onDelete,
   onOpen,
   onSaveAndReveal,
-  onInterpolate,
-  isInterpolating = false,
   selectable = false,
   selected = false,
   onSelect
 }) => {
-  // Check RIFE browser capability once on mount
-  const rifeCapability = useMemo(() => getRIFECapability(), []);
-  const rifeSupported = rifeCapability.supported;
-  const rifeSlow = rifeCapability.estimatedSpeed === 'slow';
-
   // VFX state
   const [showVfxPanel, setShowVfxPanel] = useState(false);
   const [vfxSelectedFilter, setVfxSelectedFilter] = useState<VfxFilterType>(1);
@@ -78,7 +68,6 @@ const VideoCard: React.FC<VideoCardProps> = ({
       fps: vfxFps,
     };
 
-    // Add filter-specific params
     if (vfxSelectedFilter === 7) {
       options.bloom_filter_contrast = vfxBloomContrast;
     }
@@ -106,6 +95,7 @@ const VideoCard: React.FC<VideoCardProps> = ({
   };
 
   const selectedFilterInfo = VFX_FILTERS.find(f => f.id === vfxSelectedFilter);
+  const estimatedCost = video.duration > 0 ? `$${(video.duration * 0.017).toFixed(2)}` : null;
 
   return (
     <div className={`group relative overflow-hidden rounded-xl backdrop-blur-lg bg-white/10 dark:bg-gray-800/30 border border-white/20 hover:border-dash-500/50 transition-all duration-300 hover:scale-[1.02] ${selected ? 'border-emerald-500 ring-2 ring-emerald-500/50' : ''}`}>
@@ -128,7 +118,7 @@ const VideoCard: React.FC<VideoCardProps> = ({
           <div className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-br from-gray-800 via-gray-900 to-gray-800">
             <div className="absolute inset-0 backdrop-blur-xl bg-white/5" />
             <div className="relative z-10 flex flex-col items-center">
-              <div className="w-10 h-10 border-2 border-emerald-500/30 border-t-emerald-500 rounded-full animate-spin mb-3" />
+              <div className="w-10 h-10 border-2 border-dash-500/30 border-t-dash-500 rounded-full animate-spin mb-3" />
               <span className="text-xs text-gray-400 max-w-[80%] text-center truncate px-2">
                 {video.status === 'pending' ? 'Queued...' : 'Generating video...'}
               </span>
@@ -174,15 +164,9 @@ const VideoCard: React.FC<VideoCardProps> = ({
                 {video.provider === 'freepik' ? 'Freepik' : 'Kie.ai'}
               </span>
             )}
-            {/* Interpolated badge */}
-            {video.isInterpolated && (
-              <span className="absolute top-1 right-1 text-[10px] px-1.5 py-0.5 rounded font-medium text-white bg-cyan-500/80 z-10">
-                Smooth
-              </span>
-            )}
             {/* VFX result badge */}
             {vfxResultUrl && (
-              <span className="absolute top-1 left-1 text-[10px] px-1.5 py-0.5 rounded font-medium text-white bg-purple-500/80 z-10">
+              <span className="absolute top-1 left-1 text-[10px] px-1.5 py-0.5 rounded font-medium text-white bg-dash-500/80 z-10">
                 🎬 VFX
               </span>
             )}
@@ -222,37 +206,28 @@ const VideoCard: React.FC<VideoCardProps> = ({
                   </svg>
                 </button>
               )}
-              {/* Smooth Video (RIFE) button */}
-              {onInterpolate && !video.isInterpolated && rifeSupported && (
-                <button
-                  onClick={(e) => { e.stopPropagation(); onInterpolate(video.id); }}
-                  disabled={isInterpolating}
-                  className="p-2 bg-cyan-600/80 hover:bg-cyan-500/80 rounded-full text-white backdrop-blur-sm disabled:opacity-50 disabled:cursor-not-allowed"
-                  title={isInterpolating ? 'Interpolating...' : rifeSlow ? 'Smooth Video (RIFE AI) — May be slow on this browser' : 'Smooth Video (RIFE AI)'}
-                >
-                  {isInterpolating ? (
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  ) : (
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
-                    </svg>
-                  )}
-                </button>
-              )}
-              {/* VFX Button */}
+              {/* VFX Effects Button */}
               <button
                 onClick={(e) => {
                   e.stopPropagation();
                   setShowVfxPanel(prev => !prev);
                 }}
                 disabled={vfxProcessing}
-                className="p-2 bg-purple-600/80 hover:bg-purple-500/80 rounded-full text-white backdrop-blur-sm disabled:opacity-50 disabled:cursor-not-allowed"
-                title={vfxProcessing ? 'Processing VFX…' : 'Apply VFX Filter'}
+                className={`p-2 rounded-full text-white backdrop-blur-sm transition-all ${
+                  vfxProcessing 
+                    ? 'bg-dash-600/50 cursor-not-allowed' 
+                    : showVfxPanel
+                      ? 'bg-dash-500/80 ring-1 ring-dash-400/50'
+                      : 'bg-dash-700/80 hover:bg-dash-600/80'
+                }`}
+                title={vfxProcessing ? 'Processing VFX…' : 'Apply VFX Effects'}
               >
                 {vfxProcessing ? (
                   <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
                 ) : (
-                  <span className="text-sm leading-none">🎬</span>
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                  </svg>
                 )}
               </button>
               <button
@@ -268,76 +243,87 @@ const VideoCard: React.FC<VideoCardProps> = ({
           </div>
         )}
 
-        {/* VFX Panel (popover) */}
+        {/* VFX Panel — glassmorphic popup card */}
         {showVfxPanel && video.status === 'success' && (
           <div
             ref={vfxPanelRef}
-            className="absolute inset-0 z-30 flex items-center justify-center bg-black/70 backdrop-blur-sm"
+            className="absolute inset-0 z-30 flex items-center justify-center bg-black/50"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="w-[90%] max-h-[90%] overflow-y-auto rounded-xl bg-gray-900/95 backdrop-blur-xl border border-dash-500/30 p-3 shadow-2xl">
+            <div className="w-[92%] max-h-[92%] overflow-y-auto rounded-2xl bg-gray-900/90 backdrop-blur-2xl border border-dash-500/20 p-4 shadow-[0_0_30px_rgba(163,255,0,0.08)]">
               {/* Header */}
-              <div className="flex items-center justify-between mb-2">
-                <h4 className="text-xs font-bold text-dash-400 uppercase tracking-wider">VFX Filters</h4>
-                <button
-                  onClick={() => setShowVfxPanel(false)}
-                  className="text-gray-500 hover:text-white text-lg leading-none"
-                >
-                  ×
-                </button>
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <span className="text-base">⚡</span>
+                  <h4 className="text-xs font-bold text-dash-400 uppercase tracking-wider">VFX Effects</h4>
+                </div>
+                <div className="flex items-center gap-2">
+                  {estimatedCost && (
+                    <span className="text-[9px] font-mono text-gray-500 bg-gray-800/60 px-1.5 py-0.5 rounded">
+                      ~{estimatedCost}
+                    </span>
+                  )}
+                  <button
+                    onClick={() => setShowVfxPanel(false)}
+                    className="p-1 hover:bg-gray-800 rounded-full text-gray-500 hover:text-white transition-colors"
+                  >
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
               </div>
 
-              {/* Filter Grid */}
+              {/* Filter Grid — 4x2 */}
               <div className="grid grid-cols-4 gap-1.5 mb-3">
                 {VFX_FILTERS.map(filter => (
                   <button
                     key={filter.id}
                     onClick={() => setVfxSelectedFilter(filter.id)}
-                    className={`flex flex-col items-center p-1.5 rounded-lg text-center transition-all duration-150 ${
+                    className={`flex flex-col items-center p-2 rounded-xl text-center transition-all duration-200 ${
                       vfxSelectedFilter === filter.id
-                        ? 'bg-dash-600/25 backdrop-blur-sm border border-dash-500/50 ring-1 ring-dash-500/30'
-                        : 'bg-gray-800/50 border border-gray-700/50 hover:border-gray-600/70'
+                        ? 'bg-dash-600/20 backdrop-blur-sm border border-dash-400/40 shadow-[0_0_12px_rgba(163,255,0,0.1)]'
+                        : 'bg-gray-800/40 border border-gray-700/30 hover:border-gray-600/60 hover:bg-gray-800/60'
                     }`}
                     title={filter.description}
                   >
-                    <span className="text-base leading-none">{filter.icon}</span>
-                    <span className="text-[8px] text-gray-400 mt-0.5 leading-tight truncate w-full">{filter.name}</span>
+                    <span className="text-lg leading-none mb-0.5">{filter.icon}</span>
+                    <span className={`text-[7px] leading-tight truncate w-full ${
+                      vfxSelectedFilter === filter.id ? 'text-dash-300' : 'text-gray-500'
+                    }`}>{filter.name}</span>
                   </button>
                 ))}
               </div>
 
-              {/* FPS Selector */}
+              {/* FPS Row */}
               <div className="mb-3">
-                <label className="text-[10px] text-gray-500 uppercase tracking-wider font-medium mb-1 block">FPS</label>
-                <div className="flex gap-1.5">
+                <label className="text-[9px] text-gray-500 uppercase tracking-wider font-medium mb-1.5 block">Output FPS</label>
+                <div className="flex gap-1">
                   {VFX_FPS_OPTIONS.map(fps => (
                     <button
                       key={fps}
                       onClick={() => setVfxFps(fps)}
-                      className={`flex-1 py-1 rounded text-[11px] font-mono transition-all ${
+                      className={`flex-1 py-1.5 rounded-lg text-[10px] font-mono transition-all duration-200 ${
                         vfxFps === fps
-                          ? 'bg-dash-600/30 text-dash-400 border border-dash-500/50'
-                          : 'bg-gray-800/50 text-gray-500 border border-gray-700/50 hover:text-gray-300'
+                          ? 'bg-dash-600/25 text-dash-300 border border-dash-400/40 shadow-[0_0_8px_rgba(163,255,0,0.08)]'
+                          : 'bg-gray-800/40 text-gray-500 border border-gray-700/30 hover:text-gray-300 hover:border-gray-600/50'
                       }`}
                     >
-                      {fps}
+                      {fps}fps
                     </button>
                   ))}
                 </div>
               </div>
 
-              {/* Filter-specific controls */}
+              {/* Context-sensitive controls */}
               {vfxSelectedFilter === 7 && (
-                <div className="mb-3">
-                  <label className="text-[10px] text-gray-500 uppercase tracking-wider font-medium mb-1 flex justify-between">
-                    <span>Bloom Contrast</span>
+                <div className="mb-3 p-2.5 rounded-xl bg-gray-800/30 border border-gray-700/20">
+                  <label className="text-[9px] text-gray-500 uppercase tracking-wider font-medium mb-1 flex justify-between">
+                    <span>✨ Bloom Contrast</span>
                     <span className="text-dash-400 font-mono">{vfxBloomContrast.toFixed(2)}</span>
                   </label>
                   <input
-                    type="range"
-                    min="0"
-                    max="1"
-                    step="0.05"
+                    type="range" min="0" max="1" step="0.05"
                     value={vfxBloomContrast}
                     onChange={(e) => setVfxBloomContrast(parseFloat(e.target.value))}
                     className="w-full h-1.5 rounded-full appearance-none bg-gray-700 accent-dash-500"
@@ -346,32 +332,26 @@ const VideoCard: React.FC<VideoCardProps> = ({
               )}
 
               {vfxSelectedFilter === 2 && (
-                <div className="space-y-2 mb-3">
+                <div className="mb-3 p-2.5 rounded-xl bg-gray-800/30 border border-gray-700/20 space-y-2">
                   <div>
-                    <label className="text-[10px] text-gray-500 uppercase tracking-wider font-medium mb-1 flex justify-between">
-                      <span>Kernel Size</span>
+                    <label className="text-[9px] text-gray-500 uppercase tracking-wider font-medium mb-1 flex justify-between">
+                      <span>💨 Kernel Size</span>
                       <span className="text-dash-400 font-mono">{vfxMotionKernel}</span>
                     </label>
                     <input
-                      type="range"
-                      min="1"
-                      max="15"
-                      step="2"
+                      type="range" min="1" max="15" step="2"
                       value={vfxMotionKernel}
                       onChange={(e) => setVfxMotionKernel(parseInt(e.target.value))}
                       className="w-full h-1.5 rounded-full appearance-none bg-gray-700 accent-dash-500"
                     />
                   </div>
                   <div>
-                    <label className="text-[10px] text-gray-500 uppercase tracking-wider font-medium mb-1 flex justify-between">
+                    <label className="text-[9px] text-gray-500 uppercase tracking-wider font-medium mb-1 flex justify-between">
                       <span>Decay Factor</span>
                       <span className="text-dash-400 font-mono">{vfxMotionDecay.toFixed(2)}</span>
                     </label>
                     <input
-                      type="range"
-                      min="0"
-                      max="1"
-                      step="0.05"
+                      type="range" min="0" max="1" step="0.05"
                       value={vfxMotionDecay}
                       onChange={(e) => setVfxMotionDecay(parseFloat(e.target.value))}
                       className="w-full h-1.5 rounded-full appearance-none bg-gray-700 accent-dash-500"
@@ -380,7 +360,7 @@ const VideoCard: React.FC<VideoCardProps> = ({
                 </div>
               )}
 
-              {/* Error display */}
+              {/* Error */}
               {vfxError && (
                 <div className="mb-2 p-2 rounded-lg bg-red-900/30 border border-red-500/30 text-[10px] text-red-300">
                   {vfxError}
@@ -389,7 +369,7 @@ const VideoCard: React.FC<VideoCardProps> = ({
 
               {/* Progress */}
               {vfxProcessing && (
-                <div className="mb-2 flex items-center gap-2">
+                <div className="mb-2 flex items-center gap-2 p-2 rounded-lg bg-gray-800/30">
                   <div className="w-3 h-3 border-2 border-dash-500/30 border-t-dash-500 rounded-full animate-spin shrink-0" />
                   <span className="text-[10px] text-gray-400 truncate">{vfxProgress}</span>
                 </div>
@@ -399,11 +379,11 @@ const VideoCard: React.FC<VideoCardProps> = ({
               <button
                 onClick={handleApplyVfx}
                 disabled={vfxProcessing}
-                className="w-full py-2 rounded-lg bg-dash-600/80 hover:bg-dash-500/80 text-white text-xs font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                className="w-full py-2.5 rounded-xl bg-dash-600/30 hover:bg-dash-500/40 backdrop-blur-sm border border-dash-400/30 text-dash-200 text-xs font-semibold transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-[0_0_15px_rgba(163,255,0,0.06)]"
               >
                 {vfxProcessing ? (
                   <>
-                    <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    <div className="w-3 h-3 border-2 border-dash-300/30 border-t-dash-300 rounded-full animate-spin" />
                     Processing…
                   </>
                 ) : (
@@ -422,7 +402,7 @@ const VideoCard: React.FC<VideoCardProps> = ({
         <p className="text-[10px] text-gray-500 font-mono truncate flex-1" title={video.prompt}>
           {video.prompt.substring(0, 40)}{video.prompt.length > 40 ? '...' : ''}
         </p>
-        <span className="text-[9px] px-1.5 py-0.5 rounded font-medium bg-emerald-900/50 text-emerald-300 shrink-0">
+        <span className="text-[9px] px-1.5 py-0.5 rounded font-medium bg-dash-900/50 text-dash-300 shrink-0">
           Video
         </span>
       </div>

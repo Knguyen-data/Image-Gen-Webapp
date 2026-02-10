@@ -20,8 +20,6 @@ interface RightPanelProps {
   generatedVideos?: GeneratedVideo[];
   onDeleteVideo?: (videoId: string) => void;
   onRetryVideo?: (video: GeneratedVideo) => void;
-  onInterpolateVideo?: (videoId: string) => void;
-  isInterpolating?: boolean;
   // Selection mode props
   selectMode?: boolean;
   selectedVideos?: string[];
@@ -43,8 +41,6 @@ const RightPanel: React.FC<RightPanelProps> = ({
   generatedVideos = [],
   onDeleteVideo = (_videoId: string) => {},
   onRetryVideo = (_video: GeneratedVideo) => {},
-  onInterpolateVideo = (_videoId: string) => {},
-  isInterpolating = false,
   selectMode = false,
   selectedVideos = [],
   onSelectVideo = (_videoId: string) => {},
@@ -653,8 +649,6 @@ const RightPanel: React.FC<RightPanelProps> = ({
                         onDelete={() => onDeleteVideo(video.id)}
                         onOpen={() => setLightboxVideo(video)}
                         onSaveAndReveal={() => handleSaveAndRevealVideo(video)}
-                        onInterpolate={onInterpolateVideo}
-                        isInterpolating={isInterpolating}
                         selectable={selectMode}
                         selected={selectedVideos.includes(video.id)}
                         onSelect={onSelectVideo}

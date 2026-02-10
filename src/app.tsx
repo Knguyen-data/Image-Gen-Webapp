@@ -24,7 +24,7 @@ import { withRateLimitRetry } from './services/rate-limiter';
 import { useSeedreamCredits } from './hooks/use-seedream-credits';
 import { generateWithSeedream, mapAspectRatio } from './services/seedream-service';
 import { uploadBase64ToR2, uploadUrlToR2 } from './services/supabase-storage-service';
-// TODO: Implement client-side video interpolation (TensorFlow.js FILM or RIFE)
+// Video effects handled by Freepik VFX API (server-side)
 import { generateWithSeedreamTxt2Img } from './services/seedream-txt2img-service';
 import { generateMotionVideo } from './services/kling-motion-control-service';
 import { createFreepikProI2VTask, pollFreepikProI2VTask, createKling3Task, pollKling3Task, createKling3OmniTask, createKling3OmniReferenceTask, pollKling3OmniTask, pollKling3OmniReferenceTask, createAndPollWithRetry } from './services/freepik-kling-service';
@@ -101,8 +101,7 @@ const AppInner: React.FC = () => {
   const [veoTaskResult, setVeoTaskResult] = useState<VeoTaskResult | null>(null);
   const [isVeoUpgrading, setIsVeoUpgrading] = useState(false);
 
-  // AMT Interpolation State
-  const [isInterpolating, setIsInterpolating] = useState(false);
+  // Video generation state managed in the main flow
 
   // State: Data
   const [runs, setRuns] = useState<Run[]>([]);
@@ -2462,71 +2461,6 @@ INSTRUCTIONS:
     }
   };
 
-  // ============ Video Interpolation Handler (Client-Side RIFE) ============
-  const handleAmtInterpolation = async (videoId: string) => {
-    const targetVideo = generatedVideos.find(v => v.id === videoId);
-    if (!targetVideo) {
-      logger.warn('App', 'Video not found for interpolation', { videoId });
-      return;
-    }
-
-    if (!targetVideo.url) {
-      alert('Video has no URL to interpolate');
-      return;
-    }
-
-    const jobId = addJob({ type: 'video', status: 'active', prompt: `RIFE Smooth: ${(targetVideo.prompt || videoId).slice(0, 40)}` });
-    addLog({ level: 'info', message: 'Starting RIFE interpolation', jobId });
-    logger.info('App', 'Starting RIFE interpolation', { videoId, url: targetVideo.url.slice(0, 50) });
-    setIsInterpolating(true);
-    setLoadingStatus('Smooth Video: Starting...');
-
-    try {
-      const { interpolateVideo } = await import('./services/rife-interpolation-service');
-
-      const resultUrl = await interpolateVideo(
-        targetVideo.url,
-        2,
-        (status) => {
-          setLoadingStatus(`Smooth Video: ${status}`);
-        }
-      );
-
-      const interpolatedVideo: GeneratedVideo = {
-        id: `video-${Date.now()}-interpolated`,
-        sceneId: targetVideo.sceneId,
-        url: resultUrl,
-        duration: targetVideo.duration,
-        prompt: `Smoothed (2x RIFE): ${targetVideo.prompt}`,
-        createdAt: Date.now(),
-        status: 'success',
-        provider: targetVideo.provider,
-        isInterpolated: true,
-        originalVideoId: videoId,
-      };
-
-      setGeneratedVideos(prev => [interpolatedVideo, ...prev]);
-      saveGeneratedVideoToDB(interpolatedVideo).catch(e =>
-        logger.warn('App', 'Failed to persist interpolated video to IndexedDB', e)
-      );
-
-      updateJob(jobId, { status: 'completed' });
-      addLog({ level: 'info', message: 'RIFE interpolation complete', jobId });
-      logger.info('App', 'RIFE interpolation complete', { videoId, resultUrl: resultUrl.slice(0, 50) });
-      setLoadingStatus('Smooth Video: Complete!');
-
-    } catch (error: any) {
-      updateJob(jobId, { status: 'failed', error: error.message });
-      addLog({ level: 'error', message: `RIFE interpolation failed: ${error.message}`, jobId });
-      logger.error('App', 'RIFE interpolation failed', { error: error.message, videoId });
-      alert(`Interpolation failed: ${error.message}`);
-      setLoadingStatus('Smooth Video: Failed');
-    } finally {
-      setIsInterpolating(false);
-      setTimeout(() => setLoadingStatus(''), 3000);
-    }
-  };
-
   return (
     <div className="flex h-screen w-screen overflow-hidden text-gray-200 font-sans bg-gray-950 transition-colors duration-300 relative">
       {/* Animated background */}
@@ -2675,8 +2609,6 @@ INSTRUCTIONS:
             generatedVideos={generatedVideos}
             onDeleteVideo={handleDeleteVideo}
             onRetryVideo={handleRetryVideo}
-            onInterpolateVideo={handleAmtInterpolation}
-            isInterpolating={isInterpolating}
             selectMode={selectMode}
             selectedVideos={selectedVideos}
             onSelectVideo={toggleVideoSelection}
