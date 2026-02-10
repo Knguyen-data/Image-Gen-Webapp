@@ -3,12 +3,14 @@
  * Uses File System Access API (showSaveFilePicker) or falls back to browser download.
  */
 
+import { fetchWithTimeout } from '../utils/fetch-with-timeout';
+
 /**
  * Prompt user to pick save location, or fall back to browser download
  */
 export async function saveAndRevealVideo(videoUrl: string): Promise<void> {
-  // Fetch the video blob
-  const response = await fetch(videoUrl);
+  // Fetch the video blob (with timeout + CORS)
+  const response = await fetchWithTimeout(videoUrl);
   const blob = await response.blob();
 
   // Try File System Access API (Chrome/Edge)

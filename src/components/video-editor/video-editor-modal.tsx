@@ -46,6 +46,7 @@ const VideoEditorModal: React.FC<VideoEditorModalProps> = ({
   const canvasContainerRef = useRef<HTMLDivElement>(null);
   const animFrameRef = useRef<number>(0);
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const timelineScrollRef = useRef<HTMLDivElement>(null);
 
   // Editor state
   const [layers, setLayers] = useState<EditorLayerInfo[]>([]);
@@ -60,6 +61,7 @@ const VideoEditorModal: React.FC<VideoEditorModalProps> = ({
   const [isExporting, setIsExporting] = useState(false);
   const [exportProgress, setExportProgress] = useState(0);
   const [initError, setInitError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   // Utility state
   const [rippleMode, setRippleMode] = useState(false);
@@ -70,6 +72,12 @@ const VideoEditorModal: React.FC<VideoEditorModalProps> = ({
   // Drag reorder state
   const [dragClipId, setDragClipId] = useState<string | null>(null);
   const [dragOverClipId, setDragOverClipId] = useState<string | null>(null);
+
+  // Scroll indicator state
+  const [scrollPercentage, setScrollPercentage] = useState(0);
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(false);
+  const [autoFollow, setAutoFollow] = useState(true);
 
   // Transition picker state
   const [transitionPicker, setTransitionPicker] = useState<{
@@ -89,16 +97,19 @@ const VideoEditorModal: React.FC<VideoEditorModalProps> = ({
   useEffect(() => {
     if (!isOpen) return;
 
-    // Suppress known non-critical errors from Diffusion Studio Core
-    const restoreConsole = suppressCoreErrors();
+    let isMounted = true;
+    const abortController = new AbortController();
 
     const init = async () => {
       setIsLoading(true);
       setLoadingMessage('Initializing editor...');
       setInitError(null);
+      setLoadError(null);
 
       try {
         await videoEditorService.createProject(1920, 1080);
+
+        if (!isMounted) return;
 
         // Mount to canvas container
         if (canvasContainerRef.current) {
@@ -108,26 +119,42 @@ const VideoEditorModal: React.FC<VideoEditorModalProps> = ({
         // Add default layer
         await videoEditorService.addLayer('SEQUENTIAL');
 
+        if (!isMounted) return;
+
         // Pre-populate with provided videos
         if (videos.length > 0) {
           setLoadingMessage(`Loading ${videos.length} clips...`);
+          let failedCount = 0;
 
           for (let i = 0; i < videos.length; i++) {
+            if (abortController.signal.aborted) break;
+
             const video = videos[i];
             if (video.status !== 'success' || !video.url) continue;
 
             try {
+              if (!isMounted) return;
               setLoadingMessage(`Loading clip ${i + 1}/${videos.length}...`);
               await videoEditorService.addClip(0, video.url, undefined, 'generated');
             } catch (clipError) {
+              if (!isMounted) return;
+              failedCount++;
               logger.warn('VideoEditor', `Failed to load clip ${video.id}`, clipError);
             }
           }
+
+          if (!isMounted) return;
+
+          if (failedCount > 0) {
+            setLoadError(`${failedCount} of ${videos.length} videos could not be loaded due to browser security restrictions. Import new videos directly.`);
+          }
         }
 
+        if (!isMounted) return;
         refreshLayers();
         setIsLoading(false);
       } catch (error: any) {
+        if (!isMounted) return;
         logger.error('VideoEditor', 'Failed to initialize editor', error);
         setInitError(error.message || 'Failed to initialize video editor');
         setIsLoading(false);
@@ -136,7 +163,26 @@ const VideoEditorModal: React.FC<VideoEditorModalProps> = ({
 
     init();
 
+    // Resize observer with debounce
+    let resizeTimer: ReturnType<typeof setTimeout>;
+    const observer = new ResizeObserver(() => {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(() => {
+        const comp = videoEditorService.getComposition();
+        if (comp && canvasContainerRef.current) {
+          // Composition auto-adapts on next render tick
+        }
+      }, 150);
+    });
+    if (canvasContainerRef.current) {
+      observer.observe(canvasContainerRef.current);
+    }
+
     return () => {
+      isMounted = false;
+      abortController.abort();
+      observer.disconnect();
+      clearTimeout(resizeTimer);
       cancelAnimationFrame(animFrameRef.current);
       videoEditorService.destroy();
     };
@@ -149,11 +195,12 @@ const VideoEditorModal: React.FC<VideoEditorModalProps> = ({
     const updateTime = () => {
       const comp = videoEditorService.getComposition();
       if (comp) {
+        const fps = videoEditorService.fps;
         setCurrentTime(comp.currentTime);
-        setDuration(comp.duration / 30);
+        setDuration(videoEditorService.duration);
         // CapCut-style timecode display
-        const currentTC = formatTimecode(comp.currentTime);
-        const durationTC = formatTimecode(comp.duration / 30);
+        const currentTC = formatTimecode(comp.currentTime, fps);
+        const durationTC = formatTimecode(videoEditorService.duration, fps);
         setTimeDisplay(`${currentTC} / ${durationTC}`);
         setIsPlaying(comp.playing);
       }
@@ -166,13 +213,15 @@ const VideoEditorModal: React.FC<VideoEditorModalProps> = ({
 
   // Frame-by-frame navigation
   const handleFrameBack = useCallback(() => {
-    const newTime = Math.max(0, currentTime - 1/30);
+    const fps = videoEditorService.fps;
+    const newTime = Math.max(0, currentTime - 1/fps);
     videoEditorService.seek(newTime);
     setCurrentTime(newTime);
   }, [currentTime]);
 
   const handleFrameForward = useCallback(() => {
-    const newTime = Math.min(duration, currentTime + 1/30);
+    const fps = videoEditorService.fps;
+    const newTime = Math.min(duration, currentTime + 1/fps);
     videoEditorService.seek(newTime);
     setCurrentTime(newTime);
   }, [currentTime, duration]);
@@ -189,6 +238,68 @@ const VideoEditorModal: React.FC<VideoEditorModalProps> = ({
       }
     }
   }, [layers, selectedClipId, currentTime]);
+
+  // --- Scroll tracking ---
+  const updateScrollState = useCallback(() => {
+    const container = timelineScrollRef.current;
+    if (!container) return;
+    const maxScroll = container.scrollWidth - container.clientWidth;
+    if (maxScroll <= 0) {
+      setScrollPercentage(0);
+      setCanScrollLeft(false);
+      setCanScrollRight(false);
+      return;
+    }
+    const pct = Math.round((container.scrollLeft / maxScroll) * 100);
+    setScrollPercentage(pct);
+    setCanScrollLeft(container.scrollLeft > 5);
+    setCanScrollRight(container.scrollLeft < maxScroll - 5);
+  }, []);
+
+  useEffect(() => {
+    const container = timelineScrollRef.current;
+    if (!container) return;
+    container.addEventListener('scroll', updateScrollState, { passive: true });
+    // Initial check
+    updateScrollState();
+    const resizeObserver = new ResizeObserver(updateScrollState);
+    resizeObserver.observe(container);
+    return () => {
+      container.removeEventListener('scroll', updateScrollState);
+      resizeObserver.disconnect();
+    };
+  }, [updateScrollState, isOpen]);
+
+  // --- Playhead auto-follow during playback ---
+  useEffect(() => {
+    if (!isPlaying || !autoFollow || !timelineScrollRef.current) return;
+
+    const playheadX = currentTime * pixelsPerSecond + 100; // +100 for track header offset
+    const container = timelineScrollRef.current;
+    const viewportWidth = container.clientWidth;
+    const scrollLeft = container.scrollLeft;
+
+    // Keep playhead in center 50% of viewport
+    if (playheadX < scrollLeft + viewportWidth * 0.25 ||
+        playheadX > scrollLeft + viewportWidth * 0.75) {
+      container.scrollTo({
+        left: playheadX - viewportWidth / 2,
+        behavior: 'smooth',
+      });
+    }
+  }, [currentTime, isPlaying, autoFollow, pixelsPerSecond]);
+
+  // Center playhead in viewport
+  const centerPlayhead = useCallback(() => {
+    const container = timelineScrollRef.current;
+    if (!container) return;
+    const playheadX = currentTime * pixelsPerSecond + 100;
+    const viewportWidth = container.clientWidth;
+    container.scrollTo({
+      left: playheadX - viewportWidth / 2,
+      behavior: 'smooth',
+    });
+  }, [currentTime, pixelsPerSecond]);
 
   const refreshLayers = useCallback(() => {
     setLayers(videoEditorService.getLayerInfo());
@@ -317,8 +428,9 @@ const VideoEditorModal: React.FC<VideoEditorModalProps> = ({
       setLoadingMessage(`Importing ${file.name}...`);
       try {
         await videoEditorService.addClipFromFile(targetLayerIndex, file, 'broll');
-      } catch (e) {
+      } catch (e: any) {
         logger.warn('VideoEditor', `Failed to import ${file.name}`, e);
+        setLoadError(`Failed to import "${file.name}": ${e.message || 'Unknown error'}`);
       }
     }
 
@@ -429,6 +541,7 @@ const VideoEditorModal: React.FC<VideoEditorModalProps> = ({
         // Fallback to local blob URL
         logger.warn('VideoEditor', 'R2 upload failed, using local URL', uploadError);
         finalUrl = URL.createObjectURL(blob);
+        setLoadError('Cloud upload failed. Video saved locally (will not persist after page refresh).');
       }
 
       const exportedVideo: GeneratedVideo = {
@@ -456,6 +569,9 @@ const VideoEditorModal: React.FC<VideoEditorModalProps> = ({
   // Handle ESC key
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Skip if user is typing in an input
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+
       if (e.key === 'Escape') {
         if (transitionPicker) {
           setTransitionPicker(null);
@@ -467,13 +583,34 @@ const VideoEditorModal: React.FC<VideoEditorModalProps> = ({
         e.preventDefault();
         isPlaying ? handlePause() : handlePlay();
       }
+      if (e.key === 's' && !e.ctrlKey && !e.metaKey) {
+        e.preventDefault();
+        handleSplitAtPlayhead();
+      }
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        if (selectedClipId) {
+          handleRemoveClip(selectedClipId);
+        }
+      }
+      if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        handleFrameBack();
+      }
+      if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        handleFrameForward();
+      }
+      if (e.key === 'c' && !e.ctrlKey && !e.metaKey) {
+        e.preventDefault();
+        centerPlayhead();
+      }
     };
 
     if (isOpen) {
       document.addEventListener('keydown', handleKeyDown);
       return () => document.removeEventListener('keydown', handleKeyDown);
     }
-  }, [isOpen, transitionPicker, isPlaying]);
+  }, [isOpen, transitionPicker, isPlaying, selectedClipId, handleSplitAtPlayhead, handleFrameBack, handleFrameForward, handleRemoveClip, onClose, handlePause, handlePlay, centerPlayhead]);
 
   if (!isOpen) return null;
 
@@ -693,12 +830,67 @@ const VideoEditorModal: React.FC<VideoEditorModalProps> = ({
                 }}
                 className="max-w-full max-h-full"
               />
+
+              {/* Empty state */}
+              {layers.length === 0 || layers.every(l => l.clips.length === 0) ? (
+                <div className="flex flex-col items-center gap-4 text-center max-w-sm">
+                  <div className="w-16 h-16 rounded-full bg-gray-800/50 flex items-center justify-center">
+                    <svg className="w-8 h-8 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <p className="text-gray-300 font-medium mb-1">No clips in timeline</p>
+                    <p className="text-sm text-gray-500">
+                      Import videos from your library or add new ones
+                    </p>
+                  </div>
+                  
+                  {/* Quick import buttons */}
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => document.getElementById('editor-import-input')?.click()}
+                      className="px-4 py-2 rounded-lg bg-dash-600/20 text-dash-400 text-sm font-medium hover:bg-dash-600/30 transition-all flex items-center gap-2"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                      </svg>
+                      Import Video
+                    </button>
+                    <button
+                      onClick={() => setShowStockGallery(true)}
+                      className="px-4 py-2 rounded-lg bg-gray-800/50 text-gray-400 text-sm font-medium hover:bg-gray-700/50 transition-all flex items-center gap-2"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                      </svg>
+                      Stock Library
+                    </button>
+                  </div>
+                  
+                  <input
+                    id="editor-import-input"
+                    type="file"
+                    accept="video/*"
+                    multiple
+                    className="hidden"
+                    onChange={(e) => e.target.files && handleImportBroll(e.target.files)}
+                  />
+
+                  {/* Load error message */}
+                  {loadError && (
+                    <div className="mt-2 px-4 py-2 bg-yellow-900/20 border border-yellow-500/30 rounded-lg text-xs text-yellow-400 max-w-xs">
+                      {loadError}
+                    </div>
+                  )}
+                </div>
+              ) : null}
             </div>
           )}
 
           {/* Frame overlay (hidden, for debugging) */}
           <div className="absolute bottom-4 left-1/2 -translate-x-1/2 px-3 py-1.5 bg-gray-900/80 backdrop-blur rounded-lg text-xs font-mono text-gray-300">
-            {formatTimecode(currentTime)}
+            {formatTimecode(currentTime, videoEditorService.fps)}
           </div>
 
           {/* Export progress overlay */}
@@ -754,7 +946,8 @@ const VideoEditorModal: React.FC<VideoEditorModalProps> = ({
           {/* Play/Pause */}
           <button
             onClick={isPlaying ? handlePause : handlePlay}
-            className="p-3 rounded-full bg-dash-500 text-white hover:bg-dash-400 transition-all shadow-lg shadow-dash-500/20"
+            disabled={isLoading || layers.every(l => l.clips.length === 0)}
+            className="p-3 rounded-full bg-dash-500 text-white hover:bg-dash-400 transition-all shadow-lg shadow-dash-500/20 disabled:opacity-40 disabled:cursor-not-allowed"
             title={isPlaying ? 'Pause (Space)' : 'Play (Space)'}
           >
             {isPlaying ? (
@@ -793,10 +986,40 @@ const VideoEditorModal: React.FC<VideoEditorModalProps> = ({
 
           {/* Timecode display */}
           <div className="flex items-center gap-2 ml-4 px-3 py-1.5 bg-gray-800/50 rounded-lg">
-            <span className="text-sm font-mono text-dash-400">{formatTimecode(currentTime)}</span>
+            <span className="text-sm font-mono text-dash-400">{formatTimecode(currentTime, videoEditorService.fps)}</span>
             <span className="text-xs text-gray-600">/</span>
-            <span className="text-sm font-mono text-gray-400">{formatTimecode(duration)}</span>
+            <span className="text-sm font-mono text-gray-400">{formatTimecode(duration, videoEditorService.fps)}</span>
           </div>
+
+          {/* Center Playhead button */}
+          <button
+            onClick={centerPlayhead}
+            className="p-2 rounded-lg text-gray-400 hover:text-white hover:bg-gray-800/50 transition-all"
+            title="Center Playhead (C)"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <circle cx="12" cy="12" r="10" strokeWidth="2" />
+              <circle cx="12" cy="12" r="3" strokeWidth="2" />
+              <path strokeLinecap="round" strokeWidth="2" d="M12 2v4m0 12v4M2 12h4m12 0h4" />
+            </svg>
+          </button>
+
+          {/* Auto-follow toggle */}
+          <button
+            onClick={() => setAutoFollow(!autoFollow)}
+            className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 ${
+              autoFollow
+                ? 'bg-dash-500/20 text-dash-400 border border-dash-500/30'
+                : 'text-gray-400 hover:text-white hover:bg-gray-800/50'
+            }`}
+            title="Auto-follow playhead during playback"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+            </svg>
+            Follow
+          </button>
 
           {/* Volume (placeholder) */}
           <button
@@ -857,7 +1080,7 @@ const VideoEditorModal: React.FC<VideoEditorModalProps> = ({
               accept="video/*"
               multiple
               className="hidden"
-              onChange={(e) => e.files && handleImportBroll(e.files)}
+              onChange={(e) => e.target.files && handleImportBroll(e.target.files)}
             />
 
             <button
@@ -883,7 +1106,23 @@ const VideoEditorModal: React.FC<VideoEditorModalProps> = ({
         </div>
 
         {/* Timeline scroll area */}
-        <div className="flex-1 overflow-auto">
+        <div className="flex-1 overflow-auto relative" ref={timelineScrollRef}>
+          {/* Left scroll shadow */}
+          {canScrollLeft && (
+            <div className="absolute left-0 top-0 bottom-0 w-8 bg-gradient-to-r from-gray-950 to-transparent pointer-events-none z-30" />
+          )}
+
+          {/* Right scroll shadow */}
+          {canScrollRight && (
+            <div className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-gray-950 to-transparent pointer-events-none z-30" />
+          )}
+
+          {/* Scroll position indicator */}
+          {(canScrollLeft || canScrollRight) && (
+            <div className="sticky top-2 float-right mr-4 px-2 py-1 bg-gray-800/80 rounded text-xs text-gray-400 font-mono z-40">
+              {scrollPercentage}%
+            </div>
+          )}
           <div className="min-w-full">
             {/* Time ruler */}
             <div className="sticky top-0 z-20 bg-gray-900/95 backdrop-blur border-b border-gray-800/30">
@@ -992,6 +1231,8 @@ const VideoEditorModal: React.FC<VideoEditorModalProps> = ({
           <span>Del: Delete</span>
           <span className="mx-1">•</span>
           <span>←→: Frame</span>
+          <span className="mx-1">•</span>
+          <span>C: Center</span>
         </div>
 
         <div className="flex items-center gap-3">

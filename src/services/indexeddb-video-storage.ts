@@ -1,5 +1,6 @@
 import { ReferenceVideo, GeneratedVideo } from "../types";
 import { uploadUrlToStorage } from "./supabase-storage-service";
+import { fetchWithTimeout } from "../utils/fetch-with-timeout";
 
 const VIDEO_DB_NAME = 'RAW_STUDIO_VIDEO_DB';
 const VIDEO_STORE_NAME = 'videos';
@@ -222,13 +223,13 @@ export const saveGeneratedVideoToDB = async (video: GeneratedVideo): Promise<voi
       console.warn('[IndexedDB] Failed to upload to Supabase, using blob URL:', e);
     }
 
-    const videoResponse = await fetch(video.url);
+    const videoResponse = await fetchWithTimeout(video.url);
     const videoBlob = await videoResponse.blob();
 
     let thumbnailBlob: Blob | undefined;
     if (video.thumbnailUrl) {
       try {
-        const thumbResponse = await fetch(video.thumbnailUrl);
+        const thumbResponse = await fetchWithTimeout(video.thumbnailUrl);
         thumbnailBlob = await thumbResponse.blob();
       } catch (e) {
         console.warn('Failed to fetch thumbnail:', e);

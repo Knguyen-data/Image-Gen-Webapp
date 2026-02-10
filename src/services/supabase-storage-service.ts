@@ -6,6 +6,7 @@
 
 import { supabase } from './supabase';
 import { logger } from './logger';
+import { fetchWithTimeout } from '../utils/fetch-with-timeout';
 
 const BUCKET = 'media';
 const MAX_RETRIES = 3;
@@ -105,7 +106,7 @@ async function uploadWithRetry(
         .from(BUCKET)
         .getPublicUrl(data.path);
 
-      return urlData.publicUrl;
+      return urlData.publicUrl.replace(/^http:/, 'https:');
     } catch (err: any) {
       lastError = err;
       if (attempt < MAX_RETRIES) {
@@ -159,8 +160,8 @@ export async function uploadUrlToStorage(
 ): Promise<string> {
   logger.debug('SupabaseStorage', 'Uploading from URL', { sourceUrl: sourceUrl.slice(0, 80) });
 
-  // Fetch the file from the source URL
-  const response = await fetch(sourceUrl);
+  // Fetch the file from the source URL (with timeout + CORS)
+  const response = await fetchWithTimeout(sourceUrl);
   if (!response.ok) {
     throw new Error(`Failed to fetch source URL (${response.status}): ${sourceUrl}`);
   }

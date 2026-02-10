@@ -7,6 +7,7 @@
 
 import { Composition, Layer, VideoClip, Source, Encoder } from '@diffusionstudio/core';
 import type { TransitionType, TransitionConfig } from '@diffusionstudio/core';
+import { fetchWithTimeout, validateUrlProtocol } from '../utils/fetch-with-timeout';
 
 // These types are from the encoder but may not be re-exported from root
 export type EncoderProgress = {
@@ -33,8 +34,8 @@ export type { TransitionType };
  */
 async function blobUrlToDataUrl(blobUrl: string): Promise<string> {
   if (!blobUrl.startsWith('blob:')) return blobUrl;
-  
-  const response = await fetch(blobUrl);
+
+  const response = await fetchWithTimeout(blobUrl);
   const blob = await response.blob();
   
   return new Promise((resolve, reject) => {
@@ -154,11 +155,27 @@ export const TRANSITION_LABELS: Record<string, string> = Object.fromEntries(
   TRANSITION_PRESETS.map(p => [p.id, p.label])
 );
 
+/**
+ * Retry fetch with exponential backoff for transient network failures
+ */
+async function retryFetch(url: string, retries = 3): Promise<Response> {
+  for (let i = 0; i < retries; i++) {
+    try {
+      return await fetchWithTimeout(url);
+    } catch (err) {
+      if (i === retries - 1) throw err;
+      await new Promise(r => setTimeout(r, 1000 * Math.pow(2, i)));
+    }
+  }
+  throw new Error('Unreachable');
+}
+
 class VideoEditorService {
   private composition: Composition | null = null;
   private encoder: Encoder | null = null;
   private clipSourceMap: Map<string, string> = new Map(); // clipId -> sourceUrl
   private clipTypeMap: Map<string, 'generated' | 'broll'> = new Map();
+  private _isImporting = false;
 
   /**
    * Create a new composition/project
@@ -209,7 +226,8 @@ class VideoEditorService {
   }
 
   /**
-   * Add a video clip to a layer from a URL
+   * Add a video clip to a layer from a URL.
+   * Uses a mutex to prevent concurrent imports from corrupting composition state.
    */
   async addClip(
     layerIndex: number,
@@ -217,36 +235,92 @@ class VideoEditorService {
     range?: [number, number],
     clipType: 'generated' | 'broll' = 'generated'
   ): Promise<string> {
-    if (!this.composition) throw new Error('No project created');
-
-    // Ensure layer exists
-    while (this.composition.layers.length <= layerIndex) {
-      await this.addLayer('SEQUENTIAL');
+    if (this._isImporting) {
+      throw new Error('Import already in progress');
     }
+    this._isImporting = true;
 
-    const layer = this.composition.layers[layerIndex];
-    
-    // For blob URLs, fetch as ArrayBuffer to avoid HEAD request errors
-    let source: Source;
-    if (videoUrl.startsWith('blob:')) {
-      const response = await fetch(videoUrl);
-      const arrayBuffer = await response.arrayBuffer();
-      source = await Source.from(arrayBuffer);
-    } else {
-      source = await Source.from(videoUrl);
+    try {
+      if (!this.composition) throw new Error('No project created');
+
+      // Validate URL protocol before any fetch
+      validateUrlProtocol(videoUrl);
+
+      // Ensure layer exists
+      while (this.composition.layers.length <= layerIndex) {
+        await this.addLayer('SEQUENTIAL');
+      }
+
+      const layer = this.composition.layers[layerIndex];
+
+      // Handle different URL types for Diffusion Studio Core compatibility
+      let source: Source;
+      try {
+        if (videoUrl.startsWith('blob:')) {
+          // Fetch as blob and convert to File (Core requires File with getFile support)
+          const response = await fetchWithTimeout(videoUrl);
+          const blob = await response.blob();
+          // Convert Blob to File - Core needs File object with proper getFile() support
+          const file = new File([blob], `video-${Date.now()}.mp4`, { type: blob.type || 'video/mp4' });
+          source = await Source.from(file);
+        } else if (videoUrl.startsWith('data:')) {
+          // Validate data URL size (base64 ~ 4/3 of binary size)
+          const commaIdx = videoUrl.indexOf(',');
+          if (commaIdx === -1) throw new Error('Invalid data URL format');
+          const base64Len = videoUrl.length - commaIdx - 1;
+          const estimatedBytes = Math.ceil(base64Len * 3 / 4);
+          const MAX_DATA_URL_BYTES = 100 * 1024 * 1024; // 100MB
+          if (estimatedBytes > MAX_DATA_URL_BYTES) {
+            throw new Error(`Data URL too large (${Math.round(estimatedBytes / 1024 / 1024)}MB). Use a file or HTTP URL instead.`);
+          }
+          // Data URL - convert to File
+          const base64Data = videoUrl.split(',')[1];
+          const byteCharacters = atob(base64Data);
+          const byteNumbers = new Array(byteCharacters.length);
+          for (let i = 0; i < byteCharacters.length; i++) {
+            byteNumbers[i] = byteCharacters.charCodeAt(i);
+          }
+          const byteArray = new Uint8Array(byteNumbers);
+          const blob = new Blob([byteArray], { type: 'video/mp4' });
+          const file = new File([blob], `video-${Date.now()}.mp4`, { type: 'video/mp4' });
+          source = await Source.from(file);
+        } else {
+          // HTTP/HTTPS URL - try direct URL first (faster, no extra memory)
+          try {
+            source = await Source.from(videoUrl);
+          } catch {
+            // Fallback: fetch as File with retry (handles CORS/getFile() errors)
+            const response = await retryFetch(videoUrl);
+            if (!response.ok) {
+              throw new Error(`Failed to fetch video: ${response.statusText}`);
+            }
+            const blob = await response.blob();
+            const file = new File([blob], `video-${Date.now()}.mp4`, { type: blob.type || 'video/mp4' });
+            source = await Source.from(file);
+          }
+        }
+      } catch (sourceError) {
+        throw new Error(
+          `Failed to load video source: ${sourceError instanceof Error ? sourceError.message : String(sourceError)}`,
+          { cause: sourceError }
+        );
+      }
+
+      const clip = new VideoClip(source as any, range ? {
+        range: [range[0], range[1]],
+      } : undefined);
+
+      await layer.add(clip);
+
+      this.clipSourceMap.set(clip.id, videoUrl);
+      this.clipTypeMap.set(clip.id, clipType);
+
+      return clip.id;
+    } finally {
+      this._isImporting = false;
     }
-    
-    const clip = new VideoClip(source as any, range ? {
-      range: [range[0], range[1]],
-    } : undefined);
-
-    await layer.add(clip);
-
-    this.clipSourceMap.set(clip.id, videoUrl);
-    this.clipTypeMap.set(clip.id, clipType);
-
-    return clip.id;
   }
+
 
   /**
    * Add a video clip from a File object
@@ -373,6 +447,35 @@ class VideoEditorService {
   }
 
   /**
+   * Split a clip at a given time (seconds).
+   * Creates two clips from original: [start..splitTime] and [splitTime..end].
+   */
+  async splitClip(layerIndex: number, clipIndex: number, splitTimeSec: number): Promise<void> {
+    if (!this.composition) throw new Error('No project created');
+    const layer = this.composition.layers[layerIndex];
+    if (!layer) return;
+
+    const clip = layer.clips[clipIndex] as any;
+    if (!clip) return;
+
+    const fps = this.fps;
+    const clipStartSec = clip.start / fps;
+    const clipEndSec = clip.end / fps;
+
+    // Validate split point is within clip bounds
+    if (splitTimeSec <= clipStartSec || splitTimeSec >= clipEndSec) return;
+
+    const sourceUrl = this.clipSourceMap.get(clip.id) || '';
+    const clipType = this.clipTypeMap.get(clip.id) || 'generated';
+
+    // Trim original to [start..splitTime]
+    clip.trim(clipStartSec, splitTimeSec);
+
+    // Add second half as new clip after original
+    await this.addClip(layerIndex, sourceUrl, [splitTimeSec, clipEndSec], clipType);
+  }
+
+  /**
    * Play the composition
    */
   async play(time?: number): Promise<void> {
@@ -404,11 +507,18 @@ class VideoEditorService {
   }
 
   /**
+   * Get FPS from composition settings or default to 30
+   */
+  get fps(): number {
+    return (this.composition as any)?.settings?.fps ?? 30;
+  }
+
+  /**
    * Get total duration in seconds
    */
   get duration(): number {
     return this.composition?.duration
-      ? this.composition.duration / 30 // frames to seconds (assume 30fps)
+      ? this.composition.duration / this.fps
       : 0;
   }
 
@@ -480,9 +590,9 @@ class VideoEditorService {
         layerIndex,
         clipIndex,
         name: clip.name || `Clip ${clipIndex + 1}`,
-        startSec: clip.start / 30,
-        endSec: clip.end / 30,
-        durationSec: clip.duration / 30,
+        startSec: clip.start / this.fps,
+        endSec: clip.end / this.fps,
+        durationSec: clip.duration / this.fps,
         sourceUrl: this.clipSourceMap.get(clip.id) || '',
         transition: clip.transition,
         type: this.clipTypeMap.get(clip.id) || 'generated',
