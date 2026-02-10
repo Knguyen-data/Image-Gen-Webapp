@@ -20,6 +20,17 @@ interface VideoEditorModalProps {
   onExportComplete?: (video: GeneratedVideo) => void;
 }
 
+/**
+ * Fetch a video URL as an ArrayBuffer to avoid blob URL HEAD request errors
+ */
+async function fetchAsArrayBuffer(url: string): Promise<ArrayBuffer> {
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`Failed to fetch video: ${response.status}`);
+  }
+  return response.arrayBuffer();
+}
+
 const VideoEditorModal: React.FC<VideoEditorModalProps> = ({
   isOpen,
   onClose,

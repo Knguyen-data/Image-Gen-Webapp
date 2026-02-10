@@ -1,4 +1,5 @@
 import { ReferenceVideo, GeneratedVideo } from "../types";
+import { uploadUrlToStorage } from "./supabase-storage-service";
 
 const VIDEO_DB_NAME = 'RAW_STUDIO_VIDEO_DB';
 const VIDEO_STORE_NAME = 'videos';
@@ -187,6 +188,7 @@ export const storedVideoToReferenceVideo = (stored: StoredVideo): ReferenceVideo
 /**
  * Interface for storing generated videos (from Kling API)
  * Stores video blob locally to persist across sessions
+ * Also stores Supabase URL for real HTTP access
  */
 export interface StoredGeneratedVideo {
   id: string;
@@ -198,16 +200,26 @@ export interface StoredGeneratedVideo {
   createdAt: number;
   status: 'pending' | 'generating' | 'success' | 'failed';
   error?: string;
+  supabaseUrl?: string; // Real HTTP URL from Supabase Storage (avoids blob URL issues)
 }
 
 /**
  * Save generated video to IndexedDB.
- * Downloads video from URL and stores as blob.
+ * Also uploads to Supabase Storage for persistence and real HTTP URLs.
  */
 export const saveGeneratedVideoToDB = async (video: GeneratedVideo): Promise<void> => {
   try {
     if (video.status !== 'success' || !video.url) {
       return;
+    }
+
+    // Upload to Supabase Storage to get a real HTTP URL (avoids blob URL HEAD errors)
+    let supabaseUrl: string | undefined;
+    try {
+      supabaseUrl = await uploadUrlToStorage(video.url, `video-${video.id}.mp4`);
+      console.log('[IndexedDB] Uploaded to Supabase:', supabaseUrl.slice(0, 60) + '...');
+    } catch (e) {
+      console.warn('[IndexedDB] Failed to upload to Supabase, using blob URL:', e);
     }
 
     const videoResponse = await fetch(video.url);
@@ -237,7 +249,8 @@ export const saveGeneratedVideoToDB = async (video: GeneratedVideo): Promise<voi
         prompt: video.prompt,
         createdAt: video.createdAt,
         status: video.status,
-        error: video.error
+        error: video.error,
+        supabaseUrl // Store the real HTTP URL for use in video editor
       };
 
       store.put(stored);
@@ -270,13 +283,15 @@ export const getAllGeneratedVideosFromDB = async (): Promise<GeneratedVideo[]> =
         const videos: GeneratedVideo[] = results.map(stored => ({
           id: stored.id,
           sceneId: stored.sceneId,
-          url: URL.createObjectURL(stored.videoBlob),
+          // Use Supabase URL if available (real HTTP URL), otherwise blob URL
+          url: stored.supabaseUrl || URL.createObjectURL(stored.videoBlob),
           thumbnailUrl: stored.thumbnailBlob ? URL.createObjectURL(stored.thumbnailBlob) : undefined,
           duration: stored.duration,
           prompt: stored.prompt,
           createdAt: stored.createdAt,
           status: stored.status,
-          error: stored.error
+          error: stored.error,
+          supabaseUrl: stored.supabaseUrl
         }));
 
         resolve(videos);
