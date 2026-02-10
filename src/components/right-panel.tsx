@@ -1,9 +1,512 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Run, GeneratedImage, AppMode, GeneratedVideo } from '../types';
 import ImageCard from './image-card';
 import VideoCard from './video-card';
+import StockGallery from './stock-gallery/stock-gallery';
 import { saveAndRevealVideo } from '../services/video-file-service';
 import JSZip from 'jszip';
+import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
+import {
+  ImagePlus,
+  Video,
+  Clapperboard,
+  Undo2,
+  Redo2,
+  Scissors,
+  Copy,
+  ClipboardPaste,
+  Trash2,
+  SplitSquareHorizontal,
+  ZoomIn,
+  ZoomOut,
+  Magnet,
+  Download,
+  Play,
+  Pause,
+  Keyboard,
+  PanelLeftClose,
+  PanelRightClose,
+  PanelLeftOpen,
+  PanelRightOpen,
+  FolderVideo,
+  Film,
+  Image,
+  SkipBack,
+  SkipForward,
+  HelpCircle,
+  ChevronDown,
+  ChevronUp,
+  GripVertical,
+} from 'lucide-react';
+
+// ============================================================================
+// EDITING WORKSPACE COMPONENT
+// ============================================================================
+
+interface EditingWorkspaceProps {
+  allImages: Array<GeneratedImage & { runId: string }>;
+  generatedVideos: GeneratedVideo[];
+}
+
+type AssetTab = 'stock' | 'videos' | 'images';
+
+const EditingWorkspace: React.FC<EditingWorkspaceProps> = ({ allImages, generatedVideos }) => {
+  // Panel collapse states (persisted)
+  const [leftCollapsed, setLeftCollapsed] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return localStorage.getItem('editor_left_collapsed') === 'true';
+  });
+  const [rightCollapsed, setRightCollapsed] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return localStorage.getItem('editor_right_collapsed') === 'true';
+  });
+
+  // Asset tray tab
+  const [activeAssetTab, setActiveAssetTab] = useState<AssetTab>('stock');
+
+  // Zoom level (50-200%)
+  const [zoomLevel, setZoomLevel] = useState(100);
+
+  // Snap toggle
+  const [snapEnabled, setSnapEnabled] = useState(true);
+
+  // Keyboard shortcuts tooltip
+  const [showShortcuts, setShowShortcuts] = useState(false);
+
+  // Persist collapse states
+  useEffect(() => {
+    localStorage.setItem('editor_left_collapsed', String(leftCollapsed));
+  }, [leftCollapsed]);
+  useEffect(() => {
+    localStorage.setItem('editor_right_collapsed', String(rightCollapsed));
+  }, [rightCollapsed]);
+
+  // Toolbar button component with animations
+  const ToolButton = ({ 
+    icon: Icon, 
+    label, 
+    disabled = true, 
+    active = false,
+    onClick,
+    title,
+  }: { 
+    icon: React.ElementType; 
+    label?: string; 
+    disabled?: boolean; 
+    active?: boolean;
+    onClick?: () => void;
+    title?: string;
+  }) => (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      title={title || label}
+      className={`
+        px-2 py-1.5 rounded flex items-center gap-1.5 text-xs transition-all duration-150
+        ${disabled 
+          ? 'opacity-40 cursor-not-allowed bg-gray-800/30 text-gray-500' 
+          : active 
+            ? 'bg-dash-600/30 text-dash-400 border border-dash-500/30' 
+            : 'bg-gray-800/50 text-gray-400 hover:bg-gray-700 hover:text-gray-200 hover:scale-[1.05] active:scale-95 border border-gray-700/30'
+        }
+      `}
+    >
+      <Icon className="w-4 h-4" strokeWidth={1.5} />
+      {label && <span className="hidden xl:inline">{label}</span>}
+    </button>
+  );
+
+  // Keyboard shortcuts data
+  const shortcuts = [
+    { key: 'Space', action: 'Play/Pause' },
+    { key: 'Ctrl+Z', action: 'Undo' },
+    { key: 'Ctrl+Y', action: 'Redo' },
+    { key: 'Delete', action: 'Remove selected' },
+    { key: 'S', action: 'Split at playhead' },
+  ];
+
+  // Asset item component with drag prep
+  const AssetItem = ({ 
+    thumbnail, 
+    name, 
+    badge,
+    type,
+  }: { 
+    thumbnail: string | null; 
+    name: string;
+    badge?: string;
+    type: 'image' | 'video';
+  }) => (
+    <div
+      draggable
+      onDragStart={(e) => {
+        e.dataTransfer.setData('text/plain', name);
+        e.currentTarget.classList.add('scale-95', 'opacity-70', 'rotate-1');
+      }}
+      onDragEnd={(e) => {
+        e.currentTarget.classList.remove('scale-95', 'opacity-70', 'rotate-1');
+      }}
+      className="group relative aspect-video rounded bg-gray-800 overflow-hidden cursor-grab hover:translate-y-[-2px] hover:shadow-lg transition-all duration-150 border border-gray-700/30 hover:border-dash-500/50"
+      title={name}
+    >
+      {thumbnail ? (
+        <img src={thumbnail} className="w-full h-full object-cover" alt="" />
+      ) : (
+        <div className="w-full h-full flex items-center justify-center">
+          {type === 'video' ? (
+            <Film className="w-6 h-6 text-gray-600" strokeWidth={1.5} />
+          ) : (
+            <Image className="w-5 h-5 text-gray-600" strokeWidth={1.5} />
+          )}
+        </div>
+      )}
+      {badge && (
+        <span className="absolute bottom-1 right-1 px-1.5 py-0.5 bg-black/70 text-[9px] text-gray-300 rounded">
+          {badge}
+        </span>
+      )}
+      <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+    </div>
+  );
+
+  return (
+    <div className="h-full flex flex-col animate-in fade-in duration-300">
+      {/* Top Toolbar */}
+      <div className="h-12 border-b border-gray-800 bg-gray-900/50 flex items-center justify-between px-3 shrink-0">
+        {/* Left group: History */}
+        <div className="flex items-center gap-1">
+          <ToolButton icon={Undo2} label="Undo" title="Undo (Ctrl+Z)" />
+          <ToolButton icon={Redo2} label="Redo" title="Redo (Ctrl+Y)" />
+          <div className="w-px h-5 bg-gray-700 mx-2" />
+          <button
+            onClick={() => setLeftCollapsed(!leftCollapsed)}
+            className="p-1.5 rounded bg-gray-800/30 text-gray-400 hover:bg-gray-700 hover:text-gray-200 transition-all duration-150"
+            title={leftCollapsed ? 'Show Asset Panel' : 'Hide Asset Panel'}
+          >
+            {leftCollapsed ? (
+              <PanelLeftOpen className="w-4 h-4" strokeWidth={1.5} />
+            ) : (
+              <PanelLeftClose className="w-4 h-4" strokeWidth={1.5} />
+            )}
+          </button>
+        </div>
+
+        {/* Center group: Edit actions */}
+        <div className="flex items-center gap-1">
+          <ToolButton icon={Scissors} label="Cut" title="Cut" />
+          <ToolButton icon={Copy} label="Copy" title="Copy" />
+          <ToolButton icon={ClipboardPaste} label="Paste" title="Paste" />
+          <ToolButton icon={Trash2} label="Delete" title="Delete (Del)" />
+          <div className="w-px h-5 bg-gray-700 mx-1" />
+          <ToolButton icon={SplitSquareHorizontal} label="Split" title="Split at playhead (S)" />
+        </div>
+
+        {/* Right group: View controls */}
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 bg-gray-800/40 rounded px-2 py-1">
+            <button 
+              onClick={() => setZoomLevel(Math.max(50, zoomLevel - 10))}
+              className="p-0.5 text-gray-400 hover:text-gray-200 transition-colors"
+              title="Zoom Out"
+            >
+              <ZoomOut className="w-3.5 h-3.5" strokeWidth={1.5} />
+            </button>
+            <span className="text-[10px] text-gray-400 w-8 text-center font-mono">{zoomLevel}%</span>
+            <button 
+              onClick={() => setZoomLevel(Math.min(200, zoomLevel + 10))}
+              className="p-0.5 text-gray-400 hover:text-gray-200 transition-colors"
+              title="Zoom In"
+            >
+              <ZoomIn className="w-3.5 h-3.5" strokeWidth={1.5} />
+            </button>
+          </div>
+          <button
+            onClick={() => setSnapEnabled(!snapEnabled)}
+            className={`p-1.5 rounded transition-all duration-150 ${
+              snapEnabled 
+                ? 'bg-dash-600/30 text-dash-400 border border-dash-500/30' 
+                : 'bg-gray-800/30 text-gray-500 hover:bg-gray-700 hover:text-gray-300'
+            }`}
+            title="Snap to Grid"
+          >
+            <Magnet className="w-4 h-4" strokeWidth={1.5} />
+          </button>
+          <div className="w-px h-5 bg-gray-700" />
+          <button
+            onClick={() => setRightCollapsed(!rightCollapsed)}
+            className="p-1.5 rounded bg-gray-800/30 text-gray-400 hover:bg-gray-700 hover:text-gray-200 transition-all duration-150"
+            title={rightCollapsed ? 'Show Properties' : 'Hide Properties'}
+          >
+            {rightCollapsed ? (
+              <PanelRightOpen className="w-4 h-4" strokeWidth={1.5} />
+            ) : (
+              <PanelRightClose className="w-4 h-4" strokeWidth={1.5} />
+            )}
+          </button>
+          <div className="relative">
+            <button
+              onMouseEnter={() => setShowShortcuts(true)}
+              onMouseLeave={() => setShowShortcuts(false)}
+              className="p-1.5 rounded bg-gray-800/30 text-gray-400 hover:bg-gray-700 hover:text-gray-200 transition-all duration-150"
+              title="Keyboard Shortcuts"
+            >
+              <Keyboard className="w-4 h-4" strokeWidth={1.5} />
+            </button>
+            {showShortcuts && (
+              <div className="absolute right-0 top-full mt-2 w-48 bg-gray-900 border border-gray-700 rounded-lg shadow-xl z-50 p-3 animate-in fade-in slide-in-from-top-2 duration-200">
+                <div className="text-xs text-gray-300 font-semibold mb-2 flex items-center gap-1.5">
+                  <Keyboard className="w-3.5 h-3.5" strokeWidth={1.5} />
+                  Shortcuts
+                </div>
+                {shortcuts.map(({ key, action }) => (
+                  <div key={key} className="flex justify-between text-[11px] py-1">
+                    <kbd className="px-1.5 py-0.5 bg-gray-800 rounded text-gray-400 font-mono">{key}</kbd>
+                    <span className="text-gray-500">{action}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+          <div className="w-px h-5 bg-gray-700" />
+          <button
+            className="px-3 py-1.5 rounded bg-dash-600 text-white text-xs font-medium hover:bg-dash-500 hover:scale-[1.02] active:scale-95 transition-all duration-150 flex items-center gap-1.5"
+            disabled
+            title="Export (coming soon)"
+          >
+            <Download className="w-3.5 h-3.5" strokeWidth={1.5} />
+            Export
+          </button>
+        </div>
+      </div>
+
+      {/* Main content with resizable panels */}
+      <div className="flex-1 overflow-hidden">
+        <PanelGroup direction="vertical" className="h-full">
+          {/* Top section: Asset tray + Preview + Properties */}
+          <Panel defaultSize={65} minSize={40}>
+            <PanelGroup direction="horizontal" className="h-full">
+              {/* Left Panel: Asset Tray */}
+              {!leftCollapsed && (
+                <>
+                  <Panel 
+                    defaultSize={18} 
+                    minSize={15} 
+                    maxSize={30}
+                    collapsible
+                    className="transition-all duration-200"
+                  >
+                    <div className="h-full flex flex-col bg-gray-900/30 border-r border-gray-800">
+                      {/* Tabs */}
+                      <div className="flex border-b border-gray-800">
+                        {[
+                          { id: 'stock' as const, icon: FolderVideo, label: 'Stock' },
+                          { id: 'videos' as const, icon: Film, label: 'Videos' },
+                          { id: 'images' as const, icon: Image, label: 'Images' },
+                        ].map(({ id, icon: TabIcon, label }) => (
+                          <button
+                            key={id}
+                            onClick={() => setActiveAssetTab(id)}
+                            className={`
+                              flex-1 px-2 py-2 text-[10px] flex items-center justify-center gap-1 transition-all duration-200
+                              ${activeAssetTab === id 
+                                ? 'text-dash-400 border-b-2 border-dash-500 bg-gray-800/30' 
+                                : 'text-gray-500 hover:text-gray-300 hover:bg-gray-800/20'
+                              }
+                            `}
+                          >
+                            <TabIcon className="w-3 h-3" strokeWidth={1.5} />
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+
+                      {/* Tab content */}
+                      <div className="flex-1 overflow-hidden">
+                        {activeAssetTab === 'stock' ? (
+                          <StockGallery
+                            mode="inline"
+                            onSelectVideo={(video) => {
+                              console.log('Stock video added to timeline:', video);
+                            }}
+                          />
+                        ) : activeAssetTab === 'videos' ? (
+                          <div className="h-full overflow-y-auto p-2">
+                            {generatedVideos.filter(v => v.status === 'success').length > 0 ? (
+                              <div className="grid grid-cols-2 gap-2">
+                                {generatedVideos.filter(v => v.status === 'success').map((video) => (
+                                  <AssetItem
+                                    key={video.id}
+                                    thumbnail={video.thumbnailUrl || null}
+                                    name={video.promptUsed || 'Generated video'}
+                                    badge={video.duration ? `${video.duration}s` : undefined}
+                                    type="video"
+                                  />
+                                ))}
+                              </div>
+                            ) : (
+                              <div className="h-full flex flex-col items-center justify-center text-center p-4">
+                                <Film className="w-8 h-8 text-gray-700 mb-2" strokeWidth={1.5} />
+                                <p className="text-xs text-gray-600">No videos yet</p>
+                                <p className="text-[10px] text-gray-700 mt-1">Generate some first</p>
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="h-full overflow-y-auto p-2">
+                            {allImages.length > 0 ? (
+                              <div className="grid grid-cols-2 gap-2">
+                                {allImages.map((img) => (
+                                  <AssetItem
+                                    key={img.id}
+                                    thumbnail={
+                                      img.thumbnailBase64 
+                                        ? `data:${img.thumbnailMimeType || 'image/jpeg'};base64,${img.thumbnailBase64}`
+                                        : img.base64 
+                                          ? `data:${img.mimeType};base64,${img.base64}`
+                                          : null
+                                    }
+                                    name={img.promptUsed}
+                                    type="image"
+                                  />
+                                ))}
+                              </div>
+                            ) : (
+                              <div className="h-full flex flex-col items-center justify-center text-center p-4">
+                                <Image className="w-8 h-8 text-gray-700 mb-2" strokeWidth={1.5} />
+                                <p className="text-xs text-gray-600">No images yet</p>
+                                <p className="text-[10px] text-gray-700 mt-1">Generate some first</p>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </Panel>
+                  <PanelResizeHandle className="w-1 bg-gray-800 hover:bg-dash-500/50 transition-colors cursor-col-resize opacity-0 hover:opacity-100" />
+                </>
+              )}
+
+              {/* Center: Preview Canvas */}
+              <Panel minSize={30}>
+                <div 
+                  id="editor-preview-mount" 
+                  className="h-full flex flex-col bg-gray-950"
+                >
+                  {/* Preview placeholder */}
+                  <div className="flex-1 flex items-center justify-center animate-in fade-in duration-300">
+                    <div className="text-center">
+                      <div className="w-24 h-24 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-purple-500/20 to-dash-500/20 flex items-center justify-center border border-gray-700/30">
+                        <Video className="w-10 h-10 text-gray-500" strokeWidth={1.5} />
+                      </div>
+                      <h3 className="text-lg font-semibold text-gray-400 mb-2">Preview Canvas</h3>
+                      <p className="text-sm text-gray-600 max-w-xs">
+                        Video preview will appear here. OpenCut integration coming soon.
+                      </p>
+                      <div className="mt-4 flex items-center justify-center gap-2 text-[11px] text-gray-600">
+                        <kbd className="px-2 py-1 bg-gray-800 rounded">Space</kbd>
+                        <span>to play/pause</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </Panel>
+
+              {/* Right Panel: Properties */}
+              {!rightCollapsed && (
+                <>
+                  <PanelResizeHandle className="w-1 bg-gray-800 hover:bg-dash-500/50 transition-colors cursor-col-resize opacity-0 hover:opacity-100" />
+                  <Panel 
+                    defaultSize={18} 
+                    minSize={15} 
+                    maxSize={25}
+                    collapsible
+                    className="transition-all duration-200"
+                  >
+                    <div 
+                      id="editor-properties-mount"
+                      className="h-full flex flex-col bg-gray-900/30 border-l border-gray-800"
+                    >
+                      <div className="px-3 py-2.5 border-b border-gray-800 bg-gray-900/50">
+                        <span className="text-xs text-gray-400 uppercase tracking-wider font-semibold">Properties</span>
+                      </div>
+                      <div className="flex-1 flex items-center justify-center p-4">
+                        <div className="text-center">
+                          <HelpCircle className="w-8 h-8 text-gray-700 mx-auto mb-2" strokeWidth={1.5} />
+                          <p className="text-xs text-gray-600">No selection</p>
+                          <p className="text-[10px] text-gray-700 mt-1">Select a clip to edit properties</p>
+                        </div>
+                      </div>
+                    </div>
+                  </Panel>
+                </>
+              )}
+            </PanelGroup>
+          </Panel>
+
+          {/* Resize handle */}
+          <PanelResizeHandle className="h-1 bg-gray-800 hover:bg-dash-500/50 transition-colors cursor-row-resize opacity-0 hover:opacity-100 flex items-center justify-center">
+            <GripVertical className="w-4 h-4 text-gray-600 rotate-90" strokeWidth={1.5} />
+          </PanelResizeHandle>
+
+          {/* Bottom: Timeline */}
+          <Panel defaultSize={35} minSize={20} maxSize={50}>
+            <div 
+              id="editor-timeline-mount" 
+              className="h-full flex flex-col bg-gray-900/50"
+            >
+              {/* Timeline header */}
+              <div className="flex items-center justify-between px-4 py-2 border-b border-gray-800/50 shrink-0">
+                <span className="text-xs text-gray-500 uppercase tracking-wider">Timeline</span>
+                <div className="flex items-center gap-2">
+                  <button 
+                    className="p-1 rounded bg-gray-800/50 text-gray-500 hover:text-gray-300 hover:bg-gray-700 transition-all duration-150" 
+                    disabled
+                    title="Previous"
+                  >
+                    <SkipBack className="w-3.5 h-3.5" strokeWidth={1.5} />
+                  </button>
+                  <button 
+                    className="px-3 py-1 rounded bg-dash-600/30 text-dash-400 hover:bg-dash-600/50 transition-all duration-150 flex items-center gap-1" 
+                    disabled
+                    title="Play (Space)"
+                  >
+                    <Play className="w-3.5 h-3.5" strokeWidth={1.5} />
+                    <span className="text-[10px]">Play</span>
+                  </button>
+                  <button 
+                    className="p-1 rounded bg-gray-800/50 text-gray-500 hover:text-gray-300 hover:bg-gray-700 transition-all duration-150" 
+                    disabled
+                    title="Next"
+                  >
+                    <SkipForward className="w-3.5 h-3.5" strokeWidth={1.5} />
+                  </button>
+                  <span className="text-[10px] text-gray-600 font-mono ml-2">00:00:00 / 00:00:00</span>
+                </div>
+              </div>
+
+              {/* Timeline content placeholder */}
+              <div className="flex-1 flex items-center justify-center">
+                <div className="text-center">
+                  <div className="flex items-center gap-2 text-xs text-gray-600 mb-2">
+                    <GripVertical className="w-4 h-4" strokeWidth={1.5} />
+                    <span>Drag assets here to build your timeline</span>
+                  </div>
+                  <p className="text-[10px] text-gray-700">
+                    Tracks: Video, Audio, Captions
+                  </p>
+                </div>
+              </div>
+            </div>
+          </Panel>
+        </PanelGroup>
+      </div>
+    </div>
+  );
+};
+
+// ============================================================================
+// RIGHT PANEL COMPONENT
+// ============================================================================
 
 interface RightPanelProps {
   runs: Run[];
@@ -62,6 +565,13 @@ const RightPanel: React.FC<RightPanelProps> = ({
     return saved === 'true';
   });
 
+  // Stock gallery collapse state (persisted)
+  const [stockCollapsed, setStockCollapsed] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    const saved = localStorage.getItem('raw_studio_stock_collapsed');
+    return saved === 'true';
+  });
+
   // Gallery column count (persisted)
   const [columnCount, setColumnCount] = useState(() => {
     if (typeof window === 'undefined') return 5;
@@ -82,6 +592,11 @@ const RightPanel: React.FC<RightPanelProps> = ({
   useEffect(() => {
     localStorage.setItem('raw_studio_images_collapsed', String(imagesCollapsed));
   }, [imagesCollapsed]);
+
+  // Persist stock collapse preference
+  useEffect(() => {
+    localStorage.setItem('raw_studio_stock_collapsed', String(stockCollapsed));
+  }, [stockCollapsed]);
 
   // Persist column preference
   useEffect(() => {
@@ -450,7 +965,14 @@ const RightPanel: React.FC<RightPanelProps> = ({
 
         <div className="flex items-center gap-3">
           <h2 className="font-semibold text-gray-200">
-            {appMode === 'video' ? (
+            {appMode === 'editing' ? (
+              <>
+                <span className="text-purple-400">✂️ Editing</span> Workspace
+                <span className="text-gray-500 font-normal ml-2">
+                  ({allImages.length} images, {generatedVideos.length} videos)
+                </span>
+              </>
+            ) : appMode === 'video' ? (
               <>
                 <span className="text-dash-400">Video</span> Gallery
                 <span className="text-gray-500 font-normal ml-2">
@@ -470,18 +992,28 @@ const RightPanel: React.FC<RightPanelProps> = ({
           {/* Mode Toggle */}
           <div className="flex bg-gray-800 rounded-lg p-1 ml-2">
             <button
-              className={`px-3 py-1 rounded text-sm transition-all ${appMode === 'image' ? 'bg-dash-700 text-white' : 'text-gray-400 hover:text-gray-200'}`}
+              className={`px-3 py-1.5 rounded text-sm transition-all duration-150 flex items-center gap-1.5 ${appMode === 'image' ? 'bg-dash-700 text-white' : 'text-gray-400 hover:text-gray-200 hover:scale-[1.02]'}`}
               onClick={() => setAppMode('image')}
-              title="Image Mode"
+              title="Image Generation"
             >
-              🖼️
+              <ImagePlus className="w-3.5 h-3.5" strokeWidth={1.5} />
+              <span className="text-xs">Image</span>
             </button>
             <button
-              className={`px-3 py-1 rounded text-sm transition-all ${appMode === 'video' ? 'bg-dash-700 text-white' : 'text-gray-400 hover:text-gray-200'}`}
+              className={`px-3 py-1.5 rounded text-sm transition-all duration-150 flex items-center gap-1.5 ${appMode === 'video' ? 'bg-dash-700 text-white' : 'text-gray-400 hover:text-gray-200 hover:scale-[1.02]'}`}
               onClick={() => setAppMode('video')}
-              title="Video Mode"
+              title="Video Generation"
             >
-              🎬
+              <Video className="w-3.5 h-3.5" strokeWidth={1.5} />
+              <span className="text-xs">Video</span>
+            </button>
+            <button
+              className={`px-3 py-1.5 rounded text-sm transition-all duration-150 flex items-center gap-1.5 ${appMode === 'editing' ? 'bg-dash-700 text-white' : 'text-gray-400 hover:text-gray-200 hover:scale-[1.02]'}`}
+              onClick={() => setAppMode('editing')}
+              title="Editing Workspace"
+            >
+              <Clapperboard className="w-3.5 h-3.5" strokeWidth={1.5} />
+              <span className="text-xs">Edit</span>
             </button>
           </div>
         </div>
@@ -597,7 +1129,7 @@ const RightPanel: React.FC<RightPanelProps> = ({
               )}
             </div>
 
-            {/* VIDEOS SECTION - Bottom 50% (results) */}
+            {/* VIDEOS SECTION - Generated results */}
             <div className="flex-1 overflow-y-auto">
               <div className="sticky top-0 bg-gray-900/95 backdrop-blur px-6 py-3 border-b border-gray-700/50 z-20">
                 <div className="flex items-center justify-between">
@@ -668,6 +1200,12 @@ const RightPanel: React.FC<RightPanelProps> = ({
               )}
             </div>
           </div>
+        ) : appMode === 'editing' ? (
+          // EDITING MODE: Full resizable workspace with OpenCut mounting points
+          <EditingWorkspace
+            allImages={allImages}
+            generatedVideos={generatedVideos}
+          />
         ) : (
           // IMAGE MODE: Show only images (unchanged)
           runs.length === 0 ? (

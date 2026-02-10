@@ -18,16 +18,28 @@ interface ClipBarProps {
   isDragOver?: boolean;
   // Waveform display
   showWaveform?: boolean;
+  // FPS for time formatting
+  fps?: number;
 }
 
 // CapCut-style time formatter
-function formatClipTime(seconds: number): string {
+function formatClipTime(seconds: number, fps: number = 30): string {
   const mins = Math.floor(seconds / 60);
   const secs = Math.floor(seconds % 60);
-  const frames = Math.floor((seconds % 1) * 30);
-  return mins > 0 
+  const frames = Math.floor((seconds % 1) * fps);
+  return mins > 0
     ? `${mins}:${secs.toString().padStart(2, '0')}:${frames.toString().padStart(2, '0')}`
     : `${secs}.${frames.toString().padStart(2, '0')}s`;
+}
+
+// Deterministic waveform height based on clip id and bar index
+function seededHeight(clipId: string, index: number): number {
+  let hash = 0;
+  const seed = `${clipId}-${index}`;
+  for (let i = 0; i < seed.length; i++) {
+    hash = ((hash << 5) - hash + seed.charCodeAt(i)) | 0;
+  }
+  return 15 + Math.abs(hash % 60);
 }
 
 const ClipBar: React.FC<ClipBarProps> = ({
@@ -45,13 +57,16 @@ const ClipBar: React.FC<ClipBarProps> = ({
   onDragEnd,
   isDragOver = false,
   showWaveform = true,
+  fps = 30,
 }) => {
   const barRef = useRef<HTMLDivElement>(null);
   const [trimming, setTrimming] = useState<'start' | 'end' | null>(null);
   const trimStartX = useRef(0);
   const trimOriginalValue = useRef(0);
 
-  const widthPx = Math.max(clip.durationSec * pixelsPerSecond, 60);
+  const minWidth = 20;
+  const widthPx = Math.max(clip.durationSec * pixelsPerSecond, minWidth);
+  const isTinyClip = widthPx < 50;
   const leftPx = clip.startSec * pixelsPerSecond;
 
   const handleTrimMouseDown = useCallback((
@@ -122,6 +137,7 @@ const ClipBar: React.FC<ClipBarProps> = ({
       className="absolute top-1 bottom-1 flex items-stretch"
       style={{ left: `${leftPx}px`, width: `${widthPx}px` }}
       onDragOver={(e) => { e.preventDefault(); onDragOver(clip.id); }}
+      title={isTinyClip ? `${clip.type === 'generated' ? 'Generated' : clip.type === 'broll' ? 'B-roll' : 'Stock'} - ${formatClipTime(clip.durationSec, fps)}` : undefined}
     >
       {/* Drop indicator */}
       {isDragOver && (
@@ -185,17 +201,17 @@ const ClipBar: React.FC<ClipBarProps> = ({
           <div className="flex-1 rounded bg-black/20 flex items-center justify-center overflow-hidden relative">
             {showWaveform && (
               <div className="absolute inset-0 flex items-center justify-center gap-px px-2">
-                {/* Simulated waveform visualization */}
+                {/* Deterministic waveform visualization */}
                 {Array.from({ length: Math.min(50, Math.floor(widthPx / 3)) }).map((_, i) => (
                   <div
                     key={i}
                     className="w-0.5 bg-gradient-to-t from-white/40 to-white/10 rounded-full"
-                    style={{ height: `${15 + Math.random() * 60}%` }}
+                    style={{ height: `${seededHeight(clip.id, i)}%` }}
                   />
                 ))}
               </div>
             )}
-            
+
             {/* Clip type icon */}
             <div className={`relative z-10 ${colors.icon}`}>
               {clip.type === 'broll' && (
@@ -216,18 +232,20 @@ const ClipBar: React.FC<ClipBarProps> = ({
             </div>
           </div>
 
-          {/* Clip info bar */}
-          <div className="flex items-center justify-between mt-1">
-            {/* Clip name */}
-            <span className="text-[10px] text-gray-300 truncate font-medium">
-              {clip.type === 'generated' ? 'Generated' : clip.type === 'broll' ? 'B-roll' : 'Stock'}
-            </span>
-            
-            {/* Duration */}
-            <span className="text-[9px] text-gray-500 font-mono">
-              {formatClipTime(clip.durationSec)}
-            </span>
-          </div>
+          {/* Clip info bar - hidden for tiny clips */}
+          {!isTinyClip && (
+            <div className="flex items-center justify-between mt-1">
+              {/* Clip name */}
+              <span className="text-[10px] text-gray-300 truncate font-medium">
+                {clip.type === 'generated' ? 'Generated' : clip.type === 'broll' ? 'B-roll' : 'Stock'}
+              </span>
+
+              {/* Duration */}
+              <span className="text-[9px] text-gray-500 font-mono">
+                {formatClipTime(clip.durationSec, fps)}
+              </span>
+            </div>
+          )}
         </div>
 
         {/* Transition indicator (if exists) */}

@@ -38,39 +38,39 @@ const TimelineTrack: React.FC<TimelineTrackProps> = ({
   showWaveforms = true,
 }) => {
   return (
-    <div className="flex items-center h-10 border-b border-gray-800/30 relative group/track">
-      {/* Clips container */}
-      <div className="flex-1 flex items-center min-w-0 relative">
-        {layer.clips.length === 0 ? (
-          <div className="flex items-center h-full pl-2">
-            <span className="text-xs text-gray-700 select-none">Empty</span>
-          </div>
-        ) : (
-          layer.clips.map((clip, i) => (
-            <ClipBar
-              key={clip.id}
-              clip={clip}
-              pixelsPerSecond={pixelsPerSecond}
-              isSelected={selectedClipId === clip.id}
-              onSelect={onSelectClip}
-              onTrimStart={onTrimStart}
-              onTrimEnd={onTrimEnd}
-              onTransitionClick={onTransitionClick}
-              onRemove={onRemoveClip}
-              isLast={i === layer.clips.length - 1}
-              onDragStart={onDragStart}
-              onDragOver={onDragOver}
-              onDragEnd={onDragEnd}
-              showWaveform={showWaveforms}
-            />
-          ))
-        )}
+    <div className="relative h-12 border-b border-gray-800/30">
+      {layer.clips.map((clip, i) => (
+        <ClipBar
+          key={clip.id}
+          clip={clip}
+          pixelsPerSecond={pixelsPerSecond}
+          isSelected={selectedClipId === clip.id}
+          onSelect={onSelectClip}
+          onTrimStart={onTrimStart}
+          onTrimEnd={onTrimEnd}
+          onTransitionClick={onTransitionClick}
+          onRemove={onRemoveClip}
+          isLast={i === layer.clips.length - 1}
+          onDragStart={onDragStart}
+          onDragOver={onDragOver}
+          onDragEnd={onDragEnd}
+          showWaveform={showWaveforms}
+        />
+      ))}
 
-        {/* Drop indicator when dragging */}
-        {dragOverClipId && (
-          <div className="absolute top-0 bottom-0 w-0.5 bg-dash-500 animate-pulse z-10" />
-        )}
-      </div>
+      {/* Empty track placeholder */}
+      {layer.clips.length === 0 && (
+        <div className="absolute inset-0 flex items-center justify-center">
+          <div className="text-gray-600 text-xs border-2 border-dashed border-gray-700/30 rounded-lg px-4 py-2">
+            Drop clips here
+          </div>
+        </div>
+      )}
+
+      {/* Drop indicator when dragging */}
+      {dragOverClipId && (
+        <div className="absolute top-0 bottom-0 w-0.5 bg-dash-500 animate-pulse z-10" />
+      )}
     </div>
   );
 };

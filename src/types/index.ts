@@ -1,7 +1,7 @@
 export type AspectRatio = '1:1' | '16:9' | '9:16' | '4:3' | '3:4' | '4:5';
 export type ImageSize = '1K' | '2K' | '4K'; // Gemini 3 Pro supports up to 4K
 
-export type AppMode = 'image' | 'video';
+export type AppMode = 'image' | 'video' | 'editing';
 export type FixedBlockPosition = 'top' | 'bottom';
 
 export type VideoModel = 'kling-2.6' | 'kling-2.6-pro' | 'kling-3' | 'kling-3-omni' | 'veo-3.1';

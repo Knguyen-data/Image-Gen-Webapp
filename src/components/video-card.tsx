@@ -3,6 +3,7 @@ import { GeneratedVideo } from '../types';
 import { applyVfxEffect } from '../services/freepik-vfx-service';
 import { uploadBlobToStorage } from '../services/supabase-storage-service';
 import { VFX_FILTERS, VFX_FPS_OPTIONS, type VfxFilterType, type VfxApplyOptions, type VfxFps } from '../types/vfx';
+import { getSafeThumbnailUrl } from '../utils/browser-compatibility';
 
 interface VideoCardProps {
   video: GeneratedVideo;
@@ -38,6 +39,15 @@ const VideoCard: React.FC<VideoCardProps> = ({
   const [vfxResultUrl, setVfxResultUrl] = useState<string | null>(null);
   const [vfxError, setVfxError] = useState<string | null>(null);
   const vfxPanelRef = useRef<HTMLDivElement>(null);
+
+  // Safe thumbnail URL (browser compatibility checked)
+  const [safeThumbnailUrl, setSafeThumbnailUrl] = useState<string | null>(null);
+  const [thumbnailError, setThumbnailError] = useState(false);
+
+  // Check thumbnail URL safety on mount
+  useEffect(() => {
+    getSafeThumbnailUrl(video.thumbnailUrl || null).then(setSafeThumbnailUrl);
+  }, [video.thumbnailUrl]);
 
   // Close VFX panel when clicking outside
   useEffect(() => {
@@ -132,8 +142,8 @@ const VideoCard: React.FC<VideoCardProps> = ({
         </div>
       )}
 
-      {/* Fixed 9:16 aspect ratio container */}
-      <div className="relative w-full aspect-[9/16] bg-gray-950 rounded overflow-hidden cursor-pointer">
+      {/* Fixed 16:9 aspect ratio container */}
+      <div className="relative w-full aspect-[16/9] bg-gray-950 rounded overflow-hidden cursor-pointer">
         {video.status === 'generating' || video.status === 'pending' ? (
           <div className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-br from-gray-800 via-gray-900 to-gray-800">
             <div className="absolute inset-0 backdrop-blur-xl bg-white/5" />
@@ -157,8 +167,15 @@ const VideoCard: React.FC<VideoCardProps> = ({
             <video
               src={vfxResultUrl || video.url}
               className="w-full h-full object-contain"
-              poster={video.thumbnailUrl}
+              poster={!thumbnailError && safeThumbnailUrl ? safeThumbnailUrl : undefined}
               preload="metadata"
+              onError={() => {
+                // Only log thumbnail errors in dev, don't break the video
+                if (process.env.NODE_ENV === 'development') {
+                  console.warn('[VideoCard] Thumbnail failed to load:', safeThumbnailUrl);
+                }
+                setThumbnailError(true);
+              }}
             />
             {/* Play button overlay */}
             <div

@@ -91,6 +91,48 @@ export type Database = {
           },
         ]
       }
+      stock_videos: {
+        Row: {
+          id: string
+          name: string
+          filename: string
+          category: string
+          url: string
+          size: number
+          mime_type: string
+          tags: string[]
+          description: string
+          mood: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          name: string
+          filename: string
+          category: string
+          url: string
+          size?: number
+          mime_type?: string
+          tags?: string[]
+          description?: string
+          mood?: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          name?: string
+          filename?: string
+          category?: string
+          url?: string
+          size?: number
+          mime_type?: string
+          tags?: string[]
+          description?: string
+          mood?: string
+          created_at?: string
+        }
+        Relationships: []
+      }
       usage_logs: {
         Row: {
           action: string
@@ -272,6 +314,37 @@ export type Database = {
       handle_new_user: {
         Args: Record<PropertyKey, never>
         Returns: string
+      }
+      search_stock_videos: {
+        Args: {
+          search_query?: string
+          category_filter?: string
+          sort_by?: string
+          sort_dir?: string
+          page_limit?: number
+          page_offset?: number
+        }
+        Returns: {
+          id: string
+          name: string
+          filename: string
+          category: string
+          url: string
+          size: number
+          mime_type: string
+          tags: string[]
+          description: string
+          mood: string
+          created_at: string
+          rank: number
+        }[]
+      }
+      get_stock_video_categories: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          category: string
+          video_count: number
+        }[]
       }
     }
     Enums: {
