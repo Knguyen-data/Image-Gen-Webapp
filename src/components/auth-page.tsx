@@ -112,7 +112,7 @@ const AuthPage: React.FC<AuthPageProps> = ({ onAuthenticated }) => {
             <div
               className="absolute w-20 h-20 rounded-full"
               style={{
-                background: 'radial-gradient(circle, rgba(34, 197, 94, 0.3) 0%, transparent 70%)',
+                background: 'radial-gradient(circle, rgba(163, 255, 0, 0.3) 0%, transparent 70%)',
                 animation: 'pulse 3s ease-in-out infinite, glowColorShift 4s ease-in-out infinite',
               }}
             />
@@ -120,7 +120,7 @@ const AuthPage: React.FC<AuthPageProps> = ({ onAuthenticated }) => {
               className="relative w-16 h-16 rounded-2xl overflow-hidden"
               style={{
                 animation: 'borderColorShift 4s ease-in-out infinite',
-                border: '1.5px solid rgba(134, 239, 172, 0.3)',
+                border: '1.5px solid rgba(163, 255, 0, 0.3)',
               }}
             >
               <img
@@ -153,7 +153,7 @@ const AuthPage: React.FC<AuthPageProps> = ({ onAuthenticated }) => {
             style={{
               background: 'rgba(10, 15, 20, 0.7)',
               backdropFilter: 'blur(40px) saturate(1.2)',
-              boxShadow: '0 0 80px rgba(34, 197, 94, 0.05), 0 25px 50px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.03)',
+              boxShadow: '0 0 80px rgba(163, 255, 0, 0.05), 0 25px 50px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.03)',
             }}
           >
             {/* Tab bar */}
@@ -164,7 +164,7 @@ const AuthPage: React.FC<AuthPageProps> = ({ onAuthenticated }) => {
                   onClick={() => { setActiveTab(tab); clearError(); setSuccessMessage(''); }}
                   className="flex-1 relative py-3.5 text-sm font-medium transition-colors"
                   style={{
-                    color: activeTab === tab ? '#86efac' : '#6b7280',
+                    color: activeTab === tab ? '#b8ff4d' : '#6b7280',
                   }}
                 >
                   {tab === 'signIn' ? 'Sign In' : 'Create Account'}
@@ -174,7 +174,7 @@ const AuthPage: React.FC<AuthPageProps> = ({ onAuthenticated }) => {
                       style={{
                         width: '40%',
                         transform: 'translateX(-50%)',
-                        boxShadow: '0 0 10px rgba(134, 239, 172, 0.5)',
+                        boxShadow: '0 0 10px rgba(163, 255, 0, 0.5)',
                       }}
                     />
                   )}
@@ -228,8 +228,8 @@ const AuthPage: React.FC<AuthPageProps> = ({ onAuthenticated }) => {
                       border: `1px solid ${error ? 'rgba(239,68,68,0.5)' : 'rgba(255,255,255,0.06)'}`,
                     }}
                     onFocus={(e) => {
-                      e.target.style.borderColor = error ? 'rgba(239,68,68,0.5)' : 'rgba(134, 239, 172, 0.3)';
-                      e.target.style.boxShadow = error ? '0 0 0 3px rgba(239,68,68,0.1)' : '0 0 0 3px rgba(134, 239, 172, 0.05)';
+                      e.target.style.borderColor = error ? 'rgba(239,68,68,0.5)' : 'rgba(163, 255, 0, 0.3)';
+                      e.target.style.boxShadow = error ? '0 0 0 3px rgba(239,68,68,0.1)' : '0 0 0 3px rgba(163, 255, 0, 0.05)';
                     }}
                     onBlur={(e) => {
                       e.target.style.borderColor = error ? 'rgba(239,68,68,0.5)' : 'rgba(255,255,255,0.06)';
@@ -251,8 +251,8 @@ const AuthPage: React.FC<AuthPageProps> = ({ onAuthenticated }) => {
                       border: `1px solid ${error ? 'rgba(239,68,68,0.5)' : 'rgba(255,255,255,0.06)'}`,
                     }}
                     onFocus={(e) => {
-                      e.target.style.borderColor = error ? 'rgba(239,68,68,0.5)' : 'rgba(134, 239, 172, 0.3)';
-                      e.target.style.boxShadow = error ? '0 0 0 3px rgba(239,68,68,0.1)' : '0 0 0 3px rgba(134, 239, 172, 0.05)';
+                      e.target.style.borderColor = error ? 'rgba(239,68,68,0.5)' : 'rgba(163, 255, 0, 0.3)';
+                      e.target.style.boxShadow = error ? '0 0 0 3px rgba(239,68,68,0.1)' : '0 0 0 3px rgba(163, 255, 0, 0.05)';
                     }}
                     onBlur={(e) => {
                       e.target.style.borderColor = error ? 'rgba(239,68,68,0.5)' : 'rgba(255,255,255,0.06)';
@@ -309,9 +309,9 @@ const AuthPage: React.FC<AuthPageProps> = ({ onAuthenticated }) => {
                   disabled={loading || !email || !password}
                   className="w-full py-3 rounded-xl text-sm font-semibold transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                   style={{
-                    background: loading ? 'rgba(34, 197, 94, 0.3)' : 'linear-gradient(135deg, #22c55e 0%, #16a34a 100%)',
-                    color: '#052e16',
-                    boxShadow: loading ? 'none' : '0 0 20px rgba(34, 197, 94, 0.2), inset 0 1px 0 rgba(255,255,255,0.15)',
+                    background: loading ? 'rgba(163, 255, 0, 0.3)' : 'linear-gradient(135deg, #a3ff00 0%, #6bb300 100%)',
+                    color: '#1a2b00',
+                    boxShadow: loading ? 'none' : '0 0 20px rgba(163, 255, 0, 0.2), inset 0 1px 0 rgba(255,255,255,0.15)',
                   }}
                 >
                   {loading && (
@@ -349,7 +349,7 @@ const AuthPage: React.FC<AuthPageProps> = ({ onAuthenticated }) => {
             style={{
               width: '60%',
               height: '40px',
-              background: 'radial-gradient(ellipse, rgba(34, 197, 94, 0.08) 0%, transparent 70%)',
+              background: 'radial-gradient(ellipse, rgba(163, 255, 0, 0.08) 0%, transparent 70%)',
               filter: 'blur(20px)',
             }}
           />
@@ -380,11 +380,11 @@ const AuthPage: React.FC<AuthPageProps> = ({ onAuthenticated }) => {
           to { opacity: 1; transform: translateY(0); }
         }
         @keyframes glowColorShift {
-          0%, 100% { background: radial-gradient(circle, rgba(34, 197, 94, 0.3) 0%, transparent 70%); }
+          0%, 100% { background: radial-gradient(circle, rgba(163, 255, 0, 0.3) 0%, transparent 70%); }
           50% { background: radial-gradient(circle, rgba(250, 204, 21, 0.3) 0%, transparent 70%); }
         }
         @keyframes borderColorShift {
-          0%, 100% { border-color: rgba(134, 239, 172, 0.3); }
+          0%, 100% { border-color: rgba(163, 255, 0, 0.3); }
           50% { border-color: rgba(250, 204, 21, 0.4); }
         }
         @keyframes logoHueShift {
@@ -396,7 +396,7 @@ const AuthPage: React.FC<AuthPageProps> = ({ onAuthenticated }) => {
           50% { color: #fef9c3; }
         }
         @keyframes accentColorShift {
-          0%, 100% { color: #4ade80; }
+          0%, 100% { color: #a3ff00; }
           50% { color: #facc15; }
         }
       `}</style>

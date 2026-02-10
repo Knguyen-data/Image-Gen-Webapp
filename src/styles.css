@@ -4,16 +4,17 @@
   --font-sans: 'Inter', sans-serif;
   --font-mono: 'JetBrains Mono', monospace;
 
-  --color-dash-50: #f0fdf4;
-  --color-dash-100: #dcfce7;
-  --color-dash-200: #bbf7d0;
-  --color-dash-300: #86efac;
-  --color-dash-400: #4ade80;
-  --color-dash-500: #22c55e;
-  --color-dash-600: #16a34a;
-  --color-dash-700: #15803d;
-  --color-dash-800: #166534;
-  --color-dash-900: #14532d;
+  /* Lime green palette — matched to Higfails logo (#A3FF00) */
+  --color-dash-50: #f5ffe6;
+  --color-dash-100: #e8ffcc;
+  --color-dash-200: #cdff8a;
+  --color-dash-300: #b8ff4d;
+  --color-dash-400: #a3ff00;
+  --color-dash-500: #8ae600;
+  --color-dash-600: #6bb300;
+  --color-dash-700: #4d8000;
+  --color-dash-800: #335500;
+  --color-dash-900: #1a2b00;
 }
 
 /* Custom scrollbar for a cleaner studio look */

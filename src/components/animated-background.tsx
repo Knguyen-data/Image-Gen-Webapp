@@ -47,10 +47,10 @@ const AnimatedBackground: React.FC<AnimatedBackgroundProps> = ({
 
       // Floating orbs
       const orbs = [
-        { x: 0.3 + Math.sin(time * 0.7) * 0.15, y: 0.4 + Math.cos(time * 0.5) * 0.2, r: 0.4, color: 'rgba(34, 197, 94, 0.06)' },
-        { x: 0.7 + Math.cos(time * 0.6) * 0.1, y: 0.6 + Math.sin(time * 0.4) * 0.15, r: 0.35, color: 'rgba(74, 222, 128, 0.04)' },
-        { x: 0.5 + Math.sin(time * 0.8) * 0.2, y: 0.3 + Math.cos(time * 0.3) * 0.1, r: 0.3, color: 'rgba(134, 239, 172, 0.05)' },
-        { x: 0.2 + Math.cos(time * 0.5) * 0.1, y: 0.8 + Math.sin(time * 0.6) * 0.1, r: 0.25, color: 'rgba(16, 185, 129, 0.04)' },
+        { x: 0.3 + Math.sin(time * 0.7) * 0.15, y: 0.4 + Math.cos(time * 0.5) * 0.2, r: 0.4, color: 'rgba(163, 255, 0, 0.06)' },
+        { x: 0.7 + Math.cos(time * 0.6) * 0.1, y: 0.6 + Math.sin(time * 0.4) * 0.15, r: 0.35, color: 'rgba(184, 255, 77, 0.04)' },
+        { x: 0.5 + Math.sin(time * 0.8) * 0.2, y: 0.3 + Math.cos(time * 0.3) * 0.1, r: 0.3, color: 'rgba(163, 255, 0, 0.05)' },
+        { x: 0.2 + Math.cos(time * 0.5) * 0.1, y: 0.8 + Math.sin(time * 0.6) * 0.1, r: 0.25, color: 'rgba(107, 179, 0, 0.04)' },
       ];
 
       for (const orb of orbs) {
@@ -66,7 +66,7 @@ const AnimatedBackground: React.FC<AnimatedBackgroundProps> = ({
 
       // Subtle grid overlay
       if (showGrid) {
-        ctx.strokeStyle = 'rgba(134, 239, 172, 0.015)';
+        ctx.strokeStyle = 'rgba(163, 255, 0, 0.015)';
         ctx.lineWidth = 1;
         const gridSize = 80;
         for (let x = 0; x < w; x += gridSize) {
@@ -89,7 +89,7 @@ const AnimatedBackground: React.FC<AnimatedBackgroundProps> = ({
         const py = (Math.cos(time * 0.3 + i * 2.1) * 0.5 + 0.5) * h;
         const size = 1 + Math.sin(time + i) * 0.5;
         const alpha = 0.12 + Math.sin(time * 2 + i * 0.8) * 0.08;
-        ctx.fillStyle = `rgba(134, 239, 172, ${alpha})`;
+        ctx.fillStyle = `rgba(163, 255, 0, ${alpha})`;
         ctx.beginPath();
         ctx.arc(px, py, size, 0, Math.PI * 2);
         ctx.fill();
