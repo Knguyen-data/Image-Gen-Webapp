@@ -10,6 +10,7 @@
 
 import * as ort from 'onnxruntime-web';
 import { logger } from './logger';
+import { getRIFECapability } from './browser-capability-detector';
 
 // Configure ONNX Runtime WASM paths — load from CDN to avoid bundling ~25MB of WASM
 ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.24.1/dist/';
@@ -441,6 +442,25 @@ export async function interpolateVideo(
   onProgress?: (status: string) => void,
 ): Promise<string> {
   const startTime = performance.now();
+
+  // 0. Check browser capabilities
+  const capability = getRIFECapability();
+  logger.info('RIFE', 'Browser capability check', {
+    supported: capability.supported,
+    provider: capability.provider,
+    estimatedSpeed: capability.estimatedSpeed,
+    maxVideoSeconds: capability.maxVideoSeconds,
+    warnings: capability.warnings,
+  });
+
+  if (!capability.supported) {
+    throw new Error(`RIFE interpolation is not supported: ${capability.reason}`);
+  }
+
+  if (capability.warnings.length > 0) {
+    capability.warnings.forEach(w => logger.warn('RIFE', w));
+  }
+
   logger.info('RIFE', 'Starting video interpolation', { multiplier });
 
   // 1. Load model (cached after first download)
@@ -455,8 +475,10 @@ export async function interpolateVideo(
     throw new Error('Video too short — need at least 2 frames');
   }
 
-  if (frames.length > 300) {
-    throw new Error('Video too long for client-side interpolation (max ~12s at 24fps)');
+  // Use capability-based max duration instead of hardcoded 300 frames
+  const maxFrames = Math.floor(capability.maxVideoSeconds * 24); // assume 24fps
+  if (frames.length > maxFrames) {
+    throw new Error(`Video too long for client-side interpolation (max ~${capability.maxVideoSeconds}s at 24fps, got ${frames.length} frames)`);
   }
 
   // 3. Run RIFE interpolation

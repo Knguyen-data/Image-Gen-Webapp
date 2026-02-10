@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { GeneratedVideo } from '../types';
+import { getRIFECapability, type RIFECapability } from '../services/browser-capability-detector';
 
 interface VideoCardProps {
   video: GeneratedVideo;
@@ -27,6 +28,11 @@ const VideoCard: React.FC<VideoCardProps> = ({
   selected = false,
   onSelect
 }) => {
+  // Check RIFE browser capability once on mount
+  const rifeCapability = useMemo(() => getRIFECapability(), []);
+  const rifeSupported = rifeCapability.supported;
+  const rifeSlow = rifeCapability.estimatedSpeed === 'slow';
+
   const formatDuration = (seconds: number): string => {
     const mins = Math.floor(seconds / 60);
     const secs = Math.floor(seconds % 60);
@@ -143,12 +149,12 @@ const VideoCard: React.FC<VideoCardProps> = ({
                 </button>
               )}
               {/* Smooth Video (RIFE) button */}
-              {onInterpolate && !video.isInterpolated && (
+              {onInterpolate && !video.isInterpolated && rifeSupported && (
                 <button
                   onClick={(e) => { e.stopPropagation(); onInterpolate(video.id); }}
                   disabled={isInterpolating}
                   className="p-2 bg-cyan-600/80 hover:bg-cyan-500/80 rounded-full text-white backdrop-blur-sm disabled:opacity-50 disabled:cursor-not-allowed"
-                  title={isInterpolating ? 'Interpolating...' : 'Smooth Video (RIFE AI)'}
+                  title={isInterpolating ? 'Interpolating...' : rifeSlow ? 'Smooth Video (RIFE AI) — May be slow on this browser' : 'Smooth Video (RIFE AI)'}
                 >
                   {isInterpolating ? (
                     <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
