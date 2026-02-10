@@ -226,10 +226,15 @@ class VideoEditorService {
 
     const layer = this.composition.layers[layerIndex];
     
-    // Convert blob URLs to data URLs to avoid HEAD request errors
-    // Diffusion Studio Core tries to HEAD blob URLs which browsers don't support
-    const safeUrl = await blobUrlToDataUrl(videoUrl);
-    const source = await Source.from(safeUrl);
+    // For blob URLs, fetch as ArrayBuffer to avoid HEAD request errors
+    let source: Source;
+    if (videoUrl.startsWith('blob:')) {
+      const response = await fetch(videoUrl);
+      const arrayBuffer = await response.arrayBuffer();
+      source = await Source.from(arrayBuffer);
+    } else {
+      source = await Source.from(videoUrl);
+    }
     
     const clip = new VideoClip(source as any, range ? {
       range: [range[0], range[1]],
@@ -258,13 +263,17 @@ class VideoEditorService {
     }
 
     const layer = this.composition.layers[layerIndex];
-    const source = await Source.from(file);
+    
+    // Read file as ArrayBuffer to avoid creating blob URLs that trigger HEAD errors
+    const arrayBuffer = await file.arrayBuffer();
+    const source = await Source.from(arrayBuffer);
     const clip = new VideoClip(source as any);
 
     await layer.add(clip);
 
-    const blobUrl = URL.createObjectURL(file);
-    this.clipSourceMap.set(clip.id, blobUrl);
+    // Store the original URL or create a data URL for persistence
+    const dataUrl = await blobUrlToDataUrl(URL.createObjectURL(file));
+    this.clipSourceMap.set(clip.id, dataUrl);
     this.clipTypeMap.set(clip.id, clipType);
 
     return clip.id;
