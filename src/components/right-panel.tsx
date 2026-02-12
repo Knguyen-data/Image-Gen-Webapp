@@ -1,11 +1,11 @@
-import React, { useState, useEffect, useCallback } from 'react';
+﻿import React, { useState, useEffect, useCallback } from 'react';
 import { Run, GeneratedImage, AppMode, GeneratedVideo } from '../types';
 import ImageCard from './image-card';
 import VideoCard from './video-card';
 import StockGallery from './stock-gallery/stock-gallery';
 import { saveAndRevealVideo } from '../services/video-file-service';
 import JSZip from 'jszip';
-import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
+import { Panel, Group, Separator } from 'react-resizable-panels';
 import {
   ImagePlus,
   Video,
@@ -281,10 +281,10 @@ const EditingWorkspace: React.FC<EditingWorkspaceProps> = ({ allImages, generate
 
       {/* Main content with resizable panels */}
       <div className="flex-1 overflow-hidden">
-        <PanelGroup direction="vertical" className="h-full">
+        <Group direction="vertical" className="h-full">
           {/* Top section: Asset tray + Preview + Properties */}
           <Panel defaultSize={65} minSize={40}>
-            <PanelGroup direction="horizontal" className="h-full">
+            <Group direction="horizontal" className="h-full">
               {/* Left Panel: Asset Tray */}
               {!leftCollapsed && (
                 <>
@@ -382,7 +382,7 @@ const EditingWorkspace: React.FC<EditingWorkspaceProps> = ({ allImages, generate
                       </div>
                     </div>
                   </Panel>
-                  <PanelResizeHandle className="w-1 bg-gray-800 hover:bg-dash-500/50 transition-colors cursor-col-resize opacity-0 hover:opacity-100" />
+                  <Separator className="w-1 bg-gray-800 hover:bg-dash-500/50 transition-colors cursor-col-resize opacity-0 hover:opacity-100" />
                 </>
               )}
 
@@ -414,7 +414,7 @@ const EditingWorkspace: React.FC<EditingWorkspaceProps> = ({ allImages, generate
               {/* Right Panel: Properties */}
               {!rightCollapsed && (
                 <>
-                  <PanelResizeHandle className="w-1 bg-gray-800 hover:bg-dash-500/50 transition-colors cursor-col-resize opacity-0 hover:opacity-100" />
+                  <Separator className="w-1 bg-gray-800 hover:bg-dash-500/50 transition-colors cursor-col-resize opacity-0 hover:opacity-100" />
                   <Panel 
                     defaultSize={18} 
                     minSize={15} 
@@ -440,13 +440,13 @@ const EditingWorkspace: React.FC<EditingWorkspaceProps> = ({ allImages, generate
                   </Panel>
                 </>
               )}
-            </PanelGroup>
+            </Group>
           </Panel>
 
           {/* Resize handle */}
-          <PanelResizeHandle className="h-1 bg-gray-800 hover:bg-dash-500/50 transition-colors cursor-row-resize opacity-0 hover:opacity-100 flex items-center justify-center">
+          <Separator className="h-1 bg-gray-800 hover:bg-dash-500/50 transition-colors cursor-row-resize opacity-0 hover:opacity-100 flex items-center justify-center">
             <GripVertical className="w-4 h-4 text-gray-600 rotate-90" strokeWidth={1.5} />
-          </PanelResizeHandle>
+          </Separator>
 
           {/* Bottom: Timeline */}
           <Panel defaultSize={35} minSize={20} maxSize={50}>
@@ -498,7 +498,7 @@ const EditingWorkspace: React.FC<EditingWorkspaceProps> = ({ allImages, generate
               </div>
             </div>
           </Panel>
-        </PanelGroup>
+        </Group>
       </div>
     </div>
   );
