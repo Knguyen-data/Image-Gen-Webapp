@@ -125,6 +125,38 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
   // Helper to ensure settings exist before access
   const safeSettings: AppSettings = settings || DEFAULT_SETTINGS;
 
+  // Check if current mode supports reference images
+  const supportsReferenceImages = (): boolean => {
+    // Extreme mode (ComfyUI) supports reference images via IP-Adapter
+    if (safeSettings.spicyMode?.enabled && safeSettings.spicyMode.subMode === 'extreme') {
+      return true;
+    }
+    // Spicy Edit mode supports reference images
+    if (safeSettings.spicyMode?.enabled && safeSettings.spicyMode.subMode === 'edit') {
+      return true;
+    }
+    // Gemini mode supports reference images
+    if (!safeSettings.spicyMode?.enabled) {
+      return true;
+    }
+    // Spicy Generate mode (txt2img) does NOT support reference images
+    return false;
+  };
+
+  // Get mode name for error messages
+  const getModeName = (): string => {
+    if (safeSettings.spicyMode?.enabled && safeSettings.spicyMode.subMode === 'extreme') {
+      return 'Extreme Mode (ComfyUI)';
+    }
+    if (safeSettings.spicyMode?.enabled && safeSettings.spicyMode.subMode === 'generate') {
+      return 'Spicy Generate Mode (Seedream Txt2Img)';
+    }
+    if (safeSettings.spicyMode?.enabled && safeSettings.spicyMode.subMode === 'edit') {
+      return 'Spicy Edit Mode (Seedream Edit)';
+    }
+    return 'Gemini Mode';
+  };
+
   // --- VIDEO MODEL SELECTOR HANDLER ---
   const handleModelSelect = (model: VideoModel) => {
     setSelectedVideoModel(model);
@@ -164,8 +196,47 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
     return { images, nonImageCount };
   };
 
+  // Handle dropped image card (from gallery)
+  const handleDroppedImageCard = (promptIndex: number, jsonData: string): boolean => {
+    try {
+      const refImage: ReferenceImage = JSON.parse(jsonData);
+      if (!refImage.base64 || !refImage.mimeType) {
+        console.warn('Invalid image card data');
+        return false;
+      }
+
+      // Check if mode supports reference images
+      if (!supportsReferenceImages()) {
+        alert(`${getModeName()} does not support reference images. Switch to Gemini or Spicy Edit mode to use reference images.`);
+        return false;
+      }
+
+      const newPrompts = [...prompts];
+      const currentRefCount = newPrompts[promptIndex].referenceImages.length;
+
+      if (currentRefCount >= MAX_REFERENCE_IMAGES) {
+        alert(`Maximum of ${MAX_REFERENCE_IMAGES} reference images per prompt reached.`);
+        return false;
+      }
+
+      newPrompts[promptIndex].referenceImages = [...newPrompts[promptIndex].referenceImages, refImage];
+      setPrompts(newPrompts);
+      return true;
+    } catch (e) {
+      console.warn('Failed to parse dropped image card:', e);
+      return false;
+    }
+  };
+
   // --- FIXED BLOCK IMAGES ---
   const addFixedBlockImages = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    // Check if mode supports reference images
+    if (!supportsReferenceImages()) {
+      alert(`${getModeName()} does not support reference images. Switch to Gemini or Spicy Edit mode to use reference images.`);
+      if (fixedBlockFileRef.current) fixedBlockFileRef.current.value = '';
+      return;
+    }
+
     const { images, nonImageCount } = await processFiles(e.target.files);
     if (nonImageCount > 0) {
       alert(`Only image files are supported. ${nonImageCount} non-image file(s) were ignored.`);
@@ -185,6 +256,12 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
 
   const addLocalImages = async (promptIndex: number, files: FileList | null) => {
     if (!files) return;
+
+    // Check if mode supports reference images
+    if (!supportsReferenceImages()) {
+      alert(`${getModeName()} does not support reference images. Switch to Gemini or Spicy Edit mode to use reference images.`);
+      return;
+    }
 
     // Check if any dropped file is a video (image mode only)
     if (!isVideoMode) {
@@ -1428,8 +1505,22 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
                         onDrop={async (e) => {
                           e.preventDefault();
                           e.currentTarget.classList.remove('ring-2', 'ring-dash-300', 'bg-gray-900');
+
+                          // First, try to handle dropped image card (from gallery)
+                          const jsonData = e.dataTransfer.getData('application/json');
+                          if (jsonData) {
+                            const handled = handleDroppedImageCard(index, jsonData);
+                            if (handled) return; // Successfully handled image card
+                          }
+
+                          // Otherwise, handle file drop
                           const files = e.dataTransfer.files;
                           if (files && files.length > 0) {
+                            // Check if mode supports reference images before processing
+                            if (!supportsReferenceImages()) {
+                              alert(`${getModeName()} does not support reference images. Switch to Gemini or Spicy Edit mode to use reference images.`);
+                              return;
+                            }
                             await addLocalImages(index, files);
                           }
                         }}
@@ -1475,8 +1566,22 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
                               </button>
                             </div>
                           ))}
-                          <label className="w-10 h-10 flex items-center justify-center border border-dashed border-gray-700 rounded hover:border-dash-300 hover:bg-gray-900 cursor-pointer text-gray-500 hover:text-dash-300 transition-colors" title="Click or Drag onto card">
-                            <input type="file" multiple accept="image/*,video/mp4,video/quicktime,video/webm" className="hidden" onChange={(e) => addLocalImages(index, e.target.files)} />
+                          <label
+                            className={`w-10 h-10 flex items-center justify-center border border-dashed rounded transition-colors ${
+                              supportsReferenceImages()
+                                ? 'border-gray-700 hover:border-dash-300 hover:bg-gray-900 cursor-pointer text-gray-500 hover:text-dash-300'
+                                : 'border-gray-800 cursor-not-allowed text-gray-700'
+                            }`}
+                            title={supportsReferenceImages() ? "Click or Drag onto card" : `${getModeName()} does not support reference images`}
+                          >
+                            <input
+                              type="file"
+                              multiple
+                              accept="image/*,video/mp4,video/quicktime,video/webm"
+                              className="hidden"
+                              onChange={(e) => addLocalImages(index, e.target.files)}
+                              disabled={!supportsReferenceImages()}
+                            />
                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
                           </label>
                           {isOverLimit && <span className="text-[10px] text-red-400 font-bold ml-auto">Max {MAX_REFERENCE_IMAGES} imgs exceeded!</span>}
@@ -1526,6 +1631,13 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
               e.preventDefault();
               e.currentTarget.classList.remove('ring-2', 'ring-dash-300', 'bg-gray-800', 'border-dash-300');
               e.currentTarget.classList.add('border-gray-800');
+
+              // Check if mode supports reference images
+              if (!supportsReferenceImages()) {
+                alert(`${getModeName()} does not support reference images. Switch to Gemini or Spicy Edit mode to use reference images.`);
+                return;
+              }
+
               const files = e.dataTransfer.files;
               if (files && files.length > 0) {
                 const { images, nonImageCount } = await processFiles(files);
