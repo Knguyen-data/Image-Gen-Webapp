@@ -28,7 +28,7 @@ import {
   PanelRightClose,
   PanelLeftOpen,
   PanelRightOpen,
-  FolderVideo,
+  Folder,
   Film,
   Image,
   SkipBack,
@@ -299,7 +299,7 @@ const EditingWorkspace: React.FC<EditingWorkspaceProps> = ({ allImages, generate
                       {/* Tabs */}
                       <div className="flex border-b border-gray-800">
                         {[
-                          { id: 'stock' as const, icon: FolderVideo, label: 'Stock' },
+                          { id: 'stock' as const, icon: Folder, label: 'Stock' },
                           { id: 'videos' as const, icon: Film, label: 'Videos' },
                           { id: 'images' as const, icon: Image, label: 'Images' },
                         ].map(({ id, icon: TabIcon, label }) => (
