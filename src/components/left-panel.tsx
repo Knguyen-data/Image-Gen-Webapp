@@ -14,6 +14,7 @@ import MentionDropdown from './mention-dropdown';
 import LoraSelector from './lora/lora-selector';
 import LoraManagementModal from './lora/lora-management-modal';
 import type { LoraModel } from '../types';
+import { supabase } from '../services/supabase';
 
 interface LeftPanelProps {
   prompts: PromptItem[];

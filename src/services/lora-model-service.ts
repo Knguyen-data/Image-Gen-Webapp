@@ -509,6 +509,10 @@ export async function deleteLoraById(loraId: string, userId: string): Promise<vo
   await loraService.deleteLora(loraId);
 }
 
+export async function deleteLora(loraId: string): Promise<void> {
+  await loraService.deleteLora(loraId);
+}
+
 export async function getTrainingImageUrl(storagePath: string): Promise<string> {
   // Simple implementation for image URL
   const { data } = supabase.storage
