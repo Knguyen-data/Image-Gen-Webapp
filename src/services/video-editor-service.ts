@@ -56,7 +56,7 @@ export interface EditorClipInfo {
   durationSec: number;
   sourceUrl: string;
   transition?: TransitionConfig;
-  type: 'generated' | 'broll';
+  type: 'generated' | 'broll' | 'stock';
 }
 
 export interface EditorLayerInfo {
@@ -174,7 +174,7 @@ class VideoEditorService {
   private composition: Composition | null = null;
   private encoder: Encoder | null = null;
   private clipSourceMap: Map<string, string> = new Map(); // clipId -> sourceUrl
-  private clipTypeMap: Map<string, 'generated' | 'broll'> = new Map();
+  private clipTypeMap: Map<string, 'generated' | 'broll' | 'stock'> = new Map();
   private _isImporting = false;
 
   /**
@@ -233,7 +233,7 @@ class VideoEditorService {
     layerIndex: number,
     videoUrl: string,
     range?: [number, number],
-    clipType: 'generated' | 'broll' = 'generated'
+    clipType: 'generated' | 'broll' | 'stock' = 'generated'
   ): Promise<string> {
     if (this._isImporting) {
       throw new Error('Import already in progress');
@@ -328,7 +328,7 @@ class VideoEditorService {
   async addClipFromFile(
     layerIndex: number,
     file: File,
-    clipType: 'generated' | 'broll' = 'broll'
+    clipType: 'generated' | 'broll' | 'stock' = 'broll'
   ): Promise<string> {
     if (!this.composition) throw new Error('No project created');
 
@@ -473,6 +473,58 @@ class VideoEditorService {
 
     // Add second half as new clip after original
     await this.addClip(layerIndex, sourceUrl, [splitTimeSec, clipEndSec], clipType);
+  }
+
+  /**
+   * Set playback speed for a clip
+   */
+  setSpeed(layerIndex: number, clipIndex: number, speed: number): void {
+    if (!this.composition) throw new Error('No project created');
+    const layer = this.composition.layers[layerIndex];
+    if (!layer) return;
+    const clip = layer.clips[clipIndex] as any;
+    if (clip) {
+      clip.speed = speed;
+    }
+  }
+
+  /**
+   * Set volume for a clip
+   */
+  setVolume(layerIndex: number, clipIndex: number, volume: number): void {
+    if (!this.composition) throw new Error('No project created');
+    const layer = this.composition.layers[layerIndex];
+    if (!layer) return;
+    const clip = layer.clips[clipIndex] as any;
+    if (clip) {
+      clip.volume = volume;
+    }
+  }
+
+  /**
+   * Set opacity for a clip
+   */
+  setOpacity(layerIndex: number, clipIndex: number, opacity: number): void {
+    if (!this.composition) throw new Error('No project created');
+    const layer = this.composition.layers[layerIndex];
+    if (!layer) return;
+    const clip = layer.clips[clipIndex] as any;
+    if (clip) {
+      clip.opacity = opacity;
+    }
+  }
+
+  /**
+   * Set rotation for a clip (degrees)
+   */
+  setRotation(layerIndex: number, clipIndex: number, rotation: number): void {
+    if (!this.composition) throw new Error('No project created');
+    const layer = this.composition.layers[layerIndex];
+    if (!layer) return;
+    const clip = layer.clips[clipIndex] as any;
+    if (clip) {
+      clip.rotation = rotation;
+    }
   }
 
   /**

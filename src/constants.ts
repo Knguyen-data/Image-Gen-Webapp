@@ -1,4 +1,4 @@
-import { AppSettings, UnifiedVideoSettings, VideoModel } from './types';
+import { AppSettings, ComfyUISettings, UnifiedVideoSettings, VideoModel } from './types';
 
 // Reverting to the model ID user requested (Nano Banana Pro equivalent)
 export const GEMINI_MODEL_ID = 'gemini-3-pro-image-preview';
@@ -46,6 +46,34 @@ export const SAFETY_CATEGORIES = [
   'HARM_CATEGORY_HATE_SPEECH',
   'HARM_CATEGORY_SEXUALLY_EXPLICIT'
 ] as const;
+
+// ComfyUI (Extreme Spicy Mode)
+export const COMFYUI_SAMPLER_LABELS: Record<string, string> = {
+  'euler': 'Euler',
+  'euler_ancestral': 'Euler Ancestral',
+  'dpmpp_2m': 'DPM++ 2M',
+  'dpmpp_sde': 'DPM++ SDE',
+};
+
+export const COMFYUI_SCHEDULER_LABELS: Record<string, string> = {
+  'normal': 'Normal',
+  'karras': 'Karras',
+  'sgm_uniform': 'SGM Uniform',
+};
+
+export const DEFAULT_COMFYUI_SETTINGS: ComfyUISettings = {
+  steps: 20,
+  cfg: 8,
+  denoise: 1.0,
+  sampler: 'euler',
+  scheduler: 'normal',
+  seed: -1,
+  ipAdapterWeight: 1.0,
+  ipAdapterFaceidWeight: 1.0,
+};
+
+// RunPod endpoint (hardcoded since it's a personal deployment)
+export const COMFYUI_RUNPOD_ENDPOINT_ID = 'llqkdhn3kk0ze6';
 
 // Video Validation Constraints (Kling 2.6 Motion Control)
 export const VIDEO_CONSTRAINTS = {

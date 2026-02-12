@@ -281,18 +281,19 @@ const EditingWorkspace: React.FC<EditingWorkspaceProps> = ({ allImages, generate
 
       {/* Main content with resizable panels */}
       <div className="flex-1 overflow-hidden">
-        <Group direction="vertical" className="h-full">
+        <Group orientation="vertical" className="h-full">
           {/* Top section: Asset tray + Preview + Properties */}
           <Panel defaultSize={65} minSize={40}>
-            <Group direction="horizontal" className="h-full">
+            <Group orientation="horizontal" className="h-full">
               {/* Left Panel: Asset Tray */}
               {!leftCollapsed && (
                 <>
-                  <Panel 
-                    defaultSize={18} 
-                    minSize={15} 
+                  <Panel
+                    defaultSize={18}
+                    minSize={15}
                     maxSize={30}
                     collapsible
+                    collapsedSize={5}
                     className="transition-all duration-200"
                   >
                     <div className="h-full flex flex-col bg-gray-900/30 border-r border-gray-800">
@@ -415,11 +416,12 @@ const EditingWorkspace: React.FC<EditingWorkspaceProps> = ({ allImages, generate
               {!rightCollapsed && (
                 <>
                   <Separator className="w-1 bg-gray-800 hover:bg-dash-500/50 transition-colors cursor-col-resize opacity-0 hover:opacity-100" />
-                  <Panel 
-                    defaultSize={18} 
-                    minSize={15} 
+                  <Panel
+                    defaultSize={18}
+                    minSize={15}
                     maxSize={25}
                     collapsible
+                    collapsedSize={5}
                     className="transition-all duration-200"
                   >
                     <div 
@@ -620,7 +622,7 @@ const RightPanel: React.FC<RightPanelProps> = ({
       return;
     }
 
-    const img = new Image();
+    const img = new window.Image();
     img.onload = () => {
       const aspectRatio = `${img.naturalWidth}/${img.naturalHeight}`;
       setLightboxAspectRatio(aspectRatio);
@@ -1009,7 +1011,7 @@ const RightPanel: React.FC<RightPanelProps> = ({
             </button>
             <button
               className={`px-3 py-1.5 rounded text-sm transition-all duration-150 flex items-center gap-1.5 ${appMode === 'editing' ? 'bg-dash-700 text-white' : 'text-gray-400 hover:text-gray-200 hover:scale-[1.02]'}`}
-              onClick={() => setAppMode('editing')}
+              onClick={() => { setAppMode('editing'); onOpenVideoEditor?.(); }}
               title="Editing Workspace"
             >
               <Clapperboard className="w-3.5 h-3.5" strokeWidth={1.5} />
@@ -1200,12 +1202,6 @@ const RightPanel: React.FC<RightPanelProps> = ({
               )}
             </div>
           </div>
-        ) : appMode === 'editing' ? (
-          // EDITING MODE: Full resizable workspace with OpenCut mounting points
-          <EditingWorkspace
-            allImages={allImages}
-            generatedVideos={generatedVideos}
-          />
         ) : (
           // IMAGE MODE: Show only images (unchanged)
           runs.length === 0 ? (

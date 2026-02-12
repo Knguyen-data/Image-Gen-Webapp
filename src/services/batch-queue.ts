@@ -45,6 +45,7 @@ const delay = (ms: number): Promise<void> =>
 export const BATCH_DELAYS = {
   gemini: 70000,    // 70s = 60s rate limit + 10s buffer
   seedream: 10000,  // 10s (handled by unified rate limiter)
+  comfyui: 5000,    // 5s - no rate limit, just slight buffer
 } as const;
 
 /**
@@ -52,8 +53,15 @@ export const BATCH_DELAYS = {
  */
 export const calculateOptimalBatchSize = (
   queueLength: number,
-  provider: 'gemini' | 'seedream' = 'gemini'
+  provider: 'gemini' | 'seedream' | 'comfyui' = 'gemini'
 ): number => {
+  if (provider === 'comfyui') {
+    // ComfyUI is GPU-bound; RunPod handles 1 at a time per worker
+    // But multiple workers can spin up, so batch of 3 is safe
+    if (queueLength <= 3) return queueLength;
+    return 3;
+  }
+
   if (provider === 'seedream') {
     // Seedream uses unified rate limiter, keep conservative
     if (queueLength <= 5) return queueLength;

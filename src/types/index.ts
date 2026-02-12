@@ -24,13 +24,15 @@ export interface PromptItem {
 // Seedream 4.5 Edit Types (Spicy Mode)
 export type SeedreamAspectRatio = '1:1' | '4:3' | '3:4' | '16:9' | '9:16' | '2:3' | '3:2' | '21:9';
 export type SeedreamQuality = 'basic' | 'high';
-export type SpicySubMode = 'edit' | 'generate';
-export type GenerationModel = 'gemini' | 'seedream-edit' | 'seedream-txt2img';
+export type SpicySubMode = 'edit' | 'generate' | 'extreme';
+export type GenerationModel = 'gemini' | 'seedream-edit' | 'seedream-txt2img' | 'comfyui-lustify';
 
 export interface SpicyModeSettings {
   enabled: boolean;
   quality: SeedreamQuality;
   subMode: SpicySubMode;
+  // Extreme Mode (ComfyUI) settings
+  comfyui?: ComfyUISettings;
 }
 
 export interface AppSettings {
@@ -100,7 +102,33 @@ export interface SeedreamTask {
   costTime?: number;
 }
 
-// Video Generation Types
+// ComfyUI RunPod Types (Extreme Spicy Mode)
+export type ComfyUISampler = 'euler' | 'euler_ancestral' | 'dpmpp_2m' | 'dpmpp_sde';
+export type ComfyUIScheduler = 'normal' | 'karras' | 'sgm_uniform';
+
+export interface ComfyUISettings {
+  steps: number;        // 15-50, default 20
+  cfg: number;          // 1-15, default 8
+  denoise: number;      // 0-1, default 1.0
+  sampler: ComfyUISampler;    // default 'euler'
+  scheduler: ComfyUIScheduler; // default 'normal'
+  seed: number;         // -1 = random
+  ipAdapterWeight: number;     // 0-2, default 1.0 (face strength)
+  ipAdapterFaceidWeight: number; // 0-2, default 1.0
+}
+
+export interface ComfyUIRunPodJob {
+  id: string;
+  status: 'IN_QUEUE' | 'IN_PROGRESS' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
+  output?: {
+    success: boolean;
+    outputs?: Record<string, unknown>;
+    error?: string;
+  };
+  error?: string;
+}
+
+export type ComfyUIDimensions = { width: number; height: number };
 export type VideoRefMode = 'global' | 'per-scene';
 
 export interface ReferenceVideo {

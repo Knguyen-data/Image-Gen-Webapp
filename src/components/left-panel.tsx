@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { AppSettings, PromptItem, ReferenceImage, ImageSize, SeedreamQuality, AppMode, VideoScene, VideoSettings, VideoModel, KlingProDuration, KlingProAspectRatio, VeoGenerationType } from '../types';
-import { ASPECT_RATIO_LABELS, IMAGE_SIZE_LABELS, SEEDREAM_QUALITY_LABELS, DEFAULT_SETTINGS, MAX_REFERENCE_IMAGES, MAX_PROMPTS } from '../constants';
+import { AppSettings, PromptItem, ReferenceImage, ImageSize, SeedreamQuality, AppMode, VideoScene, VideoSettings, VideoModel, KlingProDuration, KlingProAspectRatio, VeoGenerationType, ComfyUISampler, ComfyUIScheduler } from '../types';
+import { ASPECT_RATIO_LABELS, IMAGE_SIZE_LABELS, SEEDREAM_QUALITY_LABELS, DEFAULT_SETTINGS, MAX_REFERENCE_IMAGES, MAX_PROMPTS, DEFAULT_COMFYUI_SETTINGS, COMFYUI_SAMPLER_LABELS, COMFYUI_SCHEDULER_LABELS } from '../constants';
 import BulkInputModal from './bulk-input-modal';
 import VideoSceneQueue from './video-scene-queue';
 import VideoTrimmerModal from './video-trimmer-modal';
@@ -22,6 +22,7 @@ interface LeftPanelProps {
   onOpenApiKey: () => void;
   hasApiKey: boolean;
   hasKieApiKey: boolean;
+  hasRunPodApiKey: boolean;
   // Spicy Mode props
   credits: number | null;
   creditsLoading: boolean;
@@ -65,6 +66,7 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
   onOpenApiKey,
   hasApiKey,
   hasKieApiKey,
+  hasRunPodApiKey,
   credits,
   creditsLoading,
   creditsError,
@@ -380,6 +382,9 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
       return 'Kling 2.6 Motion Control';
     }
     if (safeSettings.spicyMode?.enabled) {
+      if (safeSettings.spicyMode.subMode === 'extreme') {
+        return 'ComfyUI Lustify (RunPod)';
+      }
       return `Seedream 4.5 ${safeSettings.spicyMode.subMode === 'edit' ? 'Edit' : 'Txt2Img'}`;
     }
     return 'Gemini Nano Banana Pro';
@@ -526,6 +531,25 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
                     title="Generate mode - text only, no image needed"
                   >
                     Generate
+                  </button>
+                  <button
+                    onClick={() => setSettings({
+                      ...safeSettings,
+                      spicyMode: {
+                        ...safeSettings.spicyMode,
+                        subMode: 'extreme',
+                        comfyui: safeSettings.spicyMode.comfyui || DEFAULT_COMFYUI_SETTINGS
+                      }
+                    })}
+
+                    className={`px-3 py-1 text-xs rounded-md transition-all ${
+                      safeSettings.spicyMode.subMode === 'extreme'
+                        ? 'bg-gradient-to-r from-red-600 to-red-800 text-white font-medium ring-1 ring-red-400/50'
+                        : 'text-gray-400 hover:text-white'
+                    }`}
+                    title="Extreme mode - ComfyUI Lustify (RunPod)"
+                  >
+                    Extreme
                   </button>
                 </div>
               )}
@@ -1669,6 +1693,122 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
                 </select>
               )}
             </div>
+
+            {/* ComfyUI Settings (Extreme Mode) */}
+            {safeSettings.spicyMode?.enabled && safeSettings.spicyMode.subMode === 'extreme' && (() => {
+              const comfySettings = safeSettings.spicyMode.comfyui || DEFAULT_COMFYUI_SETTINGS;
+              const updateComfyUI = (patch: Partial<typeof comfySettings>) =>
+                setSettings({
+                  ...safeSettings,
+                  spicyMode: {
+                    ...safeSettings.spicyMode,
+                    comfyui: { ...comfySettings, ...patch }
+                  }
+                });
+              const hasRefImage = prompts.some(p => p.referenceImages.length > 0) ||
+                (safeSettings.fixedBlockEnabled && (safeSettings.fixedBlockImages?.length || 0) > 0);
+
+              return (
+                <div className="col-span-2 space-y-3 mt-2 p-3 bg-red-950/30 border border-red-500/20 rounded-lg">
+                  <span className="text-xs font-semibold text-red-300 uppercase tracking-wider">
+                    ComfyUI Settings
+                  </span>
+
+                  {/* Steps */}
+                  <div className="space-y-1">
+                    <div className="flex justify-between">
+                      <label className="text-xs text-red-300/80">Steps</label>
+                      <span className="text-xs text-red-300 font-mono">{comfySettings.steps}</span>
+                    </div>
+                    <input type="range" min="15" max="50" step="1"
+                      className="w-full h-2 bg-red-900/50 rounded-lg appearance-none cursor-pointer accent-red-500"
+                      value={comfySettings.steps}
+                      onChange={(e) => updateComfyUI({ steps: parseInt(e.target.value) })}
+                    />
+                  </div>
+
+                  {/* CFG Scale */}
+                  <div className="space-y-1">
+                    <div className="flex justify-between">
+                      <label className="text-xs text-red-300/80">CFG Scale</label>
+                      <span className="text-xs text-red-300 font-mono">{comfySettings.cfg}</span>
+                    </div>
+                    <input type="range" min="1" max="15" step="0.5"
+                      className="w-full h-2 bg-red-900/50 rounded-lg appearance-none cursor-pointer accent-red-500"
+                      value={comfySettings.cfg}
+                      onChange={(e) => updateComfyUI({ cfg: parseFloat(e.target.value) })}
+                    />
+                  </div>
+
+                  {/* Denoise */}
+                  <div className="space-y-1">
+                    <div className="flex justify-between">
+                      <label className="text-xs text-red-300/80">Denoise</label>
+                      <span className="text-xs text-red-300 font-mono">{comfySettings.denoise.toFixed(2)}</span>
+                    </div>
+                    <input type="range" min="0.1" max="1.0" step="0.05"
+                      className="w-full h-2 bg-red-900/50 rounded-lg appearance-none cursor-pointer accent-red-500"
+                      value={comfySettings.denoise}
+                      onChange={(e) => updateComfyUI({ denoise: parseFloat(e.target.value) })}
+                    />
+                  </div>
+
+                  {/* Sampler */}
+                  <div className="space-y-1">
+                    <label className="text-xs text-red-300/80">Sampler</label>
+                    <select
+                      className="w-full bg-gray-950 border border-red-700/50 rounded p-2 text-sm text-red-200"
+                      value={comfySettings.sampler}
+                      onChange={(e) => updateComfyUI({ sampler: e.target.value as ComfyUISampler })}
+                    >
+                      {Object.entries(COMFYUI_SAMPLER_LABELS).map(([key, label]) => (
+                        <option key={key} value={key}>{label}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Scheduler */}
+                  <div className="space-y-1">
+                    <label className="text-xs text-red-300/80">Scheduler</label>
+                    <select
+                      className="w-full bg-gray-950 border border-red-700/50 rounded p-2 text-sm text-red-200"
+                      value={comfySettings.scheduler}
+                      onChange={(e) => updateComfyUI({ scheduler: e.target.value as ComfyUIScheduler })}
+                    >
+                      {Object.entries(COMFYUI_SCHEDULER_LABELS).map(([key, label]) => (
+                        <option key={key} value={key}>{label}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* IP-Adapter Weight (only when reference image attached) */}
+                  {hasRefImage && (
+                    <div className="space-y-1">
+                      <div className="flex justify-between">
+                        <label className="text-xs text-red-300/80">IP-Adapter Weight</label>
+                        <span className="text-xs text-red-300 font-mono">{comfySettings.ipAdapterWeight.toFixed(2)}</span>
+                      </div>
+                      <input type="range" min="0" max="2" step="0.05"
+                        className="w-full h-2 bg-red-900/50 rounded-lg appearance-none cursor-pointer accent-red-500"
+                        value={comfySettings.ipAdapterWeight}
+                        onChange={(e) => updateComfyUI({ ipAdapterWeight: parseFloat(e.target.value) })}
+                      />
+                    </div>
+                  )}
+
+                  {/* Seed */}
+                  <div className="space-y-1">
+                    <label className="text-xs text-red-300/80">Seed (-1 = random)</label>
+                    <input type="number"
+                      className="w-full bg-gray-950 border border-red-700/50 rounded p-2 text-sm text-red-200 font-mono"
+                      value={comfySettings.seed}
+                      onChange={(e) => updateComfyUI({ seed: parseInt(e.target.value) || -1 })}
+                      min="-1"
+                    />
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* Temperature */}
             {!safeSettings.spicyMode?.enabled && (

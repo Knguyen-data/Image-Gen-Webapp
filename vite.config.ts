@@ -33,6 +33,11 @@ export default defineConfig(({ mode }) => {
             changeOrigin: true,
             rewrite: (path) => path.replace(/^\/api\/r2/, ''),
           },
+          '/api/runpod': {
+            target: 'https://api.runpod.ai',
+            changeOrigin: true,
+            rewrite: (path) => path.replace(/^\/api\/runpod/, ''),
+          },
         },
       },
       plugins: [tailwindcss(), react(), fileSystemPlugin()],

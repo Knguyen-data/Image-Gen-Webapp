@@ -27,6 +27,9 @@ import { generateWithSeedream, mapAspectRatio } from './services/seedream-servic
 import { uploadBase64ToR2, uploadUrlToR2 } from './services/supabase-storage-service';
 // Video effects handled by Freepik VFX API (server-side)
 import { generateWithSeedreamTxt2Img } from './services/seedream-txt2img-service';
+// Extreme Mode - ComfyUI RunPod
+import { generateWithComfyUI, mapAspectRatioToDimensions } from './services/comfyui-runpod-service';
+import { COMFYUI_RUNPOD_ENDPOINT_ID } from './constants';
 import { generateMotionVideo } from './services/kling-motion-control-service';
 import { createFreepikProI2VTask, pollFreepikProI2VTask, createKling3Task, pollKling3Task, createKling3OmniTask, createKling3OmniReferenceTask, pollKling3OmniTask, pollKling3OmniReferenceTask, createAndPollWithRetry } from './services/freepik-kling-service';
 import { createVeoTask, pollVeoTask, getVeo1080pVideo, requestVeo4kVideo, pollVeo4kTask, extendVeoTask } from './services/veo3-service';
@@ -51,8 +54,9 @@ const AppInner: React.FC = () => {
   const [apiKey, setApiKey] = useState('');
   const [kieApiKey, setKieApiKey] = useState('');
   const [freepikApiKey, setFreepikApiKey] = useState('');
+  const [runpodApiKey, setRunpodApiKey] = useState('');
   const [isKeyModalOpen, setIsKeyModalOpen] = useState(false);
-  const [keyModalMode, setKeyModalMode] = useState<'gemini' | 'spicy' | 'freepik'>('gemini');
+  const [keyModalMode, setKeyModalMode] = useState<'gemini' | 'spicy' | 'freepik' | 'runpod'>('gemini');
   const [showSettings, setShowSettings] = useState(false);
 
   // Crash Recovery State
@@ -172,6 +176,12 @@ const AppInner: React.FC = () => {
         if (savedFreepikKey) {
           setFreepikApiKey(savedFreepikKey);
           logger.debug('App', 'Loaded Freepik API key from storage');
+        }
+
+        const savedRunPodKey = localStorage.getItem('raw_studio_runpod_api_key');
+        if (savedRunPodKey) {
+          setRunpodApiKey(savedRunPodKey);
+          logger.debug('App', 'Loaded RunPod API key from storage');
         }
 
         // Prompt for Gemini key if missing
@@ -609,12 +619,17 @@ INSTRUCTIONS:
   // --- BATCH QUEUE LOGIC ---
   const handleGenerate = async () => {
     const isSpicyMode = settings.spicyMode?.enabled;
-    const effectiveApiKey = isSpicyMode ? kieApiKey : apiKey;
+    const isExtremeMode = isSpicyMode && settings.spicyMode?.subMode === 'extreme';
+    const effectiveApiKey = isExtremeMode ? runpodApiKey : (isSpicyMode ? kieApiKey : apiKey);
 
-    logger.info('App', `Starting generation in ${isSpicyMode ? 'Spicy' : 'Gemini'} mode`);
+    logger.info('App', `Starting generation in ${isExtremeMode ? 'Extreme' : isSpicyMode ? 'Spicy' : 'Gemini'} mode`);
 
     if (!effectiveApiKey) {
-      if (isSpicyMode) {
+      if (isExtremeMode) {
+        logger.warn('App', 'No RunPod API key, showing modal');
+        setKeyModalMode('runpod');
+        setIsKeyModalOpen(true);
+      } else if (isSpicyMode) {
         logger.warn('App', 'No Kie.ai API key, showing modal');
         setKeyModalMode('spicy');
         setIsKeyModalOpen(true);
@@ -636,7 +651,7 @@ INSTRUCTIONS:
     // Fixed block images count toward refs when enabled
     const fixedBlockRefs = settings.fixedBlockEnabled ? (settings.fixedBlockImages || []) : [];
 
-    // Spicy Edit Mode requires at least one reference image
+    // Spicy Edit Mode requires at least one reference image (Extreme mode optional)
     const isSpicyEditMode = isSpicyMode && settings.spicyMode?.subMode === 'edit';
     if (isSpicyEditMode) {
       for (const item of validItems) {
@@ -757,7 +772,7 @@ INSTRUCTIONS:
       createdAt: Date.now(),
       promptUsed: task.prompt,
       settingsSnapshot: task.settings,
-      generatedBy: isSpicyMode ? (settings.spicyMode?.subMode === 'generate' ? 'seedream-txt2img' : 'seedream-edit') : 'gemini',
+      generatedBy: isExtremeMode ? 'comfyui-lustify' : (isSpicyMode ? (settings.spicyMode?.subMode === 'generate' ? 'seedream-txt2img' : 'seedream-edit') : 'gemini'),
       status: 'generating' as const
     }));
 
@@ -765,10 +780,10 @@ INSTRUCTIONS:
     newRun.images = [...placeholderImages];
     setRuns(prev => prev.map(r => r.id === newRunId ? { ...r, images: [...placeholderImages] } : r));
 
-    const provider = isSpicyMode ? 'seedream' : 'gemini';
+    const provider = isExtremeMode ? 'comfyui' : (isSpicyMode ? 'seedream' : 'gemini');
     const batchSize = calculateOptimalBatchSize(taskQueue.length, provider);
-    const batchDelayMs = isSpicyMode ? BATCH_DELAYS.seedream : BATCH_DELAYS.gemini;
-    setLoadingStatus(`Queued ${taskQueue.length} images${isSpicyMode ? ' (Spicy)' : ''} (batches of ${batchSize})...`);
+    const batchDelayMs = isExtremeMode ? BATCH_DELAYS.comfyui : (isSpicyMode ? BATCH_DELAYS.seedream : BATCH_DELAYS.gemini);
+    setLoadingStatus(`Queued ${taskQueue.length} images${isExtremeMode ? ' (Extreme)' : isSpicyMode ? ' (Spicy)' : ''} (batches of ${batchSize})...`);
 
     // Update job to active status
     updateJob(jobId, { status: 'active' });
@@ -779,7 +794,38 @@ INSTRUCTIONS:
       await processBatchQueue(
         taskQueue,
         async (task) => {
-          if (isSpicyMode) {
+          if (isExtremeMode) {
+            // Extreme Mode - ComfyUI Lustify via RunPod
+            const comfySettings = task.settings.spicyMode?.comfyui || {
+              steps: 20, cfg: 8, denoise: 1.0, sampler: 'euler', scheduler: 'normal', seed: -1,
+              ipAdapterWeight: 1.0, ipAdapterFaceidWeight: 1.0
+            };
+            const dimensions = mapAspectRatioToDimensions(task.settings.aspectRatio);
+            const faceRef = task.refs.length > 0 ? task.refs[0].base64 : undefined;
+
+            const result = await generateWithComfyUI(
+              COMFYUI_RUNPOD_ENDPOINT_ID,
+              runpodApiKey,
+              task.prompt,
+              comfySettings,
+              dimensions,
+              faceRef,
+              (stage, detail) => {
+                setLoadingStatus(`🔥 Extreme: ${detail || stage}`);
+              }
+            );
+
+            const generatedImage: GeneratedImage = {
+              id: crypto.randomUUID(),
+              base64: result.base64,
+              mimeType: result.mimeType,
+              createdAt: Date.now(),
+              promptUsed: task.prompt,
+              settingsSnapshot: task.settings,
+              generatedBy: 'comfyui-lustify'
+            };
+            return generatedImage;
+          } else if (isSpicyMode) {
             const subMode = task.settings.spicyMode?.subMode || 'edit';
 
             if (subMode === 'generate') {
@@ -2505,6 +2551,8 @@ INSTRUCTIONS:
         setKieApiKey={setKieApiKey}
         freepikApiKey={freepikApiKey}
         setFreepikApiKey={setFreepikApiKey}
+        runpodApiKey={runpodApiKey}
+        setRunpodApiKey={setRunpodApiKey}
       />
 
       <ModifyImageModal
@@ -2583,6 +2631,7 @@ INSTRUCTIONS:
             }}
             hasApiKey={!!apiKey}
             hasKieApiKey={!!kieApiKey}
+            hasRunPodApiKey={!!runpodApiKey}
             credits={credits}
             creditsLoading={creditsLoading}
             creditsError={creditsError}
