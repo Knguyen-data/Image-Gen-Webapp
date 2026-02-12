@@ -7,12 +7,10 @@ import {
 import type { LoraModel, LoraTrainingConfig, LoraModelStatus } from '../../types';
 import {
   listUserLoras,
-  createLora,
-  uploadTrainingImages,
-  startTraining,
   deleteLora,
   getTrainingImageUrl,
   DEFAULT_LORA_TRAINING_CONFIG,
+  loraService,
 } from '../../services/lora-model-service';
 import { supabase } from '../../services/supabase';
 
@@ -222,15 +220,28 @@ const StepImages: React.FC<{
 
 // ─── Wizard: Step 3 — Advanced Settings ─────────────────────────────
 
+type TrainingNumericFields = 'steps' | 'learningRate' | 'networkDim' | 'networkAlpha' | 'resolution';
+
 const StepSettings: React.FC<{
   config: LoraTrainingConfig;
   onChange: (c: LoraTrainingConfig) => void;
 }> = ({ config, onChange }) => {
-  const update = (key: keyof LoraTrainingConfig, value: number) =>
+  const update = (key: TrainingNumericFields, value: number) =>
     onChange({ ...config, [key]: value });
 
+  const resetToDefaults = () => {
+    onChange({
+      ...config,
+      steps: 1000,
+      learningRate: 0.0001,
+      networkDim: 32,
+      networkAlpha: 32,
+      resolution: 1024,
+    });
+  };
+
   const fields: Array<{
-    key: keyof LoraTrainingConfig;
+    key: TrainingNumericFields;
     label: string;
     min: number;
     max: number;
@@ -250,7 +261,7 @@ const StepSettings: React.FC<{
       <div className="flex items-center justify-between">
         <p className="text-sm text-zinc-300">Advanced Training Settings</p>
         <button
-          onClick={() => onChange(DEFAULT_LORA_TRAINING_CONFIG)}
+          onClick={resetToDefaults}
           className="text-[10px] text-violet-400 hover:text-violet-300 transition-colors"
         >
           Reset to defaults
@@ -356,7 +367,12 @@ const LoraManagementModal: React.FC<LoraManagementModalProps> = ({ isOpen, onClo
   const [wizardName, setWizardName] = useState('');
   const [wizardTrigger, setWizardTrigger] = useState('');
   const [wizardImages, setWizardImages] = useState<PreviewImage[]>([]);
-  const [wizardConfig, setWizardConfig] = useState<LoraTrainingConfig>(DEFAULT_LORA_TRAINING_CONFIG);
+  const [wizardConfig, setWizardConfig] = useState<LoraTrainingConfig>({
+    ...DEFAULT_LORA_TRAINING_CONFIG,
+    name: '',
+    triggerWord: '',
+    photos: [],
+  } as LoraTrainingConfig);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
@@ -395,7 +411,16 @@ const LoraManagementModal: React.FC<LoraManagementModalProps> = ({ isOpen, onClo
     setWizardName('');
     setWizardTrigger('');
     setWizardImages([]);
-    setWizardConfig(DEFAULT_LORA_TRAINING_CONFIG);
+    setWizardConfig({
+      name: '',
+      triggerWord: '',
+      photos: [],
+      steps: 1000,
+      learningRate: 0.0001,
+      networkDim: 32,
+      networkAlpha: 32,
+      resolution: 1024,
+    });
     setSubmitError(null);
   };
 
@@ -427,7 +452,7 @@ const LoraManagementModal: React.FC<LoraManagementModalProps> = ({ isOpen, onClo
     if (!userId) return;
     setDeleting(true);
     try {
-      await deleteLora(loraId, userId);
+      await deleteLora(loraId);
       setLoras(prev => prev.filter(l => l.id !== loraId));
     } catch (err) {
       console.error('Failed to delete LoRA:', err);
@@ -443,15 +468,20 @@ const LoraManagementModal: React.FC<LoraManagementModalProps> = ({ isOpen, onClo
     setSubmitError(null);
 
     try {
-      // 1. Create LoRA record
-      const lora = await createLora(userId, wizardName, wizardTrigger, wizardConfig);
+      // Build complete config with all required fields
+      const config: LoraTrainingConfig = {
+        name: wizardName,
+        triggerWord: wizardTrigger,
+        photos: wizardImages.map(img => img.file),
+        steps: wizardConfig.steps,
+        learningRate: wizardConfig.learningRate,
+        networkDim: wizardConfig.networkDim,
+        networkAlpha: wizardConfig.networkAlpha,
+        resolution: wizardConfig.resolution,
+      };
 
-      // 2. Upload training images
-      const files = wizardImages.map(img => img.file);
-      await uploadTrainingImages(lora.id, userId, files);
-
-      // 3. Start training
-      await startTraining(lora.id);
+      // Use loraService.startTraining with full config
+      await loraService.startTraining(config, localStorage.getItem('raw_studio_runpod_api_key') || '');
 
       // Done — refresh list and close wizard
       resetWizard();

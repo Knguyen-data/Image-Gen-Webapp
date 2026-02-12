@@ -91,22 +91,36 @@ class LoraModelServiceImpl implements LoraModelService {
   async deleteLora(loraId: string): Promise<void> {
     const userId = await this.requireUserId();
 
-    // Delete training images from storage
-    const { data: images } = await supabase
-      .from('lora_training_images' as AnyRecord)
-      .select('storage_path')
-      .eq('lora_model_id', loraId);
+    try {
+      // Delete training images from storage
+      const { data: images, error: selectError } = await supabase
+        .from('lora_training_images' as AnyRecord)
+        .select('storage_path')
+        .eq('lora_model_id', loraId);
 
-    if (images?.length) {
-      const paths = ((images as unknown) as Array<{ storage_path: string }>).map((i) => i.storage_path);
-      await supabase.storage.from('lora-training-images').remove(paths);
+      if (selectError) {
+        logger.warn('LoraService', 'Failed to fetch training images for deletion', selectError);
+      }
+
+      if (images?.length) {
+        const paths = ((images as unknown) as Array<{ storage_path: string }>).map((i) => i.storage_path);
+        const { error: storageError } = await supabase.storage
+          .from('lora-training-images')
+          .remove(paths);
+        
+        if (storageError) {
+          logger.warn('LoraService', 'Failed to delete some training images', storageError);
+        }
+      }
+
+      // Delete trained model from storage (ignore if not found)
+      const modelPath = `${userId}/${loraId}/model.safetensors`;
+      await supabase.storage.from('lora-models').remove([modelPath]);
+    } catch (storageErr) {
+      logger.warn('LoraService', 'Storage cleanup warning', storageErr);
     }
 
-    // Delete trained model from storage
-    const modelPath = `${userId}/${loraId}/model.safetensors`;
-    await supabase.storage.from('lora-models').remove([modelPath]);
-
-    // Delete DB record (cascades to training images table)
+    // Delete DB record (cascade should handle training_images table)
     const { error } = await supabase
       .from('lora_models' as AnyRecord)
       .delete()
@@ -266,26 +280,56 @@ class LoraModelServiceImpl implements LoraModelService {
     userId: string,
     photos: File[],
   ): Promise<void> {
+    const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB per image
+    const VALID_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/jpg'];
+
     for (let i = 0; i < photos.length; i++) {
       const file = photos[i];
-      const ext = file.name.split('.').pop() || 'jpg';
-      const storagePath = `${userId}/${loraId}/${i}.${ext}`;
 
-      const { error: uploadError } = await supabase.storage
-        .from('lora-training-images')
-        .upload(storagePath, file, { contentType: file.type, upsert: true });
-
-      if (uploadError) {
-        logger.error('LoraService', `Failed to upload image ${i}`, uploadError);
-        throw new Error(`Failed to upload training image ${i + 1}`);
+      // Validate file
+      if (!VALID_TYPES.includes(file.type)) {
+        throw new Error(`Invalid file type: ${file.name}. Only JPG, PNG, WebP allowed.`);
       }
 
-      // Record in DB
-      await supabase.from('lora_training_images' as AnyRecord).insert({
-        lora_model_id: loraId,
-        storage_path: storagePath,
-        original_filename: file.name,
-      } as AnyRecord);
+      if (file.size > MAX_FILE_SIZE) {
+        throw new Error(`File too large: ${file.name} (${(file.size / 1024 / 1024).toFixed(1)}MB). Max 10MB per image.`);
+      }
+
+      const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg';
+      const storagePath = `${userId}/${loraId}/${Date.now()}_${i}.${ext}`;
+
+      try {
+        const { error: uploadError } = await supabase.storage
+          .from('lora-training-images')
+          .upload(storagePath, file, { 
+            contentType: file.type,
+            upsert: false 
+          });
+
+        if (uploadError) {
+          logger.error('LoraService', `Failed to upload image ${i}`, uploadError);
+          throw new Error(`Failed to upload ${file.name}`);
+        }
+
+        // Record in DB
+        const { error: insertError } = await supabase.from('lora_training_images' as AnyRecord).insert({
+          lora_model_id: loraId,
+          storage_path: storagePath,
+          original_filename: file.name,
+          file_size: file.size,
+        } as AnyRecord);
+
+        if (insertError) {
+          logger.error('LoraService', `Failed to record image ${i} in DB`, insertError);
+          throw new Error(`Failed to save ${file.name} metadata`);
+        }
+
+        logger.info('LoraService', `Uploaded image ${i + 1}/${photos.length}`, { filename: file.name });
+      } catch (err) {
+        // Clean up partially uploaded files on error
+        await supabase.storage.from('lora-training-images').remove([storagePath]).catch(() => {});
+        throw err;
+      }
     }
 
     logger.info('LoraService', 'Training images uploaded', {

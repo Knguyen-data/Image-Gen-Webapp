@@ -135,16 +135,26 @@ export type ComfyUIDimensions = { width: number; height: number };
 
 // LoRA Model Types (for Extreme Spicy Mode face training)
 export type LoraStatus = 'uploading' | 'training' | 'ready' | 'failed';
+export type LoraModelStatus = LoraStatus;
 
 export interface LoraModel {
   id: string;
   name: string;
-  triggerWord: string;
+  trigger_word?: string; // DB column name
+  triggerWord?: string;
   status: LoraStatus;
-  createdAt: number;
-  fileSize?: number; // bytes, only for ready models
-  errorMessage?: string; // only for failed
-  trainingProgress?: number; // 0-100, only for training
+  created_at?: string; // DB column name
+  createdAt?: number;
+  file_size_bytes?: number; // DB column name
+  fileSize?: number;
+  error_message?: string; // DB column name
+  errorMessage?: string;
+  training_progress?: number; // DB column name
+  trainingProgress?: number;
+  training_images_count?: number;
+  training_job_id?: string;
+  storage_url?: string;
+  user_id?: string;
 }
 
 export interface LoraTrainingConfig {
