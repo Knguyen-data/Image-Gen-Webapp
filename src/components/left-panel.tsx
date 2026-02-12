@@ -1822,14 +1822,19 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
 
               return (
                 <div className="col-span-2 space-y-3 mt-2 p-3 bg-red-950/30 border border-red-500/20 rounded-lg">
-                  <span className="text-xs font-semibold text-red-300 uppercase tracking-wider">
-                    ComfyUI Settings
-                  </span>
+                  <div className="flex items-center gap-2" title="Advanced settings for ComfyUI Lustify SDXL. These control the diffusion process and image generation quality.">
+                    <span className="text-xs font-semibold text-red-300 uppercase tracking-wider cursor-help border-b border-dashed border-red-500/30 hover:border-red-500/60 transition-colors">
+                      ComfyUI Settings
+                    </span>
+                    <svg className="w-3 h-3 text-red-400/60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  </div>
 
                   {/* Steps */}
-                  <div className="space-y-1">
+                  <div className="space-y-1" title="Number of denoising steps. More steps = higher quality but slower generation. 20-30 is the sweet spot for quality vs speed.">
                     <div className="flex justify-between">
-                      <label className="text-xs text-red-300/80">Steps</label>
+                      <label className="text-xs text-red-300/80 cursor-help border-b border-dashed border-red-500/30 hover:border-red-500/60 transition-colors">Steps</label>
                       <span className="text-xs text-red-300 font-mono">{comfySettings.steps}</span>
                     </div>
                     <input type="range" min="15" max="50" step="1"
@@ -1837,12 +1842,17 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
                       value={comfySettings.steps}
                       onChange={(e) => updateComfyUI({ steps: parseInt(e.target.value) })}
                     />
+                    <p className="text-[10px] text-red-400/60">
+                      {comfySettings.steps < 20 ? 'Fast but may lack detail' : 
+                       comfySettings.steps < 30 ? 'Balanced quality & speed' : 
+                       comfySettings.steps < 40 ? 'High quality, slower' : 'Maximum quality, slowest'}
+                    </p>
                   </div>
 
                   {/* CFG Scale */}
-                  <div className="space-y-1">
+                  <div className="space-y-1" title="Classifier-Free Guidance Scale. Controls how closely the image follows your prompt. Higher = more literal interpretation, lower = more creative freedom.">
                     <div className="flex justify-between">
-                      <label className="text-xs text-red-300/80">CFG Scale</label>
+                      <label className="text-xs text-red-300/80 cursor-help border-b border-dashed border-red-500/30 hover:border-red-500/60 transition-colors">CFG Scale</label>
                       <span className="text-xs text-red-300 font-mono">{comfySettings.cfg}</span>
                     </div>
                     <input type="range" min="1" max="15" step="0.5"
@@ -1850,12 +1860,17 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
                       value={comfySettings.cfg}
                       onChange={(e) => updateComfyUI({ cfg: parseFloat(e.target.value) })}
                     />
+                    <p className="text-[10px] text-red-400/60">
+                      {comfySettings.cfg < 5 ? 'Creative, may ignore parts of prompt' : 
+                       comfySettings.cfg < 8 ? 'Balanced adherence' : 
+                       comfySettings.cfg < 12 ? 'Strict prompt following' : 'Very literal, may over-saturate'}
+                    </p>
                   </div>
 
                   {/* Denoise */}
-                  <div className="space-y-1">
+                  <div className="space-y-1" title="Denoising strength for img2img. 1.0 = complete transformation (txt2img), lower values preserve more of the original image structure.">
                     <div className="flex justify-between">
-                      <label className="text-xs text-red-300/80">Denoise</label>
+                      <label className="text-xs text-red-300/80 cursor-help border-b border-dashed border-red-500/30 hover:border-red-500/60 transition-colors">Denoise</label>
                       <span className="text-xs text-red-300 font-mono">{comfySettings.denoise.toFixed(2)}</span>
                     </div>
                     <input type="range" min="0.1" max="1.0" step="0.05"
@@ -1863,11 +1878,18 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
                       value={comfySettings.denoise}
                       onChange={(e) => updateComfyUI({ denoise: parseFloat(e.target.value) })}
                     />
+                    <p className="text-[10px] text-red-400/60">
+                      {comfySettings.denoise < 0.5 ? 'Subtle changes, preserves structure' : 
+                       comfySettings.denoise < 0.8 ? 'Moderate transformation' : 
+                       'Full generation (txt2img mode)'}
+                    </p>
                   </div>
 
                   {/* Sampler */}
-                  <div className="space-y-1">
-                    <label className="text-xs text-red-300/80">Sampler</label>
+                  <div className="space-y-1" title="Sampling algorithm. Different samplers produce different results at different speeds. Euler is fast and reliable; DPM++ offers better quality at cost of speed.">
+                    <div className="flex items-center gap-1">
+                      <label className="text-xs text-red-300/80 cursor-help border-b border-dashed border-red-500/30 hover:border-red-500/60 transition-colors">Sampler</label>
+                    </div>
                     <select
                       className="w-full bg-gray-950 border border-red-700/50 rounded p-2 text-sm text-red-200"
                       value={comfySettings.sampler}
@@ -1877,11 +1899,19 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
                         <option key={key} value={key}>{label}</option>
                       ))}
                     </select>
+                    <p className="text-[10px] text-red-400/60">
+                      {comfySettings.sampler === 'euler' ? 'Fast, stable, good for most cases' : 
+                       comfySettings.sampler === 'euler_ancestral' ? 'More varied, creative results' : 
+                       comfySettings.sampler === 'dpmpp_2m' ? 'Higher quality, slower' : 
+                       'Best quality, stochastic (randomized)'}
+                    </p>
                   </div>
 
                   {/* Scheduler */}
-                  <div className="space-y-1">
-                    <label className="text-xs text-red-300/80">Scheduler</label>
+                  <div className="space-y-1" title="Noise scheduling strategy. Controls how the denoising process progresses. Karras often produces sharper details; Normal is the standard approach.">
+                    <div className="flex items-center gap-1">
+                      <label className="text-xs text-red-300/80 cursor-help border-b border-dashed border-red-500/30 hover:border-red-500/60 transition-colors">Scheduler</label>
+                    </div>
                     <select
                       className="w-full bg-gray-950 border border-red-700/50 rounded p-2 text-sm text-red-200"
                       value={comfySettings.scheduler}
@@ -1891,13 +1921,18 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
                         <option key={key} value={key}>{label}</option>
                       ))}
                     </select>
+                    <p className="text-[10px] text-red-400/60">
+                      {comfySettings.scheduler === 'normal' ? 'Standard scheduling, reliable' : 
+                       comfySettings.scheduler === 'karras' ? 'Sharper details, recommended' : 
+                       'Uniform noise distribution'}
+                    </p>
                   </div>
 
                   {/* IP-Adapter Weight (only when reference image attached) */}
                   {hasRefImage && (
-                    <div className="space-y-1">
+                    <div className="space-y-1" title="Controls how much the reference image influences the result. 0 = no influence, 1 = balanced, 2 = strong influence. Higher values may cause artifacts.">
                       <div className="flex justify-between">
-                        <label className="text-xs text-red-300/80">IP-Adapter Weight</label>
+                        <label className="text-xs text-red-300/80 cursor-help border-b border-dashed border-red-500/30 hover:border-red-500/60 transition-colors">IP-Adapter Weight</label>
                         <span className="text-xs text-red-300 font-mono">{comfySettings.ipAdapterWeight.toFixed(2)}</span>
                       </div>
                       <input type="range" min="0" max="2" step="0.05"
@@ -1905,18 +1940,30 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
                         value={comfySettings.ipAdapterWeight}
                         onChange={(e) => updateComfyUI({ ipAdapterWeight: parseFloat(e.target.value) })}
                       />
+                      <p className="text-[10px] text-red-400/60">
+                        {comfySettings.ipAdapterWeight < 0.5 ? 'Subtle face/style influence' : 
+                         comfySettings.ipAdapterWeight < 1.0 ? 'Moderate influence' : 
+                         comfySettings.ipAdapterWeight < 1.5 ? 'Strong influence' : 'Very strong, may cause artifacts'}
+                      </p>
                     </div>
                   )}
 
                   {/* Seed */}
-                  <div className="space-y-1">
-                    <label className="text-xs text-red-300/80">Seed (-1 = random)</label>
+                  <div className="space-y-1" title="Random seed for reproducible results. Use -1 for random generation. Same seed + same settings = same image. Useful for iterating on a specific look.">
+                    <div className="flex items-center gap-1">
+                      <label className="text-xs text-red-300/80 cursor-help border-b border-dashed border-red-500/30 hover:border-red-500/60 transition-colors">Seed</label>
+                      <span className="text-[10px] text-red-400/60">(-1 = random)</span>
+                    </div>
                     <input type="number"
                       className="w-full bg-gray-950 border border-red-700/50 rounded p-2 text-sm text-red-200 font-mono"
                       value={comfySettings.seed}
                       onChange={(e) => updateComfyUI({ seed: parseInt(e.target.value) || -1 })}
                       min="-1"
+                      placeholder="-1 for random"
                     />
+                    <p className="text-[10px] text-red-400/60">
+                      {comfySettings.seed === -1 ? 'Random seed each generation' : 'Fixed seed for reproducible results'}
+                    </p>
                   </div>
                 </div>
               );
