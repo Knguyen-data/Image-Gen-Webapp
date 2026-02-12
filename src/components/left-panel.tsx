@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { AppSettings, PromptItem, ReferenceImage, ImageSize, SeedreamQuality, AppMode, VideoScene, VideoSettings, VideoModel, KlingProDuration, KlingProAspectRatio, VeoGenerationType, ComfyUISampler, ComfyUIScheduler } from '../types';
+import { AppSettings, PromptItem, ReferenceImage, ImageSize, SeedreamQuality, AppMode, VideoScene, VideoSettings, VideoModel, KlingProDuration, KlingProAspectRatio, VeoGenerationType, ComfyUISampler, ComfyUIScheduler, ComfyUISettings } from '../types';
 import { ASPECT_RATIO_LABELS, IMAGE_SIZE_LABELS, SEEDREAM_QUALITY_LABELS, DEFAULT_SETTINGS, MAX_REFERENCE_IMAGES, MAX_PROMPTS, DEFAULT_COMFYUI_SETTINGS, COMFYUI_SAMPLER_LABELS, COMFYUI_SCHEDULER_LABELS } from '../constants';
 import BulkInputModal from './bulk-input-modal';
 import VideoSceneQueue from './video-scene-queue';
@@ -11,6 +11,9 @@ import { VeoGenerationPanel } from './veo3';
 import type { VeoSettings, VeoTaskResult } from './veo3';
 import { useMentionAutocomplete, MentionOption } from '../hooks/use-mention-autocomplete';
 import MentionDropdown from './mention-dropdown';
+import LoraSelector from './lora/lora-selector';
+import LoraManagementModal from './lora/lora-management-modal';
+import type { LoraModel } from '../types';
 
 interface LeftPanelProps {
   prompts: PromptItem[];
@@ -115,6 +118,34 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
   const [videoRefOpen, setVideoRefOpen] = useState(false);
   const [videoRefFile, setVideoRefFile] = useState<File | null>(null);
   const [videoRefPromptIndex, setVideoRefPromptIndex] = useState(0);
+
+  // LoRA modal state
+  const [loraModalOpen, setLoraModalOpen] = useState(false);
+  const [loras, setLoras] = useState<LoraModel[]>([]);
+  const [loraLoading, setLoraLoading] = useState(false);
+
+  // Fetch user's LoRAs on mount
+  useEffect(() => {
+    const fetchLoras = async () => {
+      setLoraLoading(true);
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          const { listUserLoras } = await import('../services/lora-model-service');
+          const allLoras = await listUserLoras(user.id);
+          setLoras(allLoras);
+        }
+      } catch (err) {
+        console.error('Failed to fetch LoRAs:', err);
+      } finally {
+        setLoraLoading(false);
+      }
+    };
+    fetchLoras();
+  }, []);
+
+  // Get selected LoRA details
+  const selectedLora = loras.find(l => l.id === (safeSettings.spicyMode?.comfyui?.loraId || comfySettings.loraId));
 
   // Use parent video model state (no local shadow)
   const selectedVideoModel = videoModelProp;
@@ -534,6 +565,14 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
         onCancel={() => {
           setVideoRefOpen(false);
           setVideoRefFile(null);
+        }}
+      />
+
+      <LoraManagementModal
+        isOpen={loraModalOpen}
+        onClose={() => setLoraModalOpen(false)}
+        onLoraCreated={(lora) => {
+          setLoras(prev => [...prev, lora]);
         }}
       />
 
@@ -1996,6 +2035,22 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
                        'Uniform noise distribution'}
                     </p>
                   </div>
+
+                  {/* LoRA Selector */}
+                  <LoraSelector
+                    selectedLoraId={comfySettings.loraId}
+                    loraWeight={comfySettings.loraWeight ?? 0.8}
+                    onLoraChange={(loraId) => updateComfyUI({ loraId: loraId || undefined })}
+                    onWeightChange={(weight) => updateComfyUI({ loraWeight: weight })}
+                    onManageClick={() => setLoraModalOpen(true)}
+                  />
+
+                  {/* Trigger Word Hint */}
+                  {selectedLora && (
+                    <div className="p-2 bg-amber-900/20 border border-amber-500/30 rounded text-xs text-amber-300">
+                      <span className="font-medium">Trigger word:</span> {selectedLora.trigger_word}
+                    </div>
+                  )}
 
                   {/* IP-Adapter Weight (only when reference image attached) */}
                   {hasRefImage && (
