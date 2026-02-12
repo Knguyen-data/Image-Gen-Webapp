@@ -13,7 +13,7 @@ import { BatchActionsToolbar } from './components/batch-actions-toolbar';
 import { SaveCollectionModal } from './components/save-collection-modal';
 import { SavePayloadDialog } from './components/save-payload-dialog';
 import { SavedPayloadsPage } from './components/saved-payloads-page';
-import VideoEditorModal from './components/video-editor/video-editor-modal';
+import VideoEditorModalCapCutStyle from './components/video-editor/video-editor-modal-capcut-style';
 import { AppSettings, Run, GeneratedImage, PromptItem, ReferenceImage, ReferenceVideo, AppMode, VideoScene, VideoSettings, GeneratedVideo, VideoModel, KlingProDuration, KlingProAspectRatio, Kling3ImageListItem, VeoGenerationType } from './types';
 import { DEFAULT_SETTINGS } from './constants';
 import { generateImage, modifyImage } from './services/gemini-service';
@@ -2547,6 +2547,21 @@ INSTRUCTIONS:
             <p className="text-gray-400 font-mono text-sm">Loading Gallery...</p>
           </div>
         </div>
+      ) : showVideoEditor ? (
+        <VideoEditorModalCapCutStyle
+          isOpen={true}
+          onClose={() => setShowVideoEditor(false)}
+          videos={generatedVideos.filter(v => v.status === 'success' && v.url)}
+          onExportComplete={(video) => {
+            setGeneratedVideos(prev => [video, ...prev]);
+            import('./services/indexeddb-video-storage').then(({ saveGeneratedVideoToDB }) => {
+              saveGeneratedVideoToDB(video).catch(e =>
+                console.warn('Failed to persist editor export to IndexedDB', e)
+              );
+            });
+            setShowVideoEditor(false);
+          }}
+        />
       ) : (
         <>
           <LeftPanel
@@ -2627,22 +2642,6 @@ INSTRUCTIONS:
               onClose={() => setShowCompareModal(false)}
             />
           )}
-
-          {/* Video Editor Modal */}
-          <VideoEditorModal
-            isOpen={showVideoEditor}
-            onClose={() => setShowVideoEditor(false)}
-            videos={generatedVideos.filter(v => v.status === 'success' && v.url)}
-            onExportComplete={(video) => {
-              setGeneratedVideos(prev => [video, ...prev]);
-              import('./services/indexeddb-video-storage').then(({ saveGeneratedVideoToDB }) => {
-                saveGeneratedVideoToDB(video).catch(e =>
-                  console.warn('Failed to persist editor export to IndexedDB', e)
-                );
-              });
-              setShowVideoEditor(false);
-            }}
-          />
 
           {/* Batch Actions Toolbar */}
           {selectMode && selectedVideos.length > 0 && (
