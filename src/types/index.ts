@@ -115,6 +115,9 @@ export interface ComfyUISettings {
   seed: number;         // -1 = random
   ipAdapterWeight: number;     // 0-2, default 1.0 (face strength)
   ipAdapterFaceidWeight: number; // 0-2, default 1.0
+  loraId?: string;      // selected LoRA model ID
+  loraWeight?: number;  // 0.0-2.0, default 0.8
+  loraFilename?: string; // internal: resolved filename for ComfyUI workflow
 }
 
 export interface ComfyUIRunPodJob {
@@ -129,6 +132,29 @@ export interface ComfyUIRunPodJob {
 }
 
 export type ComfyUIDimensions = { width: number; height: number };
+
+// LoRA Model Types (for Extreme Spicy Mode face training)
+export type LoraStatus = 'uploading' | 'training' | 'ready' | 'failed';
+
+export interface LoraModel {
+  id: string;
+  name: string;
+  triggerWord: string;
+  status: LoraStatus;
+  createdAt: number;
+  fileSize?: number; // bytes, only for ready models
+  errorMessage?: string; // only for failed
+  trainingProgress?: number; // 0-100, only for training
+}
+
+export interface LoraTrainingConfig {
+  name: string;
+  triggerWord: string;
+  photos: File[]; // 10-25 face photos
+  steps: number; // default 1000
+  learningRate: number; // default 1e-4
+}
+
 export type VideoRefMode = 'global' | 'per-scene';
 
 export interface ReferenceVideo {
