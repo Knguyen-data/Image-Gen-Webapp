@@ -546,9 +546,10 @@ export const pollVeoTask = async (
 
       await new Promise(resolve => setTimeout(resolve, POLL_INTERVAL_MS));
     } catch (fetchError) {
+      if (fetchError instanceof VeoApiError) throw fetchError;
       consecutiveErrors++;
       onProgress?.(`Network error (${consecutiveErrors})`, attempt);
-      
+
       if (consecutiveErrors >= 15) {
         throw new VeoApiError(
           `Veo: too many polling errors`,
@@ -556,7 +557,7 @@ export const pollVeoTask = async (
           500
         );
       }
-      
+
       await new Promise(resolve => setTimeout(resolve, POLL_INTERVAL_MS));
     }
   }
@@ -607,9 +608,10 @@ export const pollVeo4kTask = async (
       // 4K takes longer - use extended interval
       await new Promise(resolve => setTimeout(resolve, POLL_INTERVAL_MS * 2));
     } catch (fetchError) {
+      if (fetchError instanceof VeoApiError) throw fetchError;
       consecutiveErrors++;
       onProgress?.(`Network error (${consecutiveErrors})`, attempt);
-      
+
       if (consecutiveErrors >= 15) {
         throw new VeoApiError(
           `Veo 4K: too many polling errors`,
@@ -617,7 +619,7 @@ export const pollVeo4kTask = async (
           500
         );
       }
-      
+
       await new Promise(resolve => setTimeout(resolve, POLL_INTERVAL_MS * 2));
     }
   }

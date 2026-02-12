@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { MAX_PROMPTS } from '../constants';
 
 interface BulkInputModalProps {
   isOpen: boolean;
@@ -22,7 +23,8 @@ const BulkInputModal: React.FC<BulkInputModalProps> = ({ isOpen, onClose, onProc
     const lines = text
       .split(/\n+/)
       .map(line => line.trim())
-      .filter(line => line.length > 0);
+      .filter(line => line.length > 0)
+      .slice(0, MAX_PROMPTS);
 
     onProcess(lines);
     onClose();

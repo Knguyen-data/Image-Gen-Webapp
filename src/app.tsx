@@ -673,7 +673,7 @@ INSTRUCTIONS:
     });
 
     const newRunId = crypto.randomUUID();
-    const countPerPrompt = settings.outputCount || 1;
+    const countPerPrompt = Math.max(1, Math.min(8, settings.outputCount || 1));
 
     // Construct summary
     const summaryPrompt = validItems.map(p => p.text).join(' || ');
@@ -1027,8 +1027,12 @@ INSTRUCTIONS:
   // --- DELETE LOGIC ---
   const handleDeleteRun = async (id: string) => {
     if (confirm("Delete this entire run history?")) {
-      await deleteRunFromDB(id);
-      setRuns(prev => prev.filter(r => r.id !== id));
+      try {
+        await deleteRunFromDB(id);
+        setRuns(prev => prev.filter(r => r.id !== id));
+      } catch (e) {
+        logger.error('App', 'Delete run failed', e);
+      }
     }
   };
 
@@ -1058,13 +1062,15 @@ INSTRUCTIONS:
 
   // --- VIDEO HANDLERS ---
   const handleDeleteVideo = async (videoId: string) => {
-    setGeneratedVideos(prev => prev.filter(v => v.id !== videoId));
+    const prev = generatedVideos;
+    setGeneratedVideos(p => p.filter(v => v.id !== videoId));
     // Also delete from IndexedDB
     try {
       await deleteGeneratedVideoFromDB(videoId);
       logger.debug('App', 'Deleted video from IndexedDB', { videoId });
     } catch (e) {
-      logger.warn('App', 'Failed to delete video from IndexedDB', e);
+      setGeneratedVideos(prev);
+      logger.error('App', 'Delete video failed', e);
     }
   };
 

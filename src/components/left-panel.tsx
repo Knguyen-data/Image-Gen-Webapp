@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { AppSettings, PromptItem, ReferenceImage, ImageSize, SeedreamQuality, AppMode, VideoScene, VideoSettings, VideoModel, KlingProDuration, KlingProAspectRatio, VeoGenerationType } from '../types';
-import { ASPECT_RATIO_LABELS, IMAGE_SIZE_LABELS, SEEDREAM_QUALITY_LABELS, DEFAULT_SETTINGS, MAX_REFERENCE_IMAGES } from '../constants';
+import { ASPECT_RATIO_LABELS, IMAGE_SIZE_LABELS, SEEDREAM_QUALITY_LABELS, DEFAULT_SETTINGS, MAX_REFERENCE_IMAGES, MAX_PROMPTS } from '../constants';
 import BulkInputModal from './bulk-input-modal';
 import VideoSceneQueue from './video-scene-queue';
 import VideoTrimmerModal from './video-trimmer-modal';
@@ -244,6 +244,10 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
   };
 
   const addPrompt = () => {
+    if (prompts.length >= MAX_PROMPTS) {
+      alert(`Maximum ${MAX_PROMPTS} prompts allowed. Remove some prompts first.`);
+      return;
+    }
     setPrompts([...prompts, { id: crypto.randomUUID(), text: '', referenceImages: [] }]);
     setTimeout(() => setActivePromptIndex(prompts.length), 50);
   };
@@ -272,7 +276,17 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
 
   const handleBulkProcess = (newLines: string[]) => {
     if (newLines.length === 0) return;
-    const newItems: PromptItem[] = newLines.map(text => ({
+
+    const existingCount = (prompts.length === 1 && prompts[0].text.trim() === '') ? 0 : prompts.length;
+    const available = MAX_PROMPTS - existingCount;
+    const linesToUse = newLines.slice(0, available);
+
+    if (linesToUse.length < newLines.length) {
+      alert(`Only ${linesToUse.length} of ${newLines.length} prompts added. Maximum ${MAX_PROMPTS} prompts allowed.`);
+    }
+    if (linesToUse.length === 0) return;
+
+    const newItems: PromptItem[] = linesToUse.map(text => ({
       id: crypto.randomUUID(),
       text,
       referenceImages: []

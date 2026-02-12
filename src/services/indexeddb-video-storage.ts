@@ -62,7 +62,14 @@ export const openVideoDB = async (): Promise<IDBDatabase> => {
       console.warn("Video DB upgrade blocked — close other tabs using this app");
     };
 
-    request.onsuccess = () => resolve(request.result);
+    request.onsuccess = () => {
+      const db = request.result;
+      db.onversionchange = () => {
+        db.close();
+        window.location.reload();
+      };
+      resolve(db);
+    };
     request.onerror = () => {
       console.error("Video IndexedDB Error:", request.error);
       reject(request.error);
@@ -103,6 +110,13 @@ export const saveVideoToDB = async (video: ReferenceVideo): Promise<void> => {
       tx.onerror = () => { db.close(); reject(request.error); };
     });
   } catch (error) {
+    if (
+      error instanceof DOMException &&
+      (error.name === 'QuotaExceededError' || error.code === 22)
+    ) {
+      console.error('IndexedDB quota exceeded (video):', error);
+      throw new Error('QUOTA_EXCEEDED: Storage full. Delete old videos to free space.');
+    }
     console.error("Failed to save video to DB:", error);
     throw error;
   }
@@ -259,6 +273,13 @@ export const saveGeneratedVideoToDB = async (video: GeneratedVideo): Promise<voi
       tx.onerror = () => { db.close(); reject(tx.error); };
     });
   } catch (error) {
+    if (
+      error instanceof DOMException &&
+      (error.name === 'QuotaExceededError' || error.code === 22)
+    ) {
+      console.error('IndexedDB quota exceeded (generated video):', error);
+      throw new Error('QUOTA_EXCEEDED: Storage full. Delete old videos to free space.');
+    }
     console.error("Failed to save generated video to DB:", error);
     throw error;
   }

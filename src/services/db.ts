@@ -135,7 +135,14 @@ export const openDB = async (): Promise<IDBDatabase> => {
       console.warn("DB upgrade blocked — close other tabs using this app");
     };
 
-    request.onsuccess = () => resolve(request.result);
+    request.onsuccess = () => {
+      const db = request.result;
+      db.onversionchange = () => {
+        db.close();
+        window.location.reload();
+      };
+      resolve(db);
+    };
     request.onerror = () => {
       console.error("IndexedDB Error:", request.error);
 

@@ -164,8 +164,8 @@ export const logger = {
   },
 };
 
-// Make logger available globally for debugging
-if (typeof window !== 'undefined') {
+// Make logger available globally for debugging (dev only)
+if (typeof window !== 'undefined' && import.meta.env.DEV) {
   (window as any).__logger = logger;
 }
 

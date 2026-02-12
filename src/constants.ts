@@ -85,3 +85,6 @@ export const DEFAULT_UNIFIED_VIDEO_SETTINGS: UnifiedVideoSettings = {
 
 // Maximum reference images per prompt
 export const MAX_REFERENCE_IMAGES = 7;
+
+// Maximum number of prompt cards
+export const MAX_PROMPTS = 50;
