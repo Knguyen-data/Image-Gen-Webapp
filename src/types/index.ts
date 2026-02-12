@@ -153,6 +153,9 @@ export interface LoraTrainingConfig {
   photos: File[]; // 10-25 face photos
   steps: number; // default 1000
   learningRate: number; // default 1e-4
+  networkDim?: number; // default 32
+  networkAlpha?: number; // default 16
+  resolution?: number; // default 1024
 }
 
 export type VideoRefMode = 'global' | 'per-scene';
