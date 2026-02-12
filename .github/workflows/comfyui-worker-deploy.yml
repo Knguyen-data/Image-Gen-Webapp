@@ -2,7 +2,7 @@ name: Deploy ComfyUI Worker
 
 on:
   push:
-    branches: [main, deploy/comfyui-v2-final]
+    branches: [master]
     paths:
       - 'workers/comfyui-worker/**'
   workflow_dispatch:
