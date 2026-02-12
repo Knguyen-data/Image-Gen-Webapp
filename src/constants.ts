@@ -75,6 +75,9 @@ export const DEFAULT_COMFYUI_SETTINGS: ComfyUISettings = {
 // RunPod endpoint (hardcoded since it's a personal deployment)
 export const COMFYUI_RUNPOD_ENDPOINT_ID = 'rj1ppodzmtdoiz';
 
+// RunPod LoRA Training endpoint (separate serverless worker)
+export const LORA_TRAINING_RUNPOD_ENDPOINT_ID = 'mpjk7veok6fb0j';
+
 // Video Validation Constraints (Kling 2.6 Motion Control)
 export const VIDEO_CONSTRAINTS = {
   allowedFormats: ['video/mp4', 'video/quicktime'],
