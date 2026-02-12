@@ -48,6 +48,7 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: workers/comfyui-worker
+          file: workers/comfyui-worker/Dockerfile
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
