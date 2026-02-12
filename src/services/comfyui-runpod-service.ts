@@ -48,39 +48,27 @@ export const buildWorkflowPrompt = (
   settings: ComfyUISettings,
   dimensions: ComfyUIDimensions,
   faceImageBase64?: string,
+  loraFilename?: string,
 ): Record<string, unknown> => {
   const seed =
     settings.seed === -1
       ? Math.floor(Math.random() * 2147483647)
       : settings.seed;
 
+  // Determine LoRA usage
+  const useLora = !!(loraFilename && loraFilename.length > 0);
+  const loraWeight = settings.loraWeight ?? 0.8;
+
+  // Source node IDs for MODEL and CLIP (rewired when LoRA is active)
+  let modelSource: [string, number] = ['1', 0]; // checkpoint MODEL
+  let clipSource: [string, number] = ['1', 1];  // checkpoint CLIP
+
   // Base nodes (always present)
   const prompt: Record<string, unknown> = {
-    // Checkpoint loader
+    // Checkpoint loader (outputs: MODEL[0], CLIP[1], VAE[2])
     '1': {
       class_type: 'CheckpointLoaderSimple',
       inputs: { ckpt_name: 'lustifySDXLNSFW_ggwpV7.safetensors' },
-    },
-    // CLIP loader
-    '2': {
-      class_type: 'CLIPLoader',
-      inputs: { clip_name: 't5xxl_fp16.safetensors', type: 'sdxl' },
-    },
-    // Positive prompt
-    '7': {
-      class_type: 'CLIPTextEncode',
-      inputs: {
-        text: promptText,
-        clip: ['2', 0],
-      },
-    },
-    // Negative prompt
-    '8': {
-      class_type: 'CLIPTextEncode',
-      inputs: {
-        text: 'ugly, blurry, low quality, deformed',
-        clip: ['2', 0],
-      },
     },
     // Empty latent image
     '13': {
@@ -91,37 +79,71 @@ export const buildWorkflowPrompt = (
         batch_size: 1,
       },
     },
-    // KSampler -- model input is wired below depending on IPAdapter
-    '10': {
-      class_type: 'KSampler',
+  };
+
+  // Inject LoRA loader between checkpoint and downstream nodes
+  if (useLora) {
+    prompt['20'] = {
+      class_type: 'LoraLoader',
       inputs: {
-        model: ['1', 0], // default: from checkpoint directly
-        positive: ['7', 0],
-        negative: ['8', 0],
-        latent_image: ['13', 0],
-        seed,
-        steps: settings.steps,
-        cfg: settings.cfg,
-        sampler_name: settings.sampler,
-        scheduler: settings.scheduler,
-        denoise: settings.denoise,
+        model: ['1', 0],
+        clip: ['1', 1],
+        lora_name: loraFilename,
+        strength_model: loraWeight,
+        strength_clip: loraWeight,
       },
+    };
+    modelSource = ['20', 0];
+    clipSource = ['20', 1];
+  }
+
+  // Positive prompt (uses CLIP from LoRA or checkpoint)
+  prompt['7'] = {
+    class_type: 'CLIPTextEncode',
+    inputs: {
+      text: promptText,
+      clip: clipSource,
     },
-    // VAE Decode
-    '11': {
-      class_type: 'VAEDecode',
-      inputs: {
-        samples: ['10', 0],
-        vae: ['1', 2],
-      },
+  };
+  // Negative prompt
+  prompt['8'] = {
+    class_type: 'CLIPTextEncode',
+    inputs: {
+      text: 'ugly, blurry, low quality, deformed',
+      clip: clipSource,
     },
-    // Save Image (output node)
-    '12': {
-      class_type: 'SaveImage',
-      inputs: {
-        images: ['11', 0],
-        filename_prefix: 'ComfyUI',
-      },
+  };
+
+  // KSampler -- model input wired to LoRA/IPAdapter/checkpoint
+  prompt['10'] = {
+    class_type: 'KSampler',
+    inputs: {
+      model: modelSource, // default: from LoRA or checkpoint
+      positive: ['7', 0],
+      negative: ['8', 0],
+      latent_image: ['13', 0],
+      seed,
+      steps: settings.steps,
+      cfg: settings.cfg,
+      sampler_name: settings.sampler,
+      scheduler: settings.scheduler,
+      denoise: settings.denoise,
+    },
+  };
+  // VAE Decode
+  prompt['11'] = {
+    class_type: 'VAEDecode',
+    inputs: {
+      samples: ['10', 0],
+      vae: ['1', 2],
+    },
+  };
+  // Save Image (output node)
+  prompt['12'] = {
+    class_type: 'SaveImage',
+    inputs: {
+      images: ['11', 0],
+      filename_prefix: 'ComfyUI',
     },
   };
 
@@ -144,12 +166,12 @@ export const buildWorkflowPrompt = (
       class_type: 'LoadImage',
       inputs: { image: faceImageBase64 },
     };
-    // IPAdapter Advanced
+    // IPAdapter Advanced — receives model from LoRA (or checkpoint if no LoRA)
     prompt['5'] = {
       class_type: 'IPAdapterAdvanced',
       inputs: {
-        model: ['1', 0],
-        clip: ['2', 0],
+        model: modelSource, // LoRA output or checkpoint
+        clip: clipSource,
         ipadapter: ['4', 0],
         clip_vision: ['3', 0],
         image: ['6', 0],
@@ -159,7 +181,7 @@ export const buildWorkflowPrompt = (
         embeds_scaling: 'V only',
       },
     };
-    // Rewire KSampler to use IPAdapter-modified model
+    // Rewire KSampler to use IPAdapter-modified model (after LoRA)
     (prompt['10'] as Record<string, Record<string, unknown>>).inputs.model = [
       '5',
       0,
@@ -178,8 +200,19 @@ export const submitRunPodJob = async (
   endpointId: string,
   apiKey: string,
   workflowPrompt: Record<string, unknown>,
+  loraOptions?: { lora_name: string; lora_weight: number; lora_url?: string },
 ): Promise<string> => {
   const url = `${RUNPOD_BASE}/v2/${endpointId}/run`;
+
+  // Build input payload — include LoRA fields at top level for handler.py
+  const input: Record<string, unknown> = { ...workflowPrompt };
+  if (loraOptions) {
+    input.lora_name = loraOptions.lora_name;
+    input.lora_weight = loraOptions.lora_weight;
+    if (loraOptions.lora_url) {
+      input.lora_url = loraOptions.lora_url;
+    }
+  }
 
   const response = await fetch(url, {
     method: 'POST',
@@ -187,7 +220,7 @@ export const submitRunPodJob = async (
       'Content-Type': 'application/json',
       Authorization: `Bearer ${apiKey}`,
     },
-    body: JSON.stringify({ input: workflowPrompt }),
+    body: JSON.stringify({ input }),
     signal: AbortSignal.timeout(30000),
   });
 
@@ -261,61 +294,31 @@ export const cancelRunPodJob = async (
 // Image extraction helpers
 // ---------------------------------------------------------------------------
 
-/** Convert a blob to { base64, mimeType } */
-const blobToBase64 = (blob: Blob): Promise<{ base64: string; mimeType: string }> =>
-  new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      const dataUrl = reader.result as string;
-      resolve({
-        base64: dataUrl.split(',')[1],
-        mimeType: blob.type || 'image/png',
-      });
-    };
-    reader.onerror = reject;
-    reader.readAsDataURL(blob);
-  });
-
 /**
  * Extract base64 image from ComfyUI worker output.
  *
- * The worker returns `{ success, outputs }` where outputs is keyed by node id.
- * SaveImage node ("12") returns `{ images: [{ filename, subfolder, type }] }`.
- * The handler may also include `data` (base64) or `url` depending on config.
+ * The handler returns `{ images: [{ filename, data, type }] }`
+ * where `data` is the base64-encoded PNG.
  */
 const extractImageFromOutput = async (
   output: ComfyUIRunPodJob['output'],
 ): Promise<{ base64: string; mimeType: string }> => {
-  if (!output?.success || !output.outputs) {
+  if (!output) {
     throw new Error('No output from ComfyUI worker');
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const saveNodeOutput = (output.outputs as Record<string, any>)['12'];
-  if (!saveNodeOutput?.images?.[0]) {
-    throw new Error('No images in ComfyUI output');
+  // Error from handler
+  if (output.error) {
+    throw new Error(`ComfyUI error: ${output.error}`);
   }
 
-  const imageData = saveNodeOutput.images[0];
-
-  // Direct base64 data
-  if (imageData.data) {
-    return { base64: imageData.data, mimeType: 'image/png' };
+  // New handler format: { images: [{ filename, data, type }] }
+  const images = output.images;
+  if (images && images.length > 0 && images[0].data) {
+    return { base64: images[0].data, mimeType: images[0].type || 'image/png' };
   }
 
-  // URL-based output (download and convert)
-  if (imageData.url) {
-    const imgResponse = await fetch(imageData.url, {
-      signal: AbortSignal.timeout(30000),
-    });
-    if (!imgResponse.ok) {
-      throw new Error(`Image download failed: ${imgResponse.status}`);
-    }
-    const blob = await imgResponse.blob();
-    return blobToBase64(blob);
-  }
-
-  throw new Error('Unexpected output format from ComfyUI worker');
+  throw new Error('No images in ComfyUI output');
 };
 
 // ---------------------------------------------------------------------------
@@ -333,6 +336,7 @@ export const generateWithComfyUI = async (
   dimensions: ComfyUIDimensions,
   faceImageBase64?: string,
   onProgress?: (stage: string, detail?: string) => void,
+  loraFilename?: string,
 ): Promise<{ base64: string; mimeType: string }> => {
   // Step 1: Build workflow
   onProgress?.('building', 'Building ComfyUI workflow...');
@@ -341,6 +345,7 @@ export const generateWithComfyUI = async (
     settings,
     dimensions,
     faceImageBase64,
+    loraFilename,
   );
 
   // Step 2: Submit job
