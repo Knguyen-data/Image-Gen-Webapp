@@ -70,6 +70,9 @@ export const DEFAULT_COMFYUI_SETTINGS: ComfyUISettings = {
   seed: -1,
   ipAdapterWeight: 1.0,
   ipAdapterFaceidWeight: 1.0,
+  loraId: undefined,
+  loraWeight: 0.8,
+  loraFilename: undefined,
 };
 
 // RunPod endpoint (hardcoded since it's a personal deployment)
