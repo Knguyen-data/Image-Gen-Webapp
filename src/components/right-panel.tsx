@@ -338,7 +338,7 @@ const EditingWorkspace: React.FC<EditingWorkspaceProps> = ({ allImages, generate
                                   <AssetItem
                                     key={video.id}
                                     thumbnail={video.thumbnailUrl || null}
-                                    name={video.promptUsed || 'Generated video'}
+                                    name={video.prompt || 'Generated video'}
                                     badge={video.duration ? `${video.duration}s` : undefined}
                                     type="video"
                                   />
@@ -1119,7 +1119,10 @@ const RightPanel: React.FC<RightPanelProps> = ({
                         >
                           <ImageCard
                             image={img}
-                            onRetry={onRetryImage}
+                            selected={false}
+                            onToggleSelect={() => {}}
+                            onOpen={() => {}}
+                            onRetry={() => onRetryImage(img)}
                             onDelete={() => onDeleteImage(img.runId, img.id)}
                             appMode={appMode}
                           />

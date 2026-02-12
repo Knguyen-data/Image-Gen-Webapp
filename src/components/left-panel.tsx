@@ -157,6 +157,41 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
     return 'Gemini Mode';
   };
 
+  // Get mode-specific image guidance
+  const getImageDropLabel = (): { label: string; hint: string; icon: string; maxRecommended: number } => {
+    if (safeSettings.spicyMode?.enabled && safeSettings.spicyMode.subMode === 'extreme') {
+      return {
+        label: '🧬 Face Reference',
+        hint: 'Drop a clear face photo for face consistency (IPAdapter FaceID)',
+        icon: 'face',
+        maxRecommended: 1,
+      };
+    }
+    if (safeSettings.spicyMode?.enabled && safeSettings.spicyMode.subMode === 'edit') {
+      return {
+        label: '🖼️ Source Image',
+        hint: 'Drop the image you want to edit with your prompt',
+        icon: 'edit',
+        maxRecommended: 1,
+      };
+    }
+    if (safeSettings.spicyMode?.enabled && safeSettings.spicyMode.subMode === 'generate') {
+      return {
+        label: '🚫 No Images',
+        hint: 'Text-to-image only — no reference images in Generate mode',
+        icon: 'none',
+        maxRecommended: 0,
+      };
+    }
+    // Gemini default
+    return {
+      label: '📎 Reference Images',
+      hint: 'Drop images for style/content guidance (up to 10)',
+      icon: 'ref',
+      maxRecommended: 10,
+    };
+  };
+
   // --- VIDEO MODEL SELECTOR HANDLER ---
   const handleModelSelect = (model: VideoModel) => {
     setSelectedVideoModel(model);
@@ -754,8 +789,8 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
                   <VideoSceneQueue
                     scenes={videoScenes}
                     setScenes={setVideoScenes}
-                    videoSettings={videoSettings}
-                    setVideoSettings={setVideoSettings}
+                    videoSettings={videoSettings as any}
+                    setVideoSettings={setVideoSettings as any}
                     onOpenVideoTrimmer={handleOpenVideoTrimmer}
                     appMode={appMode}
                     onGenerate={onVideoGenerate}
@@ -899,8 +934,8 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
                   <VideoSceneQueue
                     scenes={videoScenes}
                     setScenes={setVideoScenes}
-                    videoSettings={videoSettings}
-                    setVideoSettings={setVideoSettings}
+                    videoSettings={videoSettings as any}
+                    setVideoSettings={setVideoSettings as any}
                     onOpenVideoTrimmer={handleOpenVideoTrimmer}
                     appMode={appMode}
                     onGenerate={onVideoGenerate}
@@ -1546,12 +1581,36 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
                       >
                         <textarea
                           className="w-full bg-transparent p-3 text-sm text-gray-200 outline-none resize-y min-h-[80px] font-mono relative z-10"
-                          placeholder={`Describe image #${index + 1}...`}
+                          placeholder={
+                            safeSettings.spicyMode?.enabled && safeSettings.spicyMode.subMode === 'extreme'
+                              ? `Describe what you want to generate... (attach face photo below for face lock)`
+                              : safeSettings.spicyMode?.enabled && safeSettings.spicyMode.subMode === 'edit'
+                                ? `Describe the edits to apply to your source image...`
+                                : safeSettings.spicyMode?.enabled && safeSettings.spicyMode.subMode === 'generate'
+                                  ? `Describe what you want to generate (text only, no images)...`
+                                  : `Describe image #${index + 1}... (drop reference images below)`
+                          }
                           value={pItem.text}
                           onChange={(e) => updatePromptText(index, e.target.value)}
                           onFocus={() => setActivePromptIndex(index)}
           
                         />
+
+                        {/* Mode-specific drop zone guidance */}
+                        {(() => {
+                          const dropInfo = getImageDropLabel();
+                          return (
+                            <div className={`px-3 pt-1 ${
+                              dropInfo.icon === 'none' ? 'opacity-40' : ''
+                            }`}>
+                              <p className="text-[10px] font-medium text-gray-500 flex items-center gap-1.5">
+                                <span>{dropInfo.label}</span>
+                                <span className="text-gray-600">—</span>
+                                <span className="text-gray-600 font-normal">{dropInfo.hint}</span>
+                              </p>
+                            </div>
+                          );
+                        })()}
 
                         {/* Local Image Strip */}
                         <div className="px-3 pb-3 flex flex-wrap gap-2 items-center rounded-b-lg">
@@ -1572,7 +1631,7 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
                                 ? 'border-gray-700 hover:border-dash-300 hover:bg-gray-900 cursor-pointer text-gray-500 hover:text-dash-300'
                                 : 'border-gray-800 cursor-not-allowed text-gray-700'
                             }`}
-                            title={supportsReferenceImages() ? "Click or Drag onto card" : `${getModeName()} does not support reference images`}
+                            title={supportsReferenceImages() ? getImageDropLabel().hint : `${getModeName()} does not support reference images`}
                           >
                             <input
                               type="file"
@@ -1829,6 +1888,16 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
                     <svg className="w-3 h-3 text-red-400/60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
+                    {hasRefImage && (
+                      <span className="text-[10px] text-green-400 font-normal ml-2">
+                        ✓ Face reference attached — IP-Adapter will apply face lock
+                      </span>
+                    )}
+                    {!hasRefImage && (
+                      <span className="text-[10px] text-yellow-400/60 font-normal ml-2">
+                        No face reference — text-to-image only
+                      </span>
+                    )}
                   </div>
 
                   {/* Steps */}
@@ -2040,7 +2109,12 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
             )}
 
             {/* Spicy Mode Warning */}
-            {safeSettings.spicyMode?.enabled && !hasKieApiKey && (
+            {safeSettings.spicyMode?.enabled && safeSettings.spicyMode.subMode === 'extreme' && !hasRunPodApiKey && (
+              <div className="col-span-2 p-2 bg-red-900/20 border border-red-500/30 rounded text-xs text-red-300">
+                Set your RunPod API key to use Extreme Mode
+              </div>
+            )}
+            {safeSettings.spicyMode?.enabled && safeSettings.spicyMode.subMode !== 'extreme' && !hasKieApiKey && (
               <div className="col-span-2 p-2 bg-red-900/20 border border-red-500/30 rounded text-xs text-red-300">
                 Set your Kie.ai API key to use Spicy Mode
               </div>
@@ -2059,7 +2133,11 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
             {validPromptsCount <= 1 ? (
               <button
                 onClick={() => onGenerate(false)}
-                disabled={validPromptsCount === 0 || (safeSettings.spicyMode?.enabled ? !hasKieApiKey : !hasApiKey)}
+                disabled={validPromptsCount === 0 || (
+                  safeSettings.spicyMode?.enabled
+                    ? (safeSettings.spicyMode.subMode === 'extreme' ? !hasRunPodApiKey : !hasKieApiKey)
+                    : !hasApiKey
+                )}
                 className={`w-full py-3 px-4 font-medium rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed flex flex-col items-center justify-center leading-tight ${
                   safeSettings.spicyMode?.enabled
                     ? 'bg-red-900/30 hover:bg-red-900/50 text-red-200 border border-red-500/30'
@@ -2072,7 +2150,11 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
             ) : (
               <button
                 onClick={() => onGenerate(true)}
-                disabled={validPromptsCount === 0 || (safeSettings.spicyMode?.enabled ? !hasKieApiKey : !hasApiKey)}
+                disabled={validPromptsCount === 0 || (
+                  safeSettings.spicyMode?.enabled
+                    ? (safeSettings.spicyMode.subMode === 'extreme' ? !hasRunPodApiKey : !hasKieApiKey)
+                    : !hasApiKey
+                )}
                 className={`w-full py-3 px-4 font-bold rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed flex flex-col items-center justify-center leading-tight ${
                   safeSettings.spicyMode?.enabled
                     ? 'bg-red-500 hover:bg-red-400 text-white shadow-[0_0_15px_rgba(239,68,68,0.3)]'
@@ -2086,7 +2168,10 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
             {!safeSettings.spicyMode?.enabled && !hasApiKey && (
               <p className="text-center text-xs text-red-400 animate-pulse cursor-pointer" onClick={onOpenApiKey}>Gemini API Key required to generate</p>
             )}
-            {safeSettings.spicyMode?.enabled && !hasKieApiKey && (
+            {safeSettings.spicyMode?.enabled && safeSettings.spicyMode.subMode === 'extreme' && !hasRunPodApiKey && (
+              <p className="text-center text-xs text-red-400 animate-pulse cursor-pointer" onClick={onOpenApiKey}>RunPod API Key required for Extreme Mode</p>
+            )}
+            {safeSettings.spicyMode?.enabled && safeSettings.spicyMode.subMode !== 'extreme' && !hasKieApiKey && (
               <p className="text-center text-xs text-red-400 animate-pulse cursor-pointer" onClick={onOpenApiKey}>Kie.ai API Key required for Spicy Mode</p>
             )}
           </div>

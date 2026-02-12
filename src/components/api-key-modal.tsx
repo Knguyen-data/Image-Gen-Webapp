@@ -111,7 +111,7 @@ const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
       throw new Error('RunPod API key seems too short');
     }
     // Try to hit the health endpoint
-    const response = await fetch('https://api.runpod.ai/v2/llqkdhn3kk0ze6/health', {
+    const response = await fetch('https://api.runpod.ai/v2/rj1ppodzmtdoiz/health', {
       method: 'GET',
       headers: { 'Authorization': `Bearer ${key}` }
     });
@@ -309,12 +309,14 @@ const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
                     ? 'border-red-700/50 focus:ring-red-500'
                     : isFreepikMode
                       ? 'border-cyan-700/50 focus:ring-cyan-500'
-                      : 'border-gray-700 focus:ring-dash-300'
+                      : isRunPodMode
+                        ? 'border-orange-700/50 focus:ring-orange-500'
+                        : 'border-gray-700 focus:ring-dash-300'
               } rounded-lg py-3 pl-4 pr-10 text-sm text-white focus:ring-2 focus:border-transparent outline-none font-mono disabled:opacity-50 transition-colors`}
               placeholder={
-                isSpicyMode ? "Enter Kie.ai API key..." : 
-                
-                isFreepikMode ? "Enter Freepik API key..." : 
+                isSpicyMode ? "Enter Kie.ai API key..." :
+                isFreepikMode ? "Enter Freepik API key..." :
+                isRunPodMode ? "Enter RunPod API key..." :
                 "Paste your Gemini API key..."
               }
               value={inputVal}

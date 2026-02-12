@@ -7,7 +7,8 @@ import {
 } from "../../types";
 import { VeoFrameZones, VeoMaterialZone } from "./veo-image-upload";
 import VeoSettingsPanel, { VeoSettings } from "./veo-settings-panel";
-import VeoResultsView, { VeoTaskResult } from "./veo-results-view";
+import VeoResultsView from "./veo-results-view";
+import { VeoTaskResult } from "./veo-results-view-types";
 
 // ============ Validation ============
 
@@ -358,14 +359,18 @@ const VeoGenerationPanel: React.FC<VeoGenerationPanelProps> = ({
       </div>
 
       {/* 5. Results */}
-      <VeoResultsView
-        result={taskResult ?? null}
-        onGet1080p={onGet1080p}
-        onGet4k={onGet4k}
-        onExtend={onExtend}
-        onNewVideo={handleNewVideo}
-        isUpgrading={isUpgrading}
-      />
+      {taskResult && (
+        <VeoResultsView
+          taskId={taskResult.taskId}
+          status={taskResult.status}
+          result={taskResult.result}
+          error={taskResult.error}
+          progress={taskResult.progress}
+          onGet1080p={onGet1080p}
+          onGet4k={onGet4k}
+          onExtend={onExtend}
+        />
+      )}
 
       {/* 6. Settings */}
       <VeoSettingsPanel

@@ -99,7 +99,7 @@ export function CompareModal({ videoUrls, onClose }: CompareModalProps) {
           {videoUrls.map((url, index) => (
             <div key={index} className="relative bg-black rounded overflow-hidden">
               <video
-                ref={el => videoRefs.current[index] = el}
+                ref={el => { videoRefs.current[index] = el; }}
                 src={url}
                 className="w-full h-full object-contain"
                 controls

@@ -1,7 +1,10 @@
 /**
  * Centralized Logging Service
  * Provides consistent logging across the application with context and timestamps
+ * Includes Supabase integration for error tracking and analytics
  */
+
+import { supabase } from './supabase';
 
 type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 
@@ -27,6 +30,10 @@ const LOG_LEVEL_PRIORITY: Record<LogLevel, number> = {
 // Current log level (can be changed at runtime)
 let currentLogLevel: LogLevel = 'debug';
 
+// Supabase logging configuration
+let supabaseLoggingEnabled = true;
+let supabaseLogLevel: LogLevel = 'warn'; // Only warn and error go to Supabase
+
 // Format timestamp for logs
 const formatTimestamp = (): string => {
   const now = new Date();
@@ -50,6 +57,62 @@ const addToHistory = (entry: LogEntry): void => {
   }
 };
 
+/**
+ * Send log entry to Supabase for analytics and error tracking
+ * Only sends warn/error logs to avoid overwhelming the database
+ */
+const logToSupabase = async (entry: LogEntry): Promise<void> => {
+  if (!supabaseLoggingEnabled) return;
+  if (LOG_LEVEL_PRIORITY[entry.level] < LOG_LEVEL_PRIORITY[supabaseLogLevel]) return;
+
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    
+    // Prepare metadata (must be valid Json type)
+    const metadata: { context: string; message: string; userAgent: string; url: string; timestamp: string; data?: unknown } = {
+      context: entry.context,
+      message: entry.message,
+      userAgent: navigator.userAgent,
+      url: window.location.href,
+      timestamp: entry.timestamp,
+    };
+
+    // Add data if present and serializable
+    if (entry.data) {
+      try {
+        // Limit data size to prevent huge payloads
+        const dataStr = JSON.stringify(entry.data);
+        if (dataStr.length < 10000) {
+          metadata.data = entry.data;
+        } else {
+          metadata.data = '[Data too large]';
+        }
+      } catch {
+        metadata.data = '[Non-serializable data]';
+      }
+    }
+
+    // Insert into usage_logs table
+    const { error } = await supabase
+      .from('usage_logs')
+      .insert({
+        user_id: user?.id || 'anonymous',
+        provider: 'app',
+        action: `log:${entry.level}`,
+        credits_consumed: 0,
+        metadata: metadata as any,
+      });
+
+    if (error) {
+      // Silent fail - don't break the app if logging fails
+      console.warn('[Logger] Failed to send log to Supabase:', error);
+    }
+  } catch (err) {
+    // Silent fail
+    console.warn('[Logger] Exception sending log to Supabase:', err);
+  }
+};
+
 // Core logging function
 const log = (level: LogLevel, context: string, message: string, data?: unknown): void => {
   if (LOG_LEVEL_PRIORITY[level] < LOG_LEVEL_PRIORITY[currentLogLevel]) {
@@ -70,6 +133,9 @@ const log = (level: LogLevel, context: string, message: string, data?: unknown):
   for (const listener of listeners) {
     try { listener(entry); } catch { /* swallow listener errors */ }
   }
+
+  // Send to Supabase (fire and forget)
+  logToSupabase(entry).catch(() => { /* silent fail */ });
 
   const formattedMessage = formatLogEntry(entry);
   const style = getLogStyle(level);
@@ -122,6 +188,15 @@ export const logger = {
   // Get current log level
   getLevel: () => currentLogLevel,
 
+  // Supabase logging configuration
+  setSupabaseLogging: (enabled: boolean, minLevel?: LogLevel) => {
+    supabaseLoggingEnabled = enabled;
+    if (minLevel) supabaseLogLevel = minLevel;
+    logger.info('Logger', `Supabase logging ${enabled ? 'enabled' : 'disabled'} (min: ${supabaseLogLevel})`);
+  },
+
+  isSupabaseLoggingEnabled: () => supabaseLoggingEnabled,
+
   // Get log history for debugging
   getHistory: () => [...logHistory],
 
@@ -161,6 +236,38 @@ export const logger = {
       const idx = listeners.indexOf(fn);
       if (idx >= 0) listeners.splice(idx, 1);
     };
+  },
+
+  // Log API call for analytics
+  logApiCall: async (
+    provider: string,
+    action: string,
+    creditsConsumed: number,
+    metadata?: Record<string, unknown>
+  ): Promise<void> => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      const { error } = await supabase
+        .from('usage_logs')
+        .insert({
+          user_id: user?.id || 'anonymous',
+          provider,
+          action,
+          credits_consumed: creditsConsumed,
+          metadata: {
+            ...metadata,
+            userAgent: navigator.userAgent,
+            url: window.location.href,
+          },
+        });
+
+      if (error) {
+        logger.warn('Logger', 'Failed to log API call', error);
+      }
+    } catch (err) {
+      logger.warn('Logger', 'Exception logging API call', err);
+    }
   },
 };
 

@@ -1094,7 +1094,10 @@ const VideoEditorModal: React.FC<VideoEditorModalProps> = ({
             </button>
 
             <button
-              onClick={handleImportUrl}
+              onClick={() => {
+                const url = prompt('Enter video URL:');
+                if (url) handleImportUrl(url);
+              }}
               className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs text-gray-400 hover:text-white hover:bg-gray-800/50 transition-all"
             >
               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

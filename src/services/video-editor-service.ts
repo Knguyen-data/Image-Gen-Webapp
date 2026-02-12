@@ -340,7 +340,7 @@ class VideoEditorService {
     
     // Read file as ArrayBuffer to avoid creating blob URLs that trigger HEAD errors
     const arrayBuffer = await file.arrayBuffer();
-    const source = await Source.from(arrayBuffer);
+    const source = await Source.from(arrayBuffer as any);
     const clip = new VideoClip(source as any);
 
     await layer.add(clip);
