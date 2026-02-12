@@ -199,6 +199,9 @@ class LoraModelServiceImpl implements LoraModelService {
         training_images: imageUrls,
         steps: config.steps,
         learning_rate: config.learningRate,
+        network_dim: config.networkDim,
+        network_alpha: config.networkAlpha,
+        resolution: config.resolution,
         output_name: `lora_${userId}_${loraId.slice(0, 8)}`,
       };
 
@@ -521,10 +524,10 @@ export async function getTrainingImageUrl(storagePath: string): Promise<string> 
   return data.publicUrl;
 }
 
-export const DEFAULT_LORA_TRAINING_CONFIG: LoraTrainingConfig = {
+export const DEFAULT_LORA_TRAINING_CONFIG: Partial<LoraTrainingConfig> = {
   steps: 1000,
   learningRate: 1e-4,
   networkDim: 32,
   networkAlpha: 32,
-  resolution: 512,
+  resolution: 1024,
 };
