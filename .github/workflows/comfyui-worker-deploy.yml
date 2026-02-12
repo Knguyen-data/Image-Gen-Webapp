@@ -62,19 +62,33 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
-      - name: Get image digest
-        id: image
+      - name: Get template ID from endpoint
+        id: endpoint
         run: |
-          DIGEST=$(docker manifest inspect docker.io/${{ env.IMAGE_NAME }}:latest --format '{{.manifests[0].digest}}')
-          echo "digest=$DIGEST" >> $GITHUB_OUTPUT
-          echo "Image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@$DIGEST"
+          RESPONSE=$(curl -s -H "Authorization: Bearer ${{ secrets.RUNPOD_API_KEY }}" \
+            "https://rest.runpod.io/v1/endpoints/${{ secrets.RUNPOD_COMFYUI_ENDPOINT_ID }}")
+          TEMPLATE_ID=$(echo "$RESPONSE" | jq -r '.templateId')
+          if [ -z "$TEMPLATE_ID" ] || [ "$TEMPLATE_ID" = "null" ]; then
+            echo "Failed to get template ID from endpoint"
+            echo "$RESPONSE"
+            exit 1
+          fi
+          echo "template_id=$TEMPLATE_ID" >> $GITHUB_OUTPUT
+          echo "Template ID: $TEMPLATE_ID"
 
-      - name: Notify (placeholder for RunPod deploy)
+      - name: Update template Docker image
         run: |
-          echo "✅ Build complete!"
-          echo "📦 Image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
-          echo ""
-          echo "To deploy to RunPod:"
-          echo "1. Go to https://runpod.io/serverless"
-          echo "2. Create endpoint with container: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
-          echo "3. Save endpoint ID"
+          RESPONSE=$(curl -s -w "\n%{http_code}" -X PATCH \
+            -H "Authorization: Bearer ${{ secrets.RUNPOD_API_KEY }}" \
+            -H "Content-Type: application/json" \
+            -d '{"imageName": "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"}' \
+            "https://rest.runpod.io/v1/templates/${{ steps.endpoint.outputs.template_id }}")
+          HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+          BODY=$(echo "$RESPONSE" | head -n -1)
+          if [ "$HTTP_CODE" -ge 400 ]; then
+            echo "Failed to update template (HTTP $HTTP_CODE):"
+            echo "$BODY"
+            exit 1
+          fi
+          echo "Template updated to ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
+          echo "Rolling release triggered on endpoint ${{ secrets.RUNPOD_COMFYUI_ENDPOINT_ID }}"
