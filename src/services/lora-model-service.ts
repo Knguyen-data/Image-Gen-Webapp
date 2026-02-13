@@ -185,33 +185,8 @@ class LoraModelServiceImpl implements LoraModelService {
     const loraId = ((loraRecord as unknown) as { id: string }).id;
 
     try {
-      // Upload training images to Supabase Storage
-      await this.uploadTrainingImages(loraId, userId, config.photos);
-
-      // Get training image URLs
-      const { data: images, error: imagesError } = await supabase
-        .from('lora_training_images' as AnyRecord)
-        .select('storage_path')
-        .eq('lora_id', loraId);
-
-      if (imagesError || !images?.length) {
-        throw new Error('No training images found for this LoRA model');
-      }
-
-      // Get signed URLs for private bucket (valid for 24 hours)
-      const imageUrls = await Promise.all(
-        ((images as unknown) as Array<{ storage_path: string }>).map(async (img) => {
-          const { data, error } = await supabase.storage
-            .from('lora-training-images')
-            .createSignedUrl(img.storage_path, 86400); // 24 hours
-
-          if (error || !data?.signedUrl) {
-            throw new Error(`Failed to get signed URL for ${img.storage_path}: ${error?.message}`);
-          }
-
-          return data.signedUrl;
-        })
-      );
+      // Upload training images to R2 (new approach)
+      const imageUrls = await this.uploadTrainingImagesToR2(loraId, userId, config.photos);
 
       // Submit RunPod training job
       const workflowInput = {
@@ -360,6 +335,74 @@ class LoraModelServiceImpl implements LoraModelService {
     }
 
     logger.info('LoraService', `Batch uploaded ${photos.length} training images`, { loraId });
+  }
+
+  // ---- R2 Image Upload (NEW) ----
+
+  private async uploadTrainingImagesToR2(
+    loraId: string,
+    userId: string,
+    photos: File[],
+  ): Promise<string[]> {
+    const RUNPOD_BASE = import.meta.env.VITE_RUNPOD_LORA_BASE_URL || '/api/runpod';
+    const isLocal = RUNPOD_BASE.startsWith('http://localhost') || RUNPOD_BASE.startsWith('http://127.0.0.1');
+    const uploadUrl = isLocal
+      ? `${RUNPOD_BASE}/upload-url`
+      : `${RUNPOD_BASE}/v2/${LORA_TRAINING_ENDPOINT_ID}/run`;
+
+    const headers: Record<string, string> = {};
+    if (!isLocal) {
+      headers['Authorization'] = `Bearer ${import.meta.env.VITE_RUNPOD_API_KEY || ''}`;
+    }
+
+    const uploadedUrls: string[] = [];
+
+    logger.info('LoraService', `Uploading ${photos.length} training images to R2...`);
+
+    for (let i = 0; i < photos.length; i++) {
+      const file = photos[i];
+      const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg';
+      const filename = `training/${userId}/${loraId}/${Date.now()}_${i}.${ext}`;
+
+      try {
+        // Get pre-signed upload URL from handler
+        const urlResponse = await fetch(`${uploadUrl}?filename=${encodeURIComponent(filename)}&content_type=${file.type}`, {
+          method: 'GET',
+          headers,
+        });
+
+        if (!urlResponse.ok) {
+          throw new Error(`Failed to get upload URL: ${urlResponse.status}`);
+        }
+
+        const { upload_url: presignedUrl } = await urlResponse.json();
+
+        // Upload to R2 using pre-signed URL
+        const uploadResponse = await fetch(presignedUrl, {
+          method: 'PUT',
+          headers: { 'Content-Type': file.type },
+          body: file,
+        });
+
+        if (!uploadResponse.ok) {
+          throw new Error(`R2 upload failed: ${uploadResponse.status}`);
+        }
+
+        // Construct public R2 URL
+        const r2Endpoint = import.meta.env.VITE_R2_ENDPOINT || 'https://r2-media-upload.tnguyen633.workers.dev';
+        const r2Bucket = import.meta.env.VITE_R2_BUCKET || 'lora-training-images';
+        const publicUrl = `${r2Endpoint}/${r2Bucket}/${filename}`;
+        
+        uploadedUrls.push(publicUrl);
+        logger.info('LoraService', `Uploaded ${i + 1}/${photos.length}: ${file.name}`);
+      } catch (error) {
+        logger.error('LoraService', `Failed to upload ${file.name}`, error);
+        throw new Error(`Failed to upload ${file.name}: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+
+    logger.info('LoraService', `Successfully uploaded ${uploadedUrls.length} images to R2`);
+    return uploadedUrls;
   }
 
   // ---- Training polling ----

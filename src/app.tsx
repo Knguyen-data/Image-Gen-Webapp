@@ -2633,6 +2633,7 @@ INSTRUCTIONS:
             isOpen={true}
             onClose={() => setShowVideoEditor(false)}
             videos={generatedVideos.filter(v => v.status === 'success' && v.url)}
+            images={runs.flatMap(run => run.images).filter(img => img.status === 'success' || !img.status)}
             onExportComplete={(video) => {
               setGeneratedVideos(prev => [video, ...prev]);
               import('./services/indexeddb-video-storage').then(({ saveGeneratedVideoToDB }) => {

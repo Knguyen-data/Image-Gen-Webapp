@@ -850,16 +850,52 @@ const StockGallery: React.FC<StockGalleryProps> = ({ onSelectVideo, onClose, mod
                 <div className="text-[10px] text-gray-500 mb-1">
                   {columnCount} cols × {rowCount} rows = {videos.length} videos | {gridContainerSize.width}×{gridContainerSize.height}
                 </div>
-                {/* Simple fallback grid */}
+                {/* Simple fallback grid with thumbnails */}
                 <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${columnCount}, 1fr)` }}>
-                  {videos.slice(0, 12).map((video, idx) => (
-                    <div key={video.id + idx} className="aspect-video bg-gray-800 rounded-lg border border-gray-700 flex items-center justify-center relative overflow-hidden">
-                      <span className="text-xs text-gray-400 truncate px-2">{video.name}</span>
-                      {/* Hover overlay */}
-                      <div className="absolute inset-0 bg-black/50 opacity-0 hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-                        <button className="px-2 py-1 bg-white/20 rounded text-xs">▶</button>
-                        <button className="px-2 py-1 bg-dash-600/60 rounded text-xs">+</button>
+                  {videos.slice(0, 12).map((video) => (
+                    <div
+                      key={video.id}
+                      className="group relative aspect-video bg-gray-800 rounded-lg border border-gray-700 overflow-hidden cursor-pointer"
+                      onClick={() => onPreview(video, videos.indexOf(video))}
+                      onMouseEnter={() => onHover(video.id)}
+                      onMouseLeave={() => onHover(null)}
+                    >
+                      {/* Thumbnail placeholder with play icon */}
+                      <div className="absolute inset-0 flex items-center justify-center bg-gray-900/80">
+                        <svg className="w-8 h-8 text-gray-600 group-hover:text-lime-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
                       </div>
+                      {/* Video name overlay */}
+                      <div className="absolute bottom-0 left-0 right-0 p-1 bg-gradient-to-t from-black/90 to-transparent">
+                        <span className="text-[9px] text-gray-300 truncate block">{video.name}</span>
+                      </div>
+                      {/* Hover overlay */}
+                      <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); onPreview(video, videos.indexOf(video)); }}
+                          className="p-2 rounded-full bg-white/20 hover:bg-white/30 transition-colors"
+                        >
+                          <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M8 5v14l11-7z" />
+                          </svg>
+                        </button>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); onAdd(video); }}
+                          className="p-2 rounded-full bg-lime-500/60 hover:bg-lime-500/80 transition-colors"
+                        >
+                          <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
+                          </svg>
+                        </button>
+                      </div>
+                      {/* Duration badge */}
+                      {video.duration > 0 && (
+                        <span className="absolute top-1 right-1 px-1.5 py-0.5 rounded bg-black/70 text-[9px] text-white font-mono">
+                          {video.duration}s
+                        </span>
+                      )}
                     </div>
                   ))}
                 </div>
