@@ -26,6 +26,7 @@ interface PreviewImage {
 interface LoraManagementModalProps {
   isOpen: boolean;
   onClose: () => void;
+  onLoraCreated?: (lora: LoraModel) => void;
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────

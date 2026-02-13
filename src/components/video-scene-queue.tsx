@@ -34,6 +34,7 @@ interface VideoSceneQueueProps {
   isGenerating: boolean;
   hideReferenceVideo?: boolean;
   geminiApiKey?: string;
+  videoModel?: string;
 }
 
 const VideoSceneQueue: React.FC<VideoSceneQueueProps> = ({
@@ -47,6 +48,7 @@ const VideoSceneQueue: React.FC<VideoSceneQueueProps> = ({
   isGenerating,
   hideReferenceVideo = false,
   geminiApiKey = '',
+  videoModel,
 }) => {
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   const [globalVideoDragOver, setGlobalVideoDragOver] = useState(false);
@@ -859,12 +861,16 @@ const VideoSceneQueue: React.FC<VideoSceneQueueProps> = ({
               </>
             ) : (
               <>
-                {(videoSettings.model === 'kling-2.6' || videoSettings.model === 'kling-2.6-pro') && videoSettings.globalReferenceVideo
-                  ? '🏃 Auto Motion Control'
-                  : isKling3 
-                  ? (isKling3Omni ? '🎬 Auto Omni' : '🎬 Auto MultiShot')
-                  : '✨ Auto Motion Prompts'
-                }
+                {(() => {
+                  const model = videoSettings.model;
+                  if ((model === 'kling-2.6' || model === 'kling-2.6-pro') && videoSettings.globalReferenceVideo) {
+                    return '🏃 Auto Motion Control';
+                  }
+                  if (model === 'kling-3' || model === 'kling-3-omni') {
+                    return (model as string) === 'kling-3-omni' ? '🎬 Auto Omni' : '🎬 Auto MultiShot';
+                  }
+                  return '✨ Auto Motion Prompts';
+                })()}
               </>
             )}
           </button>

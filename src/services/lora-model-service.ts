@@ -11,8 +11,8 @@ import type { LoraModel, LoraStatus, LoraTrainingConfig } from '../types';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyRecord = any;
 
-const RUNPOD_BASE = '/api/runpod'; // Proxied via Vite -> https://api.runpod.ai
-const LORA_TRAINING_ENDPOINT_ID = import.meta.env.VITE_RUNPOD_LORA_ENDPOINT_ID || '';
+const RUNPOD_BASE = import.meta.env.VITE_RUNPOD_LORA_BASE_URL || '/api/runpod';
+const LORA_TRAINING_ENDPOINT_ID = import.meta.env.VITE_RUNPOD_LORA_TRAINING_ENDPOINT_ID || '';
 const MAX_POLL_ATTEMPTS = 120; // 10 min at 5s intervals
 const POLL_INTERVAL_MS = 5000;
 
@@ -96,7 +96,7 @@ class LoraModelServiceImpl implements LoraModelService {
       const { data: images, error: selectError } = await supabase
         .from('lora_training_images' as AnyRecord)
         .select('storage_path')
-        .eq('lora_model_id', loraId);
+        .eq('lora_id', loraId);
 
       if (selectError) {
         logger.warn('LoraService', 'Failed to fetch training images for deletion', selectError);
@@ -192,19 +192,26 @@ class LoraModelServiceImpl implements LoraModelService {
       const { data: images, error: imagesError } = await supabase
         .from('lora_training_images' as AnyRecord)
         .select('storage_path')
-        .eq('lora_model_id', loraId);
+        .eq('lora_id', loraId);
 
       if (imagesError || !images?.length) {
         throw new Error('No training images found for this LoRA model');
       }
 
-      // Get public URLs for images
-      const imageUrls = ((images as unknown) as Array<{ storage_path: string }>).map((img) => {
-        const { data } = supabase.storage
-          .from('lora-training-images')
-          .getPublicUrl(img.storage_path);
-        return data.publicUrl;
-      });
+      // Get signed URLs for private bucket (valid for 24 hours)
+      const imageUrls = await Promise.all(
+        ((images as unknown) as Array<{ storage_path: string }>).map(async (img) => {
+          const { data, error } = await supabase.storage
+            .from('lora-training-images')
+            .createSignedUrl(img.storage_path, 86400); // 24 hours
+
+          if (error || !data?.signedUrl) {
+            throw new Error(`Failed to get signed URL for ${img.storage_path}: ${error?.message}`);
+          }
+
+          return data.signedUrl;
+        })
+      );
 
       // Submit RunPod training job
       const workflowInput = {
@@ -219,18 +226,25 @@ class LoraModelServiceImpl implements LoraModelService {
         output_name: `lora_${userId}_${loraId.slice(0, 8)}`,
       };
 
-      const response = await fetch(
-        `${RUNPOD_BASE}/v2/${LORA_TRAINING_ENDPOINT_ID}/run`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${apiKey}`,
-          },
-          body: JSON.stringify({ input: workflowInput }),
-          signal: AbortSignal.timeout(30000),
-        },
-      );
+      // Build URL based on environment (RunPod vs local)
+      const isLocal = RUNPOD_BASE.startsWith('http://localhost') || RUNPOD_BASE.startsWith('http://127.0.0.1');
+      const url = isLocal
+        ? `${RUNPOD_BASE}/run`
+        : `${RUNPOD_BASE}/v2/${LORA_TRAINING_ENDPOINT_ID}/run`;
+
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+      if (!isLocal) {
+        headers['Authorization'] = `Bearer ${apiKey}`;
+      }
+
+      const response = await fetch(url, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ input: workflowInput }),
+        signal: AbortSignal.timeout(30000),
+      });
 
       if (!response.ok) {
         if (response.status === 401) throw new Error('Invalid RunPod API key');
@@ -283,59 +297,69 @@ class LoraModelServiceImpl implements LoraModelService {
     const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB per image
     const VALID_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/jpg'];
 
-    for (let i = 0; i < photos.length; i++) {
-      const file = photos[i];
-
-      // Validate file
+    // Validate all files first
+    for (const file of photos) {
       if (!VALID_TYPES.includes(file.type)) {
         throw new Error(`Invalid file type: ${file.name}. Only JPG, PNG, WebP allowed.`);
       }
-
       if (file.size > MAX_FILE_SIZE) {
         throw new Error(`File too large: ${file.name} (${(file.size / 1024 / 1024).toFixed(1)}MB). Max 10MB per image.`);
       }
-
-      const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg';
-      const storagePath = `${userId}/${loraId}/${Date.now()}_${i}.${ext}`;
-
-      try {
-        const { error: uploadError } = await supabase.storage
-          .from('lora-training-images')
-          .upload(storagePath, file, { 
-            contentType: file.type,
-            upsert: false 
-          });
-
-        if (uploadError) {
-          logger.error('LoraService', `Failed to upload image ${i}`, uploadError);
-          throw new Error(`Failed to upload ${file.name}`);
-        }
-
-        // Record in DB
-        const { error: insertError } = await supabase.from('lora_training_images' as AnyRecord).insert({
-          lora_model_id: loraId,
-          storage_path: storagePath,
-          original_filename: file.name,
-          file_size: file.size,
-        } as AnyRecord);
-
-        if (insertError) {
-          logger.error('LoraService', `Failed to record image ${i} in DB`, insertError);
-          throw new Error(`Failed to save ${file.name} metadata`);
-        }
-
-        logger.info('LoraService', `Uploaded image ${i + 1}/${photos.length}`, { filename: file.name });
-      } catch (err) {
-        // Clean up partially uploaded files on error
-        await supabase.storage.from('lora-training-images').remove([storagePath]).catch(() => {});
-        throw err;
-      }
     }
 
-    logger.info('LoraService', 'Training images uploaded', {
-      loraId,
-      count: photos.length,
+    // Prepare upload data (all in parallel)
+    const uploadData = photos.map((file, i) => {
+      const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg';
+      const storagePath = `${userId}/${loraId}/${Date.now()}_${i}.${ext}`;
+      return { file, storagePath, fileName: file.name, fileSize: file.size };
     });
+
+    // Batch upload all files in parallel
+    const uploadResults = await Promise.allSettled(
+      uploadData.map(async ({ file, storagePath }) => {
+        const { error } = await supabase.storage
+          .from('lora-training-images')
+          .upload(storagePath, file, {
+            contentType: file.type,
+            upsert: false,
+          });
+        if (error) throw new Error(`Failed to upload ${file.name}: ${error.message}`);
+        return storagePath;
+      })
+    );
+
+    // Check for failures
+    const failures = uploadResults.filter((r): r is PromiseRejectedResult => r.status === 'rejected');
+    if (failures.length > 0) {
+      // Clean up successfully uploaded files
+      const successfulPaths = uploadResults
+        .filter((r): r is PromiseFulfilledResult<string> => r.status === 'fulfilled')
+        .map(r => r.value);
+      if (successfulPaths.length > 0) {
+        await supabase.storage.from('lora-training-images').remove(successfulPaths).catch(() => {});
+      }
+      throw new Error(`Failed to upload ${failures.length} image(s)`);
+    }
+
+    // Batch insert DB records in parallel
+    const dbRecords = uploadData.map(({ storagePath, fileName, fileSize }) => ({
+      lora_id: loraId,
+      storage_path: storagePath,
+      original_filename: fileName,
+      file_size: fileSize,
+    }));
+
+    const { error: insertError } = await (supabase as any)
+      .from('lora_training_images')
+      .insert(dbRecords);
+
+    if (insertError) {
+      // Clean up uploaded files on DB error
+      await supabase.storage.from('lora-training-images').remove(uploadData.map(d => d.storagePath)).catch(() => {});
+      throw new Error(`Failed to save image metadata: ${insertError.message}`);
+    }
+
+    logger.info('LoraService', `Batch uploaded ${photos.length} training images`, { loraId });
   }
 
   // ---- Training polling ----
@@ -347,15 +371,20 @@ class LoraModelServiceImpl implements LoraModelService {
   ): Promise<void> {
     logger.info('LoraService', 'Starting training poll', { loraId, jobId });
 
+    const isLocal = RUNPOD_BASE.startsWith('http://localhost') || RUNPOD_BASE.startsWith('http://127.0.0.1');
+    const statusUrl = isLocal
+      ? `${RUNPOD_BASE}/status/${jobId}`
+      : `${RUNPOD_BASE}/v2/${LORA_TRAINING_ENDPOINT_ID}/status/${jobId}`;
+
+    const headers: Record<string, string> = {};
+    if (!isLocal) {
+      headers['Authorization'] = `Bearer ${apiKey}`;
+    }
+
     for (let attempt = 1; attempt <= MAX_POLL_ATTEMPTS; attempt++) {
       await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
 
-      const response = await fetch(
-        `${RUNPOD_BASE}/v2/${LORA_TRAINING_ENDPOINT_ID}/status/${jobId}`,
-        {
-          headers: { Authorization: `Bearer ${apiKey}` },
-        },
-      );
+      const response = await fetch(statusUrl, { headers });
 
       if (!response.ok) {
         logger.warn('LoraService', 'Status check failed', {

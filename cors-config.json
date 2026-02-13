@@ -1,0 +1,8 @@
+[
+  {
+    "origin": ["http://localhost:3000", "https://*.vercel.app", "https://higfails.com"],
+    "method": ["GET", "HEAD"],
+    "responseHeader": ["Content-Type", "Content-Length", "Content-Disposition", "Accept-Ranges", "Range"],
+    "maxAgeSeconds": 3600
+  }
+]

@@ -193,7 +193,7 @@ export const adminApi = {
     const { page = 1, limit = 100, level, startDate, endDate } = options;
 
     try {
-      let query = supabase
+      let query = (supabase as any)
         .from('system_logs')
         .select('*', { count: 'exact' });
 
@@ -270,7 +270,7 @@ export const adminApi = {
     const { page = 1, limit = 50, status } = options;
 
     try {
-      let query = supabase
+      let query = (supabase as any)
         .from('moderation_queue')
         .select('*', { count: 'exact' });
 
@@ -313,7 +313,7 @@ export const adminApi = {
     reason?: string
   ): Promise<void> {
     try {
-      const { error } = await supabase
+      const { error } = await (supabase as any)
         .from('moderation_queue')
         .update({
           status: action === 'approve' ? 'approved' : 'rejected',
@@ -337,7 +337,7 @@ export const adminApi = {
       const startDate = new Date();
       startDate.setDate(startDate.getDate() - days);
 
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .from('user_activity_daily')
         .select('*')
         .gte('date', startDate.toISOString().split('T')[0])

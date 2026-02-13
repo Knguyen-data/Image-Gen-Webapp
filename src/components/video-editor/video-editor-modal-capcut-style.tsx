@@ -11,7 +11,7 @@ import TimelineTrackCapCutStyle from './timeline-track-capcut-style';
 import TransitionPicker from './transition-picker';
 import StockGallery from '../stock-gallery/stock-gallery';
 import { logger } from '../../services/logger';
-import { Group, Panel, Separator } from 'react-resizable-panels';
+import { PanelGroup, Panel, PanelResizeHandle } from 'react-resizable-panels';
 
 interface VideoEditorModalProps {
   isOpen: boolean;
@@ -609,7 +609,7 @@ const VideoEditorModalCapCutStyle: React.FC<VideoEditorModalProps> = ({
       </div>
 
       {/* 3-Column Layout: Media | Preview | Properties */}
-      <Group orientation="horizontal" className="flex-1 min-h-0">
+      <PanelGroup direction="horizontal" className="flex-1 min-h-0">
         {/* LEFT: Media Panel */}
         <Panel defaultSize={18} minSize={12} maxSize={30}>
           <div className="h-full flex flex-col bg-[#111827] border-r border-slate-700/50 overflow-hidden">
@@ -721,7 +721,7 @@ const VideoEditorModalCapCutStyle: React.FC<VideoEditorModalProps> = ({
           </div>
         </Panel>
 
-        <Separator className="w-1 bg-slate-800 hover:bg-lime-500/50 transition-colors cursor-col-resize" />
+        <PanelResizeHandle className="w-1.5 bg-slate-700 hover:bg-lime-500 transition-colors cursor-col-resize" />
 
         {/* CENTER: Preview */}
         <Panel defaultSize={64} minSize={40}>
@@ -1010,7 +1010,7 @@ const VideoEditorModalCapCutStyle: React.FC<VideoEditorModalProps> = ({
       </div>
         </Panel>
 
-        <Separator className="w-1 bg-slate-800 hover:bg-lime-500/50 transition-colors cursor-col-resize" />
+        <PanelResizeHandle className="w-1.5 bg-slate-700 hover:bg-lime-500 transition-colors cursor-col-resize" />
 
         {/* RIGHT: Properties Panel */}
         <Panel defaultSize={18} minSize={12} maxSize={30}>
@@ -1126,7 +1126,7 @@ const VideoEditorModalCapCutStyle: React.FC<VideoEditorModalProps> = ({
             </div>
           </div>
         </Panel>
-      </Group>
+      </PanelGroup>
       {showStockGallery && (
         <StockGallery
           onSelectVideo={handleStockVideoSelect}

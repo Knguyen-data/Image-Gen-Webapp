@@ -5,7 +5,7 @@ import VideoCard from './video-card';
 import StockGallery from './stock-gallery/stock-gallery';
 import { saveAndRevealVideo } from '../services/video-file-service';
 import JSZip from 'jszip';
-import { Panel, Group, Separator } from 'react-resizable-panels';
+import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import {
   ImagePlus,
   Video,
@@ -82,17 +82,17 @@ const EditingWorkspace: React.FC<EditingWorkspaceProps> = ({ allImages, generate
   }, [rightCollapsed]);
 
   // Toolbar button component with animations
-  const ToolButton = ({ 
-    icon: Icon, 
-    label, 
-    disabled = true, 
+  const ToolButton = ({
+    icon: Icon,
+    label,
+    disabled = true,
     active = false,
     onClick,
     title,
-  }: { 
-    icon: React.ElementType; 
-    label?: string; 
-    disabled?: boolean; 
+  }: {
+    icon: React.ElementType;
+    label?: string;
+    disabled?: boolean;
     active?: boolean;
     onClick?: () => void;
     title?: string;
@@ -103,10 +103,10 @@ const EditingWorkspace: React.FC<EditingWorkspaceProps> = ({ allImages, generate
       title={title || label}
       className={`
         px-2 py-1.5 rounded flex items-center gap-1.5 text-xs transition-all duration-150
-        ${disabled 
-          ? 'opacity-40 cursor-not-allowed bg-gray-800/30 text-gray-500' 
-          : active 
-            ? 'bg-dash-600/30 text-dash-400 border border-dash-500/30' 
+        ${disabled
+          ? 'opacity-40 cursor-not-allowed bg-gray-800/30 text-gray-500'
+          : active
+            ? 'bg-dash-600/30 text-dash-400 border border-dash-500/30'
             : 'bg-gray-800/50 text-gray-400 hover:bg-gray-700 hover:text-gray-200 hover:scale-[1.05] active:scale-95 border border-gray-700/30'
         }
       `}
@@ -126,13 +126,13 @@ const EditingWorkspace: React.FC<EditingWorkspaceProps> = ({ allImages, generate
   ];
 
   // Asset item component with drag prep
-  const AssetItem = ({ 
-    thumbnail, 
-    name, 
+  const AssetItem = ({
+    thumbnail,
+    name,
     badge,
     type,
-  }: { 
-    thumbnail: string | null; 
+  }: {
+    thumbnail: string | null;
     name: string;
     badge?: string;
     type: 'image' | 'video';
@@ -204,7 +204,7 @@ const EditingWorkspace: React.FC<EditingWorkspaceProps> = ({ allImages, generate
         {/* Right group: View controls */}
         <div className="flex items-center gap-2">
           <div className="flex items-center gap-1 bg-gray-800/40 rounded px-2 py-1">
-            <button 
+            <button
               onClick={() => setZoomLevel(Math.max(50, zoomLevel - 10))}
               className="p-0.5 text-gray-400 hover:text-gray-200 transition-colors"
               title="Zoom Out"
@@ -212,7 +212,7 @@ const EditingWorkspace: React.FC<EditingWorkspaceProps> = ({ allImages, generate
               <ZoomOut className="w-3.5 h-3.5" strokeWidth={1.5} />
             </button>
             <span className="text-[10px] text-gray-400 w-8 text-center font-mono">{zoomLevel}%</span>
-            <button 
+            <button
               onClick={() => setZoomLevel(Math.min(200, zoomLevel + 10))}
               className="p-0.5 text-gray-400 hover:text-gray-200 transition-colors"
               title="Zoom In"
@@ -222,11 +222,10 @@ const EditingWorkspace: React.FC<EditingWorkspaceProps> = ({ allImages, generate
           </div>
           <button
             onClick={() => setSnapEnabled(!snapEnabled)}
-            className={`p-1.5 rounded transition-all duration-150 ${
-              snapEnabled 
-                ? 'bg-dash-600/30 text-dash-400 border border-dash-500/30' 
-                : 'bg-gray-800/30 text-gray-500 hover:bg-gray-700 hover:text-gray-300'
-            }`}
+            className={`p-1.5 rounded transition-all duration-150 ${snapEnabled
+              ? 'bg-dash-600/30 text-dash-400 border border-dash-500/30'
+              : 'bg-gray-800/30 text-gray-500 hover:bg-gray-700 hover:text-gray-300'
+              }`}
             title="Snap to Grid"
           >
             <Magnet className="w-4 h-4" strokeWidth={1.5} />
@@ -281,10 +280,10 @@ const EditingWorkspace: React.FC<EditingWorkspaceProps> = ({ allImages, generate
 
       {/* Main content with resizable panels */}
       <div className="flex-1 overflow-hidden">
-        <Group orientation="vertical" className="h-full">
+        <PanelGroup direction="vertical" className="h-full">
           {/* Top section: Asset tray + Preview + Properties */}
           <Panel defaultSize={65} minSize={40}>
-            <Group orientation="horizontal" className="h-full">
+            <PanelGroup direction="horizontal" className="h-full">
               {/* Left Panel: Asset Tray */}
               {!leftCollapsed && (
                 <>
@@ -309,8 +308,8 @@ const EditingWorkspace: React.FC<EditingWorkspaceProps> = ({ allImages, generate
                             onClick={() => setActiveAssetTab(id)}
                             className={`
                               flex-1 px-2 py-2 text-[10px] flex items-center justify-center gap-1 transition-all duration-200
-                              ${activeAssetTab === id 
-                                ? 'text-dash-400 border-b-2 border-dash-500 bg-gray-800/30' 
+                              ${activeAssetTab === id
+                                ? 'text-dash-400 border-b-2 border-dash-500 bg-gray-800/30'
                                 : 'text-gray-500 hover:text-gray-300 hover:bg-gray-800/20'
                               }
                             `}
@@ -360,9 +359,9 @@ const EditingWorkspace: React.FC<EditingWorkspaceProps> = ({ allImages, generate
                                   <AssetItem
                                     key={img.id}
                                     thumbnail={
-                                      img.thumbnailBase64 
+                                      img.thumbnailBase64
                                         ? `data:${img.thumbnailMimeType || 'image/jpeg'};base64,${img.thumbnailBase64}`
-                                        : img.base64 
+                                        : img.base64
                                           ? `data:${img.mimeType};base64,${img.base64}`
                                           : null
                                     }
@@ -383,14 +382,14 @@ const EditingWorkspace: React.FC<EditingWorkspaceProps> = ({ allImages, generate
                       </div>
                     </div>
                   </Panel>
-                  <Separator className="w-1 bg-gray-800 hover:bg-dash-500/50 transition-colors cursor-col-resize opacity-0 hover:opacity-100" />
+                  <PanelResizeHandle className="w-1 bg-gray-800 hover:bg-dash-500/50 transition-colors cursor-col-resize opacity-0 hover:opacity-100" />
                 </>
               )}
 
               {/* Center: Preview Canvas */}
               <Panel minSize={30}>
-                <div 
-                  id="editor-preview-mount" 
+                <div
+                  id="editor-preview-mount"
                   className="h-full flex flex-col bg-gray-950"
                 >
                   {/* Preview placeholder */}
@@ -415,7 +414,7 @@ const EditingWorkspace: React.FC<EditingWorkspaceProps> = ({ allImages, generate
               {/* Right Panel: Properties */}
               {!rightCollapsed && (
                 <>
-                  <Separator className="w-1 bg-gray-800 hover:bg-dash-500/50 transition-colors cursor-col-resize opacity-0 hover:opacity-100" />
+                  <PanelResizeHandle className="w-1 bg-gray-800 hover:bg-dash-500/50 transition-colors cursor-col-resize opacity-0 hover:opacity-100" />
                   <Panel
                     defaultSize={18}
                     minSize={15}
@@ -424,7 +423,7 @@ const EditingWorkspace: React.FC<EditingWorkspaceProps> = ({ allImages, generate
                     collapsedSize={5}
                     className="transition-all duration-200"
                   >
-                    <div 
+                    <div
                       id="editor-properties-mount"
                       className="h-full flex flex-col bg-gray-900/30 border-l border-gray-800"
                     >
@@ -442,41 +441,41 @@ const EditingWorkspace: React.FC<EditingWorkspaceProps> = ({ allImages, generate
                   </Panel>
                 </>
               )}
-            </Group>
+            </PanelGroup>
           </Panel>
 
           {/* Resize handle */}
-          <Separator className="h-1 bg-gray-800 hover:bg-dash-500/50 transition-colors cursor-row-resize opacity-0 hover:opacity-100 flex items-center justify-center">
+          <PanelResizeHandle className="h-1 bg-gray-800 hover:bg-dash-500/50 transition-colors cursor-row-resize opacity-0 hover:opacity-100 flex items-center justify-center">
             <GripVertical className="w-4 h-4 text-gray-600 rotate-90" strokeWidth={1.5} />
-          </Separator>
+          </PanelResizeHandle>
 
           {/* Bottom: Timeline */}
           <Panel defaultSize={35} minSize={20} maxSize={50}>
-            <div 
-              id="editor-timeline-mount" 
+            <div
+              id="editor-timeline-mount"
               className="h-full flex flex-col bg-gray-900/50"
             >
               {/* Timeline header */}
               <div className="flex items-center justify-between px-4 py-2 border-b border-gray-800/50 shrink-0">
                 <span className="text-xs text-gray-500 uppercase tracking-wider">Timeline</span>
                 <div className="flex items-center gap-2">
-                  <button 
-                    className="p-1 rounded bg-gray-800/50 text-gray-500 hover:text-gray-300 hover:bg-gray-700 transition-all duration-150" 
+                  <button
+                    className="p-1 rounded bg-gray-800/50 text-gray-500 hover:text-gray-300 hover:bg-gray-700 transition-all duration-150"
                     disabled
                     title="Previous"
                   >
                     <SkipBack className="w-3.5 h-3.5" strokeWidth={1.5} />
                   </button>
-                  <button 
-                    className="px-3 py-1 rounded bg-dash-600/30 text-dash-400 hover:bg-dash-600/50 transition-all duration-150 flex items-center gap-1" 
+                  <button
+                    className="px-3 py-1 rounded bg-dash-600/30 text-dash-400 hover:bg-dash-600/50 transition-all duration-150 flex items-center gap-1"
                     disabled
                     title="Play (Space)"
                   >
                     <Play className="w-3.5 h-3.5" strokeWidth={1.5} />
                     <span className="text-[10px]">Play</span>
                   </button>
-                  <button 
-                    className="p-1 rounded bg-gray-800/50 text-gray-500 hover:text-gray-300 hover:bg-gray-700 transition-all duration-150" 
+                  <button
+                    className="p-1 rounded bg-gray-800/50 text-gray-500 hover:text-gray-300 hover:bg-gray-700 transition-all duration-150"
                     disabled
                     title="Next"
                   >
@@ -500,7 +499,7 @@ const EditingWorkspace: React.FC<EditingWorkspaceProps> = ({ allImages, generate
               </div>
             </div>
           </Panel>
-        </Group>
+        </PanelGroup>
       </div>
     </div>
   );
@@ -545,11 +544,11 @@ const RightPanel: React.FC<RightPanelProps> = ({
   appMode,
   setAppMode,
   generatedVideos = [],
-  onDeleteVideo = (_videoId: string) => {},
-  onRetryVideo = (_video: GeneratedVideo) => {},
+  onDeleteVideo = (_videoId: string) => { },
+  onRetryVideo = (_video: GeneratedVideo) => { },
   selectMode = false,
   selectedVideos = [],
-  onSelectVideo = (_videoId: string) => {},
+  onSelectVideo = (_videoId: string) => { },
   onOpenSettings,
   onOpenVideoEditor,
 }) => {
@@ -760,7 +759,7 @@ const RightPanel: React.FC<RightPanelProps> = ({
         </div>
         <div className="flex-1 overflow-auto p-4">
           <div className={`grid h-full gap-4 ${imagesToCompare.length === 2 ? 'grid-cols-2' :
-              imagesToCompare.length === 3 ? 'grid-cols-3' : 'grid-cols-2 md:grid-cols-2'
+            imagesToCompare.length === 3 ? 'grid-cols-3' : 'grid-cols-2 md:grid-cols-2'
             }`}>
             {imagesToCompare.map(img => (
               <div key={img.id} className="relative w-full h-full min-h-[400px] border border-gray-800 rounded-lg overflow-hidden bg-gray-950 flex items-center justify-center">
@@ -1120,8 +1119,8 @@ const RightPanel: React.FC<RightPanelProps> = ({
                           <ImageCard
                             image={img}
                             selected={false}
-                            onToggleSelect={() => {}}
-                            onOpen={() => {}}
+                            onToggleSelect={() => { }}
+                            onOpen={() => { }}
                             onRetry={() => onRetryImage(img)}
                             onDelete={() => onDeleteImage(img.runId, img.id)}
                             appMode={appMode}

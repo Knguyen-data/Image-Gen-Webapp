@@ -39,7 +39,7 @@ export function useAdminAuth(): UseAdminAuthReturn {
       }
 
       // Check if user is an admin
-      const { data: adminData, error: adminError } = await supabase
+      const { data: adminData, error: adminError } = await (supabase as any)
         .from('admin_users')
         .select('*')
         .eq('user_id', session.user.id)
@@ -73,7 +73,7 @@ export function useAdminAuth(): UseAdminAuthReturn {
       setIsAuthenticated(true);
 
       // Update last login
-      await supabase
+      await (supabase as any)
         .from('admin_users')
         .update({ last_login: new Date().toISOString() })
         .eq('id', adminData.id);

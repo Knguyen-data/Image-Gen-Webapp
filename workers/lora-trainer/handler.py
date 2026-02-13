@@ -239,9 +239,19 @@ async def handler(event: dict) -> dict:
 
 if __name__ == "__main__":
     from fastapi import FastAPI, Request
+    from fastapi.middleware.cors import CORSMiddleware
     import uvicorn
 
     app = FastAPI()
+
+    # Add CORS middleware for local testing
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
     @app.post("/runsync")
     async def runsync(request: Request):
@@ -249,12 +259,47 @@ if __name__ == "__main__":
         result = await handler({"input": body})
         return result
 
+    # In-memory job storage for local testing
+    jobs: dict = {}
+
+    @app.post("/run")
+    async def run(request: Request):
+        """Async endpoint - returns job ID immediately."""
+        body = await request.json()
+        job_id = f"local-{len(jobs) + 1}"
+        jobs[job_id] = {"status": "queued", "input": body}
+        
+        # Start processing in background
+        asyncio.create_task(process_job(job_id, body))
+        
+        return {"id": job_id}
+
+    async def process_job(job_id: str, input_body: dict):
+        """Background task to process job."""
+        jobs[job_id]["status"] = "in_progress"]
+        try:
+            result = await handler({"input": input_body})
+            jobs[job_id]["status"] = result.get("status", "completed")
+            jobs[job_id]["output"] = result
+        except Exception as e:
+            jobs[job_id]["status"] = "failed"
+            jobs[job_id]["error"] = str(e)
+
+    @app.get("/status/{job_id}")
+    async def get_status(job_id: str):
+        """Get job status."""
+        if job_id not in jobs:
+            return {"error": "Job not found"}, 404
+        return jobs[job_id]
+
     @app.get("/health")
     async def health():
         return {"status": "ok"}
 
     print("Starting local testing server on port 8000...")
-    print("POST to http://localhost:8000/runsync with training payload")
+    print("POST to http://localhost:8000/run for async (returns job ID)")
+    print("POST to http://localhost:8000/runsync for sync (blocks until done)")
+    print("GET  to http://localhost:8000/status/{job_id} for status")
     uvicorn.run(app, host="0.0.0.0", port=8000)
 else:
     runpod.serverless.start({"handler": handler})

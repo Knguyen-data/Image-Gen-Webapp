@@ -78,12 +78,12 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
   isCriticalCredits,
   appMode,
   videoModel: videoModelProp = 'kling-2.6',
-  setVideoModel: setVideoModelProp = (_model: VideoModel) => {},
+  setVideoModel: setVideoModelProp = (_model: VideoModel) => { },
   videoScenes = [],
-  setVideoScenes = (_scenes: VideoScene[]) => {},
+  setVideoScenes = (_scenes: VideoScene[]) => { },
   videoSettings,
-  setVideoSettings = (_settings: VideoSettings) => {},
-  onVideoGenerate = () => {},
+  setVideoSettings = (_settings: VideoSettings) => { },
+  onVideoGenerate = () => { },
   geminiApiKey = '',
   onVeoGenerate,
   veoTaskResult,
@@ -92,6 +92,9 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
   onVeoExtend,
   isVeoUpgrading,
 }) => {
+  // Helper to ensure settings exist before access
+  const safeSettings: AppSettings = settings || DEFAULT_SETTINGS;
+
   const [activePromptIndex, setActivePromptIndex] = useState(0);
   const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
   const fixedBlockFileRef = useRef<HTMLInputElement>(null);
@@ -125,6 +128,8 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
   const [loras, setLoras] = useState<LoraModel[]>([]);
   const [loraLoading, setLoraLoading] = useState(false);
 
+
+
   // Fetch user's LoRAs on mount
   useEffect(() => {
     const fetchLoras = async () => {
@@ -146,16 +151,13 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
   }, []);
 
   // Get selected LoRA details
-  const selectedLora = loras.find(l => l.id === (safeSettings.spicyMode?.comfyui?.loraId || comfySettings.loraId));
+  const selectedLora = loras.find(l => l.id === (safeSettings.spicyMode?.comfyui?.loraId || DEFAULT_COMFYUI_SETTINGS.loraId));
 
   // Use parent video model state (no local shadow)
   const selectedVideoModel = videoModelProp;
   const setSelectedVideoModel = setVideoModelProp;
 
   const isVideoMode = appMode === 'video';
-
-  // Helper to ensure settings exist before access
-  const safeSettings: AppSettings = settings || DEFAULT_SETTINGS;
 
   // Check if current mode supports reference images
   const supportsReferenceImages = (): boolean => {
@@ -601,20 +603,18 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
                   spicyMode: { ...safeSettings.spicyMode, enabled: !safeSettings.spicyMode?.enabled }
                 })}
 
-                className={`p-2 rounded-lg border transition-all flex items-center gap-1.5 ${
-                  safeSettings.spicyMode?.enabled
+                className={`p-2 rounded-lg border transition-all flex items-center gap-1.5 ${safeSettings.spicyMode?.enabled
                     ? 'bg-red-900/30 text-red-400 border-red-500/50 ring-1 ring-red-500/30'
                     : 'bg-gray-800 text-gray-400 border-gray-700 hover:border-gray-600'
-                }`}
+                  }`}
                 title={safeSettings.spicyMode?.enabled ? 'Spicy Mode ON (Seedream)' : 'Spicy Mode OFF (Gemini)'}
               >
                 <span className="text-lg">🌶️</span>
                 {safeSettings.spicyMode?.enabled && credits !== null && (
-                  <span className={`text-xs font-mono px-1.5 py-0.5 rounded ${
-                    isCriticalCredits ? 'bg-red-900/50 text-red-300' :
-                    isLowCredits ? 'bg-yellow-900/50 text-yellow-300' :
-                    'bg-gray-800 text-gray-300'
-                  }`}>
+                  <span className={`text-xs font-mono px-1.5 py-0.5 rounded ${isCriticalCredits ? 'bg-red-900/50 text-red-300' :
+                      isLowCredits ? 'bg-yellow-900/50 text-yellow-300' :
+                        'bg-gray-800 text-gray-300'
+                    }`}>
                     {creditsLoading ? '...' : credits}
                   </span>
                 )}
@@ -624,13 +624,12 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
             {/* Video Mode Credit Balance - Header */}
             {isVideoMode && hasKieApiKey && credits !== null && (
               <div
-                className={`px-2.5 py-1.5 rounded-lg text-xs font-mono flex items-center gap-1.5 border ${
-                  isCriticalCredits
+                className={`px-2.5 py-1.5 rounded-lg text-xs font-mono flex items-center gap-1.5 border ${isCriticalCredits
                     ? 'bg-red-900/30 text-red-200 border-red-500/40'
                     : isLowCredits
-                    ? 'bg-yellow-900/30 text-yellow-200 border-yellow-500/40'
-                    : 'bg-dash-900/30 text-dash-200 border-dash-500/40'
-                }`}
+                      ? 'bg-yellow-900/30 text-yellow-200 border-yellow-500/40'
+                      : 'bg-dash-900/30 text-dash-200 border-dash-500/40'
+                  }`}
                 title="Kie.ai Credits (for video generation)"
               >
                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -646,68 +645,65 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
 
         {/* Generation Mode Section - IMAGE MODE ONLY */}
         {appMode === 'image' && (
-        <div className="px-6 py-3 border-b border-gray-800">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
-              Generation Mode
-            </span>
-            <div className="flex items-center gap-2">
-              {safeSettings.spicyMode?.enabled && (
-                <div className="flex items-center gap-1 bg-gray-800 rounded-lg p-1">
-                  <button
-                    onClick={() => setSettings({
-                      ...safeSettings,
-                      spicyMode: { ...safeSettings.spicyMode, subMode: 'edit' }
-                    })}
-    
-                    className={`px-3 py-1 text-xs rounded-md transition-all ${
-                      safeSettings.spicyMode.subMode === 'edit'
-                        ? 'bg-red-500 text-white font-medium'
-                        : 'text-gray-400 hover:text-white'
-                    }`}
-                    title="Edit mode - requires reference image"
-                  >
-                    Edit
-                  </button>
-                  <button
-                    onClick={() => setSettings({
-                      ...safeSettings,
-                      spicyMode: { ...safeSettings.spicyMode, subMode: 'generate' }
-                    })}
-    
-                    className={`px-3 py-1 text-xs rounded-md transition-all ${
-                      safeSettings.spicyMode.subMode === 'generate'
-                        ? 'bg-red-500 text-white font-medium'
-                        : 'text-gray-400 hover:text-white'
-                    }`}
-                    title="Generate mode - text only, no image needed"
-                  >
-                    Generate
-                  </button>
-                  <button
-                    onClick={() => setSettings({
-                      ...safeSettings,
-                      spicyMode: {
-                        ...safeSettings.spicyMode,
-                        subMode: 'extreme',
-                        comfyui: safeSettings.spicyMode.comfyui || DEFAULT_COMFYUI_SETTINGS
-                      }
-                    })}
+          <div className="px-6 py-3 border-b border-gray-800">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                Generation Mode
+              </span>
+              <div className="flex items-center gap-2">
+                {safeSettings.spicyMode?.enabled && (
+                  <div className="flex items-center gap-1 bg-gray-800 rounded-lg p-1">
+                    <button
+                      onClick={() => setSettings({
+                        ...safeSettings,
+                        spicyMode: { ...safeSettings.spicyMode, subMode: 'edit' }
+                      })}
 
-                    className={`px-3 py-1 text-xs rounded-md transition-all ${
-                      safeSettings.spicyMode.subMode === 'extreme'
-                        ? 'bg-gradient-to-r from-red-600 to-red-800 text-white font-medium ring-1 ring-red-400/50'
-                        : 'text-gray-400 hover:text-white'
-                    }`}
-                    title="Extreme mode - ComfyUI Lustify (RunPod)"
-                  >
-                    Extreme
-                  </button>
-                </div>
-              )}
+                      className={`px-3 py-1 text-xs rounded-md transition-all ${safeSettings.spicyMode.subMode === 'edit'
+                          ? 'bg-red-500 text-white font-medium'
+                          : 'text-gray-400 hover:text-white'
+                        }`}
+                      title="Edit mode - requires reference image"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      onClick={() => setSettings({
+                        ...safeSettings,
+                        spicyMode: { ...safeSettings.spicyMode, subMode: 'generate' }
+                      })}
+
+                      className={`px-3 py-1 text-xs rounded-md transition-all ${safeSettings.spicyMode.subMode === 'generate'
+                          ? 'bg-red-500 text-white font-medium'
+                          : 'text-gray-400 hover:text-white'
+                        }`}
+                      title="Generate mode - text only, no image needed"
+                    >
+                      Generate
+                    </button>
+                    <button
+                      onClick={() => setSettings({
+                        ...safeSettings,
+                        spicyMode: {
+                          ...safeSettings.spicyMode,
+                          subMode: 'extreme',
+                          comfyui: safeSettings.spicyMode.comfyui || DEFAULT_COMFYUI_SETTINGS
+                        }
+                      })}
+
+                      className={`px-3 py-1 text-xs rounded-md transition-all ${safeSettings.spicyMode.subMode === 'extreme'
+                          ? 'bg-gradient-to-r from-red-600 to-red-800 text-white font-medium ring-1 ring-red-400/50'
+                          : 'text-gray-400 hover:text-white'
+                        }`}
+                      title="Extreme mode - ComfyUI Lustify (RunPod)"
+                    >
+                      Extreme
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
-        </div>
         )}
 
         {/* ============================================ */}
@@ -731,11 +727,10 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
                         handleModelSelect('kling-2.6');
                       }
                     }}
-                    className={`flex-1 py-2 px-3 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1.5 ${
-                      selectedFamily === 'kling'
+                    className={`flex-1 py-2 px-3 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1.5 ${selectedFamily === 'kling'
                         ? 'bg-dash-700/50 text-dash-300 border border-dash-500/30 shadow-[0_0_8px_rgba(74,222,128,0.08)]'
                         : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800/50 border border-transparent'
-                    }`}
+                      }`}
                   >
                     {/* Kling infinity/ribbon logo */}
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="shrink-0">
@@ -766,18 +761,17 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
                         handleModelSelect('veo-3.1');
                       }
                     }}
-                    className={`flex-1 py-2 px-3 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1.5 ${
-                      selectedFamily === 'veo'
+                    className={`flex-1 py-2 px-3 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1.5 ${selectedFamily === 'veo'
                         ? 'bg-dash-700/50 text-dash-300 border border-dash-500/30 shadow-[0_0_8px_rgba(74,222,128,0.08)]'
                         : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800/50 border border-transparent'
-                    }`}
+                      }`}
                   >
                     {/* Google G logo — 4-color */}
                     <svg width="16" height="16" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" className="shrink-0">
-                      <path d="M43.6 20.5H42V20H24v8h11.3C33.6 33.5 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 8 3.1l5.7-5.7C34 6 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.2-.1-2.3-.4-3.5z" fill="#FBBC05"/>
-                      <path d="M6.3 14.7l6.6 4.8C14.5 15.9 18.9 13 24 13c3.1 0 5.8 1.2 8 3.1l5.7-5.7C34 6 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z" fill="#EA4335"/>
-                      <path d="M24 44c5.2 0 9.9-1.9 13.4-5.1l-6.2-5.2C29.2 35.2 26.7 36 24 36c-5.2 0-9.6-3.5-11.2-8.2l-6.5 5C9.5 39.6 16.2 44 24 44z" fill="#34A853"/>
-                      <path d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.1-4.1 5.5l.1-.1 6.2 5.2C37 39.1 44 34 44 24c0-1.2-.1-2.3-.4-3.5z" fill="#4285F4"/>
+                      <path d="M43.6 20.5H42V20H24v8h11.3C33.6 33.5 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 8 3.1l5.7-5.7C34 6 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.2-.1-2.3-.4-3.5z" fill="#FBBC05" />
+                      <path d="M6.3 14.7l6.6 4.8C14.5 15.9 18.9 13 24 13c3.1 0 5.8 1.2 8 3.1l5.7-5.7C34 6 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z" fill="#EA4335" />
+                      <path d="M24 44c5.2 0 9.9-1.9 13.4-5.1l-6.2-5.2C29.2 35.2 26.7 36 24 36c-5.2 0-9.6-3.5-11.2-8.2l-6.5 5C9.5 39.6 16.2 44 24 44z" fill="#34A853" />
+                      <path d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.1-4.1 5.5l.1-.1 6.2 5.2C37 39.1 44 34 44 24c0-1.2-.1-2.3-.4-3.5z" fill="#4285F4" />
                     </svg>
                     Veo
                   </button>
@@ -794,11 +788,10 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
                     <button
                       key={opt.value}
                       onClick={() => handleModelSelect(opt.value)}
-                      className={`py-2 px-2.5 rounded-lg text-xs font-medium transition-all ${
-                        selectedVideoModel === opt.value
+                      className={`py-2 px-2.5 rounded-lg text-xs font-medium transition-all ${selectedVideoModel === opt.value
                           ? 'bg-dash-600/25 backdrop-blur-sm text-dash-200 ring-1 ring-dash-400/50 shadow-[0_0_12px_rgba(34,197,94,0.15)] shadow-[0_0_6px_rgba(74,222,128,0.06)]'
                           : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800/50'
-                      }`}
+                        }`}
                     >
                       <span className="block leading-tight">{opt.label}</span>
                       <span className="text-[10px] opacity-60">{opt.desc}</span>
@@ -807,11 +800,10 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
                   {selectedFamily === 'veo' && (
                     <button
                       onClick={() => handleModelSelect('veo-3.1')}
-                      className={`py-2 px-2.5 rounded-lg text-xs font-medium transition-all ${
-                        selectedVideoModel === 'veo-3.1'
+                      className={`py-2 px-2.5 rounded-lg text-xs font-medium transition-all ${selectedVideoModel === 'veo-3.1'
                           ? 'bg-dash-600/25 backdrop-blur-sm text-dash-200 ring-1 ring-dash-400/50 shadow-[0_0_12px_rgba(34,197,94,0.15)] shadow-[0_0_6px_rgba(74,222,128,0.06)]'
                           : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800/50'
-                      }`}
+                        }`}
                     >
                       <span className="block leading-tight">Veo 3.1</span>
                       <span className="text-[10px] opacity-60">Google AI Video</span>
@@ -854,24 +846,22 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
                     <div className="flex gap-2">
                       <button
                         onClick={() => setVideoSettings({ ...videoSettings, orientation: 'image' })}
-        
-                        className={`flex-1 py-2 px-3 rounded-lg text-xs font-medium transition-all ${
-                          videoSettings.orientation === 'image'
+
+                        className={`flex-1 py-2 px-3 rounded-lg text-xs font-medium transition-all ${videoSettings.orientation === 'image'
                             ? 'bg-dash-600/25 backdrop-blur-sm text-dash-200 ring-1 ring-dash-400/50 shadow-[0_0_12px_rgba(34,197,94,0.15)]'
                             : 'bg-gray-800 text-gray-400 hover:bg-gray-700 border border-gray-700'
-                        }`}
+                          }`}
                       >
                         <span className="block">Image Mode</span>
                         <span className="text-[10px] opacity-60">10s max</span>
                       </button>
                       <button
                         onClick={() => setVideoSettings({ ...videoSettings, orientation: 'video' })}
-        
-                        className={`flex-1 py-2 px-3 rounded-lg text-xs font-medium transition-all ${
-                          videoSettings.orientation === 'video'
+
+                        className={`flex-1 py-2 px-3 rounded-lg text-xs font-medium transition-all ${videoSettings.orientation === 'video'
                             ? 'bg-dash-600/25 backdrop-blur-sm text-dash-200 ring-1 ring-dash-400/50 shadow-[0_0_12px_rgba(34,197,94,0.15)]'
                             : 'bg-gray-800 text-gray-400 hover:bg-gray-700 border border-gray-700'
-                        }`}
+                          }`}
                       >
                         <span className="block">Video Mode</span>
                         <span className="text-[10px] opacity-60">30s max</span>
@@ -886,22 +876,20 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
                       <button
                         onClick={() => setVideoSettings({ ...videoSettings, resolution: '720p' })}
 
-                        className={`flex-1 py-2 rounded-lg text-xs font-medium transition-all ${
-                          videoSettings.resolution === '720p'
+                        className={`flex-1 py-2 rounded-lg text-xs font-medium transition-all ${videoSettings.resolution === '720p'
                             ? 'bg-dash-600/25 backdrop-blur-sm text-dash-200 ring-1 ring-dash-400/50 shadow-[0_0_12px_rgba(34,197,94,0.15)]'
                             : 'bg-gray-800 text-gray-400 hover:bg-gray-700 border border-gray-700'
-                        }`}
+                          }`}
                       >
                         720p
                       </button>
                       <button
                         onClick={() => setVideoSettings({ ...videoSettings, resolution: '1080p' })}
 
-                        className={`flex-1 py-2 rounded-lg text-xs font-medium transition-all ${
-                          videoSettings.resolution === '1080p'
+                        className={`flex-1 py-2 rounded-lg text-xs font-medium transition-all ${videoSettings.resolution === '1080p'
                             ? 'bg-dash-600/25 backdrop-blur-sm text-dash-200 ring-1 ring-dash-400/50 shadow-[0_0_12px_rgba(34,197,94,0.15)]'
                             : 'bg-gray-800 text-gray-400 hover:bg-gray-700 border border-gray-700'
-                        }`}
+                          }`}
                       >
                         1080p
                       </button>
@@ -914,21 +902,19 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
                     <div className="flex gap-2">
                       <button
                         onClick={() => setVideoSettings({ ...videoSettings, klingProvider: 'freepik' })}
-                        className={`flex-1 py-2 rounded-lg text-xs font-medium transition-all ${
-                          (videoSettings.klingProvider || 'freepik') === 'freepik'
+                        className={`flex-1 py-2 rounded-lg text-xs font-medium transition-all ${(videoSettings.klingProvider || 'freepik') === 'freepik'
                             ? 'bg-dash-600/25 backdrop-blur-sm text-dash-200 ring-1 ring-dash-400/50 shadow-[0_0_12px_rgba(34,197,94,0.15)]'
                             : 'bg-gray-800 text-gray-400 hover:bg-gray-700 border border-gray-700'
-                        }`}
+                          }`}
                       >
                         Freepik
                       </button>
                       <button
                         onClick={() => setVideoSettings({ ...videoSettings, klingProvider: 'kieai' })}
-                        className={`flex-1 py-2 rounded-lg text-xs font-medium transition-all ${
-                          videoSettings.klingProvider === 'kieai'
+                        className={`flex-1 py-2 rounded-lg text-xs font-medium transition-all ${videoSettings.klingProvider === 'kieai'
                             ? 'bg-dash-600/25 backdrop-blur-sm text-dash-200 ring-1 ring-dash-400/50 shadow-[0_0_12px_rgba(34,197,94,0.15)]'
                             : 'bg-gray-800 text-gray-400 hover:bg-gray-700 border border-gray-700'
-                        }`}
+                          }`}
                       >
                         Kie.ai
                       </button>
@@ -1002,11 +988,10 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
                         <button
                           key={dur}
                           onClick={() => setVideoSettings({ ...videoSettings, klingProDuration: dur } as any)}
-                          className={`flex-1 py-2 rounded-lg text-xs font-medium transition-all ${
-                            ((videoSettings as any).klingProDuration || '5') === dur
+                          className={`flex-1 py-2 rounded-lg text-xs font-medium transition-all ${((videoSettings as any).klingProDuration || '5') === dur
                               ? 'bg-dash-600/25 backdrop-blur-sm text-dash-200 ring-1 ring-dash-400/50 shadow-[0_0_12px_rgba(34,197,94,0.15)]'
                               : 'bg-gray-800 text-gray-400 hover:bg-gray-700 border border-gray-700'
-                          }`}
+                            }`}
                         >
                           {dur}s
                         </button>
@@ -1026,11 +1011,10 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
                         <button
                           key={opt.value}
                           onClick={() => setVideoSettings({ ...videoSettings, klingProAspectRatio: opt.value } as any)}
-                          className={`flex-1 py-2 rounded-lg text-xs font-medium transition-all ${
-                            ((videoSettings as any).klingProAspectRatio || 'widescreen_16_9') === opt.value
+                          className={`flex-1 py-2 rounded-lg text-xs font-medium transition-all ${((videoSettings as any).klingProAspectRatio || 'widescreen_16_9') === opt.value
                               ? 'bg-dash-600/25 backdrop-blur-sm text-dash-200 ring-1 ring-dash-400/50 shadow-[0_0_12px_rgba(34,197,94,0.15)]'
                               : 'bg-gray-800 text-gray-400 hover:bg-gray-700 border border-gray-700'
-                          }`}
+                            }`}
                         >
                           {opt.label}
                         </button>
@@ -1083,15 +1067,13 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
                     </div>
                     <button
                       onClick={() => setVideoSettings({ ...videoSettings, klingProGenerateAudio: !(videoSettings as any).klingProGenerateAudio } as any)}
-                      className={`w-10 h-5 rounded-full relative transition-colors ${
-                        (videoSettings as any).klingProGenerateAudio
+                      className={`w-10 h-5 rounded-full relative transition-colors ${(videoSettings as any).klingProGenerateAudio
                           ? 'bg-dash-700 ring-1 ring-dash-400'
                           : 'bg-gray-700'
-                      }`}
+                        }`}
                     >
-                      <div className={`absolute top-1 w-3 h-3 rounded-full bg-white transition-transform ${
-                        (videoSettings as any).klingProGenerateAudio ? 'left-6' : 'left-1'
-                      }`} />
+                      <div className={`absolute top-1 w-3 h-3 rounded-full bg-white transition-transform ${(videoSettings as any).klingProGenerateAudio ? 'left-6' : 'left-1'
+                        }`} />
                     </button>
                   </div>
 
@@ -1109,9 +1091,9 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
             {/* ----- KLING 3 (MultiShot) CONTENT ----- */}
             {selectedVideoModel === 'kling-3' && videoSettings && (() => {
               const shotType = (videoSettings as any).kling3ShotType || 'intelligent';
-              const multiPrompt: {prompt: string; duration: number}[] =
+              const multiPrompt: { prompt: string; duration: number }[] =
                 (videoSettings as any).kling3MultiPrompt || [{ prompt: '', duration: 5 }];
-              const totalDuration = multiPrompt.reduce((sum: number, s: {duration: number}) => sum + s.duration, 0);
+              const totalDuration = multiPrompt.reduce((sum: number, s: { duration: number }) => sum + s.duration, 0);
 
               // Helper: handle frame image upload (start or end)
               const handleFrameUpload = async (files: FileList | null, which: 'kling3StartImage' | 'kling3EndImage') => {
@@ -1140,7 +1122,7 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
               };
 
               // Helper: update a single shot in multi_prompt
-              const updateShot = (idx: number, patch: Partial<{prompt: string; duration: number}>) => {
+              const updateShot = (idx: number, patch: Partial<{ prompt: string; duration: number }>) => {
                 const updated = multiPrompt.map((s, i) => i === idx ? { ...s, ...patch } : s);
                 setVideoSettings({ ...videoSettings, kling3MultiPrompt: updated } as any);
               };
@@ -1157,338 +1139,333 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
               const kling3Aspect = (videoSettings as any).kling3AspectRatio || '16:9';
               const kling3AspectClass = kling3Aspect === '9:16' ? 'aspect-[9/16]'
                 : kling3Aspect === '1:1' ? 'aspect-square'
-                : 'aspect-video';
+                  : 'aspect-video';
 
               return (
-              <>
-                {/* 1. Shot Mode Toggle */}
-                <div className="px-6 py-4 border-b border-gray-800">
-                  <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2 block">
-                    Shot Mode
-                  </label>
-                  <div className="flex gap-2">
-                    {([
-                      { value: 'intelligent' as const, label: '\u{1F916} Intelligent' },
-                      { value: 'customize' as const, label: '\u270F\uFE0F Customize' },
-                    ]).map(opt => (
-                      <button
-                        key={opt.value}
-                        onClick={() => setVideoSettings({ ...videoSettings, kling3ShotType: opt.value } as any)}
-                        className={`flex-1 py-2.5 rounded-lg text-sm font-medium transition-all ${
-                          shotType === opt.value
-                            ? 'bg-dash-600/25 backdrop-blur-sm text-dash-200 ring-1 ring-dash-400/50 shadow-[0_0_12px_rgba(34,197,94,0.15)]'
-                            : 'bg-gray-800 text-gray-400 hover:bg-gray-700 border border-gray-700'
-                        }`}
-                      >
-                        {opt.label}
-                      </button>
-                    ))}
-                  </div>
-                  <p className="text-[10px] text-gray-600 mt-1.5">
-                    {shotType === 'intelligent'
-                      ? 'AI automatically splits your prompt into cinematic shots.'
-                      : 'Manually define up to 6 shots with individual prompts and durations.'}
-                  </p>
-                </div>
-
-                {/* 2. Frames Section (always shown) */}
-                <div className="px-6 py-4 border-b border-gray-800 space-y-2">
-                  <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
-                    Frames (Optional)
-                  </label>
-                  <div className="flex gap-3">
-                    {/* Start Frame */}
-                    {(() => {
-                      const startImg = (videoSettings as any).kling3StartImage as ReferenceImage | undefined;
-                      return (
-                        <div className="flex-1">
-                          <span className="text-[10px] text-gray-500 mb-1 block">Start Frame</span>
-                          {startImg ? (
-                            <div className={`relative group rounded-lg overflow-hidden border border-dash-500/40 ${kling3AspectClass} bg-gray-900`}>
-                              <img src={startImg.previewUrl} alt="Start frame" className="w-full h-full object-contain bg-black" />
-                              <button
-                                onClick={() => setVideoSettings({ ...videoSettings, kling3StartImage: undefined } as any)}
-                                className="absolute top-1 right-1 w-5 h-5 bg-black/70 rounded-full flex items-center justify-center text-gray-300 hover:text-white opacity-0 group-hover:opacity-100 transition-opacity"
-                              >
-                                &times;
-                              </button>
-                            </div>
-                          ) : (
-                            <label
-                              className={`flex flex-col items-center justify-center ${kling3AspectClass} rounded-lg border-2 border-dashed border-gray-700 hover:border-dash-500/50 bg-gray-900/50 cursor-pointer transition-colors`}
-                              onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add('border-dash-400', 'bg-gray-800/60'); }}
-                              onDragLeave={(e) => { e.preventDefault(); e.currentTarget.classList.remove('border-dash-400', 'bg-gray-800/60'); }}
-                              onDrop={(e) => handleFrameDrop(e, 'kling3StartImage')}
-                            >
-                              <input type="file" accept="image/*" className="hidden" onChange={(e) => handleFrameUpload(e.target.files, 'kling3StartImage')} />
-                              <span className="text-gray-600 text-lg mb-1">+</span>
-                              <span className="text-[10px] text-gray-600">Drop or click</span>
-                            </label>
-                          )}
-                        </div>
-                      );
-                    })()}
-                    {/* End Frame */}
-                    {(() => {
-                      const endImg = (videoSettings as any).kling3EndImage as ReferenceImage | undefined;
-                      return (
-                        <div className="flex-1">
-                          <span className="text-[10px] text-gray-500 mb-1 block">End Frame</span>
-                          {endImg ? (
-                            <div className={`relative group rounded-lg overflow-hidden border border-dash-500/40 ${kling3AspectClass} bg-gray-900`}>
-                              <img src={endImg.previewUrl} alt="End frame" className="w-full h-full object-contain bg-black" />
-                              <button
-                                onClick={() => setVideoSettings({ ...videoSettings, kling3EndImage: undefined } as any)}
-                                className="absolute top-1 right-1 w-5 h-5 bg-black/70 rounded-full flex items-center justify-center text-gray-300 hover:text-white opacity-0 group-hover:opacity-100 transition-opacity"
-                              >
-                                &times;
-                              </button>
-                            </div>
-                          ) : (
-                            <label
-                              className={`flex flex-col items-center justify-center ${kling3AspectClass} rounded-lg border-2 border-dashed border-gray-700 hover:border-dash-500/50 bg-gray-900/50 cursor-pointer transition-colors`}
-                              onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add('border-dash-400', 'bg-gray-800/60'); }}
-                              onDragLeave={(e) => { e.preventDefault(); e.currentTarget.classList.remove('border-dash-400', 'bg-gray-800/60'); }}
-                              onDrop={(e) => handleFrameDrop(e, 'kling3EndImage')}
-                            >
-                              <input type="file" accept="image/*" className="hidden" onChange={(e) => handleFrameUpload(e.target.files, 'kling3EndImage')} />
-                              <span className="text-gray-600 text-lg mb-1">+</span>
-                              <span className="text-[10px] text-gray-600">Drop or click</span>
-                            </label>
-                          )}
-                        </div>
-                      );
-                    })()}
-                  </div>
-                </div>
-
-                {/* 3. Prompt Area */}
-                <div className="px-6 py-4 border-b border-gray-800 space-y-3">
-                  {shotType === 'intelligent' ? (
-                    <>
-                      <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider block">
-                        Video Prompt
-                      </label>
-                      <textarea
-                        className="w-full bg-gray-950 border border-gray-700 rounded-lg p-3 text-sm text-gray-200 resize-y min-h-[80px] focus:ring-1 focus:ring-dash-400 focus:border-dash-500/50 transition-all placeholder:text-gray-600"
-                        rows={4}
-                        value={(videoSettings as any).kling3Prompt || ''}
-                        onChange={(e) => setVideoSettings({ ...videoSettings, kling3Prompt: e.target.value } as any)}
-                        placeholder="Describe your entire video. AI will automatically split it into shots..."
-                      />
-                    </>
-                  ) : (
-                    <>
-                      <div className="flex items-center justify-between">
-                        <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
-                          Shots ({multiPrompt.length}/6)
-                        </label>
+                <>
+                  {/* 1. Shot Mode Toggle */}
+                  <div className="px-6 py-4 border-b border-gray-800">
+                    <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2 block">
+                      Shot Mode
+                    </label>
+                    <div className="flex gap-2">
+                      {([
+                        { value: 'intelligent' as const, label: '\u{1F916} Intelligent' },
+                        { value: 'customize' as const, label: '\u270F\uFE0F Customize' },
+                      ]).map(opt => (
                         <button
-                          onClick={addShot}
-                          disabled={multiPrompt.length >= 6}
-                          className="text-[10px] font-medium text-dash-400 hover:text-dash-300 disabled:text-gray-600 disabled:cursor-not-allowed transition-colors"
+                          key={opt.value}
+                          onClick={() => setVideoSettings({ ...videoSettings, kling3ShotType: opt.value } as any)}
+                          className={`flex-1 py-2.5 rounded-lg text-sm font-medium transition-all ${shotType === opt.value
+                              ? 'bg-dash-600/25 backdrop-blur-sm text-dash-200 ring-1 ring-dash-400/50 shadow-[0_0_12px_rgba(34,197,94,0.15)]'
+                              : 'bg-gray-800 text-gray-400 hover:bg-gray-700 border border-gray-700'
+                            }`}
                         >
-                          + Add Shot
+                          {opt.label}
                         </button>
-                      </div>
-                      {/* Duration Bar */}
-                      <div className="space-y-1">
-                        <div className="flex justify-between text-[10px]">
-                          <span className="text-gray-500">Total Duration</span>
-                          <span className={`font-mono ${totalDuration > 15 ? 'text-red-400' : totalDuration >= 12 ? 'text-amber-400' : 'text-dash-400'}`}>
-                            {totalDuration}s / 15s
-                          </span>
-                        </div>
-                        <div className="w-full h-1.5 bg-gray-800 rounded-full overflow-hidden">
-                          <div
-                            className={`h-full rounded-full transition-all ${totalDuration > 15 ? 'bg-red-500' : totalDuration >= 12 ? 'bg-amber-500' : 'bg-dash-500'}`}
-                            style={{ width: `${Math.min((totalDuration / 15) * 100, 100)}%` }}
-                          />
-                        </div>
-                      </div>
-                      {/* Shot List */}
-                      <div className="space-y-2">
-                        {multiPrompt.map((shot, idx) => (
-                          <div key={idx} className="flex items-start gap-2 bg-gray-900/50 rounded-lg p-2 border border-gray-800">
-                            <span className="text-[10px] font-mono text-dash-400/70 mt-2 w-4 text-right shrink-0">
-                              {idx + 1}
-                            </span>
-                            <textarea
-                              className="flex-1 bg-gray-950 border border-gray-700 rounded p-2 text-xs text-gray-300 resize-y min-h-[36px] focus:ring-1 focus:ring-dash-400 focus:border-dash-500/50 transition-all placeholder:text-gray-600"
-                              rows={2}
-                              value={shot.prompt}
-                              onChange={(e) => updateShot(idx, { prompt: e.target.value })}
-                              placeholder={`Shot ${idx + 1} prompt...`}
-                            />
-                            <select
-                              className="bg-gray-950 border border-gray-700 rounded px-1.5 py-1.5 text-[10px] text-gray-300 focus:ring-1 focus:ring-dash-400 shrink-0 w-14"
-                              value={shot.duration}
-                              onChange={(e) => updateShot(idx, { duration: parseInt(e.target.value) })}
-                            >
-                              {Array.from({ length: 13 }, (_, i) => i + 3).map(d => (
-                                <option key={d} value={d}>{d}s</option>
-                              ))}
-                            </select>
-                            <button
-                              onClick={() => removeShot(idx)}
-                              disabled={multiPrompt.length <= 1}
-                              className="text-gray-600 hover:text-red-400 disabled:opacity-30 disabled:cursor-not-allowed mt-1.5 shrink-0 transition-colors"
-                              title="Remove shot"
-                            >
-                              &times;
-                            </button>
+                      ))}
+                    </div>
+                    <p className="text-[10px] text-gray-600 mt-1.5">
+                      {shotType === 'intelligent'
+                        ? 'AI automatically splits your prompt into cinematic shots.'
+                        : 'Manually define up to 6 shots with individual prompts and durations.'}
+                    </p>
+                  </div>
+
+                  {/* 2. Frames Section (always shown) */}
+                  <div className="px-6 py-4 border-b border-gray-800 space-y-2">
+                    <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                      Frames (Optional)
+                    </label>
+                    <div className="flex gap-3">
+                      {/* Start Frame */}
+                      {(() => {
+                        const startImg = (videoSettings as any).kling3StartImage as ReferenceImage | undefined;
+                        return (
+                          <div className="flex-1">
+                            <span className="text-[10px] text-gray-500 mb-1 block">Start Frame</span>
+                            {startImg ? (
+                              <div className={`relative group rounded-lg overflow-hidden border border-dash-500/40 ${kling3AspectClass} bg-gray-900`}>
+                                <img src={startImg.previewUrl} alt="Start frame" className="w-full h-full object-contain bg-black" />
+                                <button
+                                  onClick={() => setVideoSettings({ ...videoSettings, kling3StartImage: undefined } as any)}
+                                  className="absolute top-1 right-1 w-5 h-5 bg-black/70 rounded-full flex items-center justify-center text-gray-300 hover:text-white opacity-0 group-hover:opacity-100 transition-opacity"
+                                >
+                                  &times;
+                                </button>
+                              </div>
+                            ) : (
+                              <label
+                                className={`flex flex-col items-center justify-center ${kling3AspectClass} rounded-lg border-2 border-dashed border-gray-700 hover:border-dash-500/50 bg-gray-900/50 cursor-pointer transition-colors`}
+                                onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add('border-dash-400', 'bg-gray-800/60'); }}
+                                onDragLeave={(e) => { e.preventDefault(); e.currentTarget.classList.remove('border-dash-400', 'bg-gray-800/60'); }}
+                                onDrop={(e) => handleFrameDrop(e, 'kling3StartImage')}
+                              >
+                                <input type="file" accept="image/*" className="hidden" onChange={(e) => handleFrameUpload(e.target.files, 'kling3StartImage')} />
+                                <span className="text-gray-600 text-lg mb-1">+</span>
+                                <span className="text-[10px] text-gray-600">Drop or click</span>
+                              </label>
+                            )}
                           </div>
-                        ))}
-                      </div>
-                    </>
-                  )}
-                </div>
-
-                {/* 4. Generate Button */}
-                <div className="px-6 py-4 border-b border-gray-800">
-                  <button
-                    onClick={onVideoGenerate}
-                    disabled={isGenerating}
-                    className="w-full py-3 rounded-lg text-sm font-semibold transition-all bg-dash-700 hover:bg-dash-600 text-white ring-1 ring-dash-400 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {isGenerating ? 'Generating...' : '\u{1F3AC} Generate Video'}
-                  </button>
-                </div>
-
-                {/* 5. Settings */}
-                <div className="px-6 py-4 space-y-4">
-                  <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider block">
-                    Settings
-                  </label>
-
-                  {/* Quality Tier */}
-                  <div className="space-y-2">
-                    <span className="text-xs text-gray-500">Quality Tier</span>
-                    <div className="flex gap-2">
-                      {([
-                        { value: 'standard', label: 'Standard' },
-                        { value: 'pro', label: 'Pro' },
-                      ] as const).map(opt => (
-                        <button
-                          key={opt.value}
-                          onClick={() => setVideoSettings({ ...videoSettings, kling3Tier: opt.value } as any)}
-                          className={`flex-1 py-2 rounded-lg text-xs font-medium transition-all ${
-                            ((videoSettings as any).kling3Tier || 'pro') === opt.value
-                              ? 'bg-dash-600/25 backdrop-blur-sm text-dash-200 ring-1 ring-dash-400/50 shadow-[0_0_12px_rgba(34,197,94,0.15)]'
-                              : 'bg-gray-800 text-gray-400 hover:bg-gray-700 border border-gray-700'
-                          }`}
-                        >
-                          {opt.label}
-                        </button>
-                      ))}
+                        );
+                      })()}
+                      {/* End Frame */}
+                      {(() => {
+                        const endImg = (videoSettings as any).kling3EndImage as ReferenceImage | undefined;
+                        return (
+                          <div className="flex-1">
+                            <span className="text-[10px] text-gray-500 mb-1 block">End Frame</span>
+                            {endImg ? (
+                              <div className={`relative group rounded-lg overflow-hidden border border-dash-500/40 ${kling3AspectClass} bg-gray-900`}>
+                                <img src={endImg.previewUrl} alt="End frame" className="w-full h-full object-contain bg-black" />
+                                <button
+                                  onClick={() => setVideoSettings({ ...videoSettings, kling3EndImage: undefined } as any)}
+                                  className="absolute top-1 right-1 w-5 h-5 bg-black/70 rounded-full flex items-center justify-center text-gray-300 hover:text-white opacity-0 group-hover:opacity-100 transition-opacity"
+                                >
+                                  &times;
+                                </button>
+                              </div>
+                            ) : (
+                              <label
+                                className={`flex flex-col items-center justify-center ${kling3AspectClass} rounded-lg border-2 border-dashed border-gray-700 hover:border-dash-500/50 bg-gray-900/50 cursor-pointer transition-colors`}
+                                onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add('border-dash-400', 'bg-gray-800/60'); }}
+                                onDragLeave={(e) => { e.preventDefault(); e.currentTarget.classList.remove('border-dash-400', 'bg-gray-800/60'); }}
+                                onDrop={(e) => handleFrameDrop(e, 'kling3EndImage')}
+                              >
+                                <input type="file" accept="image/*" className="hidden" onChange={(e) => handleFrameUpload(e.target.files, 'kling3EndImage')} />
+                                <span className="text-gray-600 text-lg mb-1">+</span>
+                                <span className="text-[10px] text-gray-600">Drop or click</span>
+                              </label>
+                            )}
+                          </div>
+                        );
+                      })()}
                     </div>
                   </div>
 
-                  {/* Aspect Ratio */}
-                  <div className="space-y-2">
-                    <span className="text-xs text-gray-500">Aspect Ratio</span>
-                    <div className="flex gap-2">
-                      {([
-                        { value: '16:9', label: '16:9' },
-                        { value: '9:16', label: '9:16' },
-                        { value: '1:1', label: '1:1' },
-                      ] as const).map(opt => (
-                        <button
-                          key={opt.value}
-                          onClick={() => setVideoSettings({ ...videoSettings, kling3AspectRatio: opt.value } as any)}
-                          className={`flex-1 py-2 rounded-lg text-xs font-medium transition-all ${
-                            ((videoSettings as any).kling3AspectRatio || '16:9') === opt.value
-                              ? 'bg-dash-600/25 backdrop-blur-sm text-dash-200 ring-1 ring-dash-400/50 shadow-[0_0_12px_rgba(34,197,94,0.15)]'
-                              : 'bg-gray-800 text-gray-400 hover:bg-gray-700 border border-gray-700'
-                          }`}
-                        >
-                          {opt.label}
-                        </button>
-                      ))}
-                    </div>
+                  {/* 3. Prompt Area */}
+                  <div className="px-6 py-4 border-b border-gray-800 space-y-3">
+                    {shotType === 'intelligent' ? (
+                      <>
+                        <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider block">
+                          Video Prompt
+                        </label>
+                        <textarea
+                          className="w-full bg-gray-950 border border-gray-700 rounded-lg p-3 text-sm text-gray-200 resize-y min-h-[80px] focus:ring-1 focus:ring-dash-400 focus:border-dash-500/50 transition-all placeholder:text-gray-600"
+                          rows={4}
+                          value={(videoSettings as any).kling3Prompt || ''}
+                          onChange={(e) => setVideoSettings({ ...videoSettings, kling3Prompt: e.target.value } as any)}
+                          placeholder="Describe your entire video. AI will automatically split it into shots..."
+                        />
+                      </>
+                    ) : (
+                      <>
+                        <div className="flex items-center justify-between">
+                          <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                            Shots ({multiPrompt.length}/6)
+                          </label>
+                          <button
+                            onClick={addShot}
+                            disabled={multiPrompt.length >= 6}
+                            className="text-[10px] font-medium text-dash-400 hover:text-dash-300 disabled:text-gray-600 disabled:cursor-not-allowed transition-colors"
+                          >
+                            + Add Shot
+                          </button>
+                        </div>
+                        {/* Duration Bar */}
+                        <div className="space-y-1">
+                          <div className="flex justify-between text-[10px]">
+                            <span className="text-gray-500">Total Duration</span>
+                            <span className={`font-mono ${totalDuration > 15 ? 'text-red-400' : totalDuration >= 12 ? 'text-amber-400' : 'text-dash-400'}`}>
+                              {totalDuration}s / 15s
+                            </span>
+                          </div>
+                          <div className="w-full h-1.5 bg-gray-800 rounded-full overflow-hidden">
+                            <div
+                              className={`h-full rounded-full transition-all ${totalDuration > 15 ? 'bg-red-500' : totalDuration >= 12 ? 'bg-amber-500' : 'bg-dash-500'}`}
+                              style={{ width: `${Math.min((totalDuration / 15) * 100, 100)}%` }}
+                            />
+                          </div>
+                        </div>
+                        {/* Shot List */}
+                        <div className="space-y-2">
+                          {multiPrompt.map((shot, idx) => (
+                            <div key={idx} className="flex items-start gap-2 bg-gray-900/50 rounded-lg p-2 border border-gray-800">
+                              <span className="text-[10px] font-mono text-dash-400/70 mt-2 w-4 text-right shrink-0">
+                                {idx + 1}
+                              </span>
+                              <textarea
+                                className="flex-1 bg-gray-950 border border-gray-700 rounded p-2 text-xs text-gray-300 resize-y min-h-[36px] focus:ring-1 focus:ring-dash-400 focus:border-dash-500/50 transition-all placeholder:text-gray-600"
+                                rows={2}
+                                value={shot.prompt}
+                                onChange={(e) => updateShot(idx, { prompt: e.target.value })}
+                                placeholder={`Shot ${idx + 1} prompt...`}
+                              />
+                              <select
+                                className="bg-gray-950 border border-gray-700 rounded px-1.5 py-1.5 text-[10px] text-gray-300 focus:ring-1 focus:ring-dash-400 shrink-0 w-14"
+                                value={shot.duration}
+                                onChange={(e) => updateShot(idx, { duration: parseInt(e.target.value) })}
+                              >
+                                {Array.from({ length: 13 }, (_, i) => i + 3).map(d => (
+                                  <option key={d} value={d}>{d}s</option>
+                                ))}
+                              </select>
+                              <button
+                                onClick={() => removeShot(idx)}
+                                disabled={multiPrompt.length <= 1}
+                                className="text-gray-600 hover:text-red-400 disabled:opacity-30 disabled:cursor-not-allowed mt-1.5 shrink-0 transition-colors"
+                                title="Remove shot"
+                              >
+                                &times;
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </>
+                    )}
                   </div>
 
-                  {/* Duration Slider — only in Intelligent mode */}
-                  {shotType === 'intelligent' && (
-                    <div className="space-y-2">
-                      <div className="flex justify-between">
-                        <span className="text-xs text-gray-500">Duration</span>
-                        <span className="text-xs text-dash-400 font-mono">{((videoSettings as any).kling3Duration || 5)}s</span>
-                      </div>
-                      <input
-                        type="range"
-                        min="3"
-                        max="15"
-                        step="1"
-                        className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-dash-400"
-                        value={(videoSettings as any).kling3Duration || 5}
-                        onChange={(e) => setVideoSettings({ ...videoSettings, kling3Duration: parseInt(e.target.value) } as any)}
-                      />
-                      <p className="text-[10px] text-gray-600">Total video duration (3-15 seconds)</p>
-                    </div>
-                  )}
-
-                  {/* CFG Scale */}
-                  <div className="space-y-2">
-                    <div className="flex justify-between">
-                      <span className="text-xs text-gray-500">CFG Scale</span>
-                      <span className="text-xs text-dash-400 font-mono">{((videoSettings as any).kling3CfgScale ?? 0.5).toFixed(2)}</span>
-                    </div>
-                    <input
-                      type="range"
-                      min="0"
-                      max="2"
-                      step="0.05"
-                      className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-dash-400"
-                      value={(videoSettings as any).kling3CfgScale ?? 0.5}
-                      onChange={(e) => setVideoSettings({ ...videoSettings, kling3CfgScale: parseFloat(e.target.value) } as any)}
-                    />
-                    <p className="text-[10px] text-gray-600">0 = creative · 0.5 = balanced · 2 = strict prompt adherence</p>
-                  </div>
-
-                  {/* Negative Prompt */}
-                  <div className="space-y-2">
-                    <span className="text-xs text-gray-500">Negative Prompt</span>
-                    <textarea
-                      className="w-full bg-gray-950 border border-gray-700 rounded-lg p-2 text-xs text-gray-300 font-mono resize-y min-h-[40px]"
-                      rows={2}
-                      value={(videoSettings as any).kling3NegativePrompt || ''}
-                      onChange={(e) => setVideoSettings({ ...videoSettings, kling3NegativePrompt: e.target.value } as any)}
-                      placeholder="Things to avoid (e.g. blurry, shaky, watermark)..."
-                    />
-                  </div>
-
-                  {/* Generate Audio Toggle */}
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <span className="text-xs text-gray-500 block">Generate Audio</span>
-                      <span className="text-[10px] text-gray-600">AI-generated sound for the video</span>
-                    </div>
+                  {/* 4. Generate Button */}
+                  <div className="px-6 py-4 border-b border-gray-800">
                     <button
-                      onClick={() => setVideoSettings({ ...videoSettings, kling3GenerateAudio: !(videoSettings as any).kling3GenerateAudio } as any)}
-                      className={`w-10 h-5 rounded-full relative transition-colors ${
-                        (videoSettings as any).kling3GenerateAudio
-                          ? 'bg-dash-700 ring-1 ring-dash-400'
-                          : 'bg-gray-700'
-                      }`}
+                      onClick={onVideoGenerate}
+                      disabled={isGenerating}
+                      className="w-full py-3 rounded-lg text-sm font-semibold transition-all bg-dash-700 hover:bg-dash-600 text-white ring-1 ring-dash-400 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      <div className={`absolute top-1 w-3 h-3 rounded-full bg-white transition-transform ${
-                        (videoSettings as any).kling3GenerateAudio ? 'left-6' : 'left-1'
-                      }`} />
+                      {isGenerating ? 'Generating...' : '\u{1F3AC} Generate Video'}
                     </button>
                   </div>
 
-                  {/* 6. Info Box */}
-                  <div className="p-3 bg-dash-900/20 border border-dash-500/30 rounded-lg text-xs text-dash-300">
-                    <p className="font-medium mb-1">Kling 3 — One Video, One Call</p>
-                    <p className="text-dash-400/80">
-                      {shotType === 'intelligent'
-                        ? 'Write a single prompt and AI splits it into cinematic shots (3-15s). Optionally set start/end frames.'
-                        : 'Define up to 6 shots with per-shot prompts and durations (max 15s total). Optionally set start/end frames.'}
-                    </p>
+                  {/* 5. Settings */}
+                  <div className="px-6 py-4 space-y-4">
+                    <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider block">
+                      Settings
+                    </label>
+
+                    {/* Quality Tier */}
+                    <div className="space-y-2">
+                      <span className="text-xs text-gray-500">Quality Tier</span>
+                      <div className="flex gap-2">
+                        {([
+                          { value: 'standard', label: 'Standard' },
+                          { value: 'pro', label: 'Pro' },
+                        ] as const).map(opt => (
+                          <button
+                            key={opt.value}
+                            onClick={() => setVideoSettings({ ...videoSettings, kling3Tier: opt.value } as any)}
+                            className={`flex-1 py-2 rounded-lg text-xs font-medium transition-all ${((videoSettings as any).kling3Tier || 'pro') === opt.value
+                                ? 'bg-dash-600/25 backdrop-blur-sm text-dash-200 ring-1 ring-dash-400/50 shadow-[0_0_12px_rgba(34,197,94,0.15)]'
+                                : 'bg-gray-800 text-gray-400 hover:bg-gray-700 border border-gray-700'
+                              }`}
+                          >
+                            {opt.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Aspect Ratio */}
+                    <div className="space-y-2">
+                      <span className="text-xs text-gray-500">Aspect Ratio</span>
+                      <div className="flex gap-2">
+                        {([
+                          { value: '16:9', label: '16:9' },
+                          { value: '9:16', label: '9:16' },
+                          { value: '1:1', label: '1:1' },
+                        ] as const).map(opt => (
+                          <button
+                            key={opt.value}
+                            onClick={() => setVideoSettings({ ...videoSettings, kling3AspectRatio: opt.value } as any)}
+                            className={`flex-1 py-2 rounded-lg text-xs font-medium transition-all ${((videoSettings as any).kling3AspectRatio || '16:9') === opt.value
+                                ? 'bg-dash-600/25 backdrop-blur-sm text-dash-200 ring-1 ring-dash-400/50 shadow-[0_0_12px_rgba(34,197,94,0.15)]'
+                                : 'bg-gray-800 text-gray-400 hover:bg-gray-700 border border-gray-700'
+                              }`}
+                          >
+                            {opt.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Duration Slider — only in Intelligent mode */}
+                    {shotType === 'intelligent' && (
+                      <div className="space-y-2">
+                        <div className="flex justify-between">
+                          <span className="text-xs text-gray-500">Duration</span>
+                          <span className="text-xs text-dash-400 font-mono">{((videoSettings as any).kling3Duration || 5)}s</span>
+                        </div>
+                        <input
+                          type="range"
+                          min="3"
+                          max="15"
+                          step="1"
+                          className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-dash-400"
+                          value={(videoSettings as any).kling3Duration || 5}
+                          onChange={(e) => setVideoSettings({ ...videoSettings, kling3Duration: parseInt(e.target.value) } as any)}
+                        />
+                        <p className="text-[10px] text-gray-600">Total video duration (3-15 seconds)</p>
+                      </div>
+                    )}
+
+                    {/* CFG Scale */}
+                    <div className="space-y-2">
+                      <div className="flex justify-between">
+                        <span className="text-xs text-gray-500">CFG Scale</span>
+                        <span className="text-xs text-dash-400 font-mono">{((videoSettings as any).kling3CfgScale ?? 0.5).toFixed(2)}</span>
+                      </div>
+                      <input
+                        type="range"
+                        min="0"
+                        max="2"
+                        step="0.05"
+                        className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-dash-400"
+                        value={(videoSettings as any).kling3CfgScale ?? 0.5}
+                        onChange={(e) => setVideoSettings({ ...videoSettings, kling3CfgScale: parseFloat(e.target.value) } as any)}
+                      />
+                      <p className="text-[10px] text-gray-600">0 = creative · 0.5 = balanced · 2 = strict prompt adherence</p>
+                    </div>
+
+                    {/* Negative Prompt */}
+                    <div className="space-y-2">
+                      <span className="text-xs text-gray-500">Negative Prompt</span>
+                      <textarea
+                        className="w-full bg-gray-950 border border-gray-700 rounded-lg p-2 text-xs text-gray-300 font-mono resize-y min-h-[40px]"
+                        rows={2}
+                        value={(videoSettings as any).kling3NegativePrompt || ''}
+                        onChange={(e) => setVideoSettings({ ...videoSettings, kling3NegativePrompt: e.target.value } as any)}
+                        placeholder="Things to avoid (e.g. blurry, shaky, watermark)..."
+                      />
+                    </div>
+
+                    {/* Generate Audio Toggle */}
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <span className="text-xs text-gray-500 block">Generate Audio</span>
+                        <span className="text-[10px] text-gray-600">AI-generated sound for the video</span>
+                      </div>
+                      <button
+                        onClick={() => setVideoSettings({ ...videoSettings, kling3GenerateAudio: !(videoSettings as any).kling3GenerateAudio } as any)}
+                        className={`w-10 h-5 rounded-full relative transition-colors ${(videoSettings as any).kling3GenerateAudio
+                            ? 'bg-dash-700 ring-1 ring-dash-400'
+                            : 'bg-gray-700'
+                          }`}
+                      >
+                        <div className={`absolute top-1 w-3 h-3 rounded-full bg-white transition-transform ${(videoSettings as any).kling3GenerateAudio ? 'left-6' : 'left-1'
+                          }`} />
+                      </button>
+                    </div>
+
+                    {/* 6. Info Box */}
+                    <div className="p-3 bg-dash-900/20 border border-dash-500/30 rounded-lg text-xs text-dash-300">
+                      <p className="font-medium mb-1">Kling 3 — One Video, One Call</p>
+                      <p className="text-dash-400/80">
+                        {shotType === 'intelligent'
+                          ? 'Write a single prompt and AI splits it into cinematic shots (3-15s). Optionally set start/end frames.'
+                          : 'Define up to 6 shots with per-shot prompts and durations (max 15s total). Optionally set start/end frames.'}
+                      </p>
+                    </div>
                   </div>
-                </div>
-              </>
+                </>
               );
             })()}
 
@@ -1521,728 +1498,720 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
 
         {/* IMAGE MODE ONLY - All generation controls */}
         {appMode === 'image' && (
-        <div className="flex-1 px-6 pb-6 space-y-6">
+          <div className="flex-1 px-6 pb-6 space-y-6">
 
-          {/* --- PROMPT INPUT --- */}
-          <div className="space-y-3">
-            <div className="flex justify-between items-end border-b border-gray-800 pb-2">
-              <div>
-                <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider block mb-1">
-                  Prompt Queue
+            {/* --- PROMPT INPUT --- */}
+            <div className="space-y-3">
+              <div className="flex justify-between items-end border-b border-gray-800 pb-2">
+                <div>
+                  <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider block mb-1">
+                    Prompt Queue
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] text-gray-500 bg-gray-800 px-2 py-0.5 rounded border border-gray-700">
+                      {validPromptsCount} Active
+                    </span>
+                    {prompts.length > 0 && (prompts[0].text !== '' || prompts.length > 1) && (
+                      <button
+                        onClick={removeAllPrompts}
+                        className="text-[10px] flex items-center gap-1 text-red-900 hover:text-red-400 transition-colors px-1"
+                        title="Clear All"
+                      >
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                        Clear All
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => setIsBulkModalOpen(true)}
+                  className="text-xs px-3 py-1.5 rounded-md bg-gray-800 text-dash-300 border border-gray-700 hover:bg-gray-700 hover:border-dash-300 transition-all flex items-center gap-1.5"
+                >
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                  Bulk Input
+                </button>
+              </div>
+
+              <div className="space-y-3">
+                {prompts.map((pItem, index) => {
+                  const fixedCount = safeSettings.fixedBlockEnabled ? fixedBlockImages.length : 0;
+                  const totalCardRefs = pItem.referenceImages.length + fixedCount;
+                  const isOverLimit = totalCardRefs > MAX_REFERENCE_IMAGES;
+
+                  return (
+                    <div key={pItem.id} className="relative group animate-in slide-in-from-left-2 duration-200">
+                      <div className="flex items-start gap-2">
+                        <span className="text-xs font-mono text-gray-600 mt-3 w-4 text-right">
+                          {index + 1}
+                        </span>
+                        <div className="flex-1 relative bg-gray-950 border border-gray-800 rounded-lg focus-within:ring-1 focus-within:ring-dash-300 focus-within:border-gray-600 transition-all"
+                          onDragOver={(e) => {
+                            e.preventDefault();
+                            e.currentTarget.classList.add('ring-2', 'ring-dash-300', 'bg-gray-900');
+                          }}
+                          onDragLeave={(e) => {
+                            e.preventDefault();
+                            e.currentTarget.classList.remove('ring-2', 'ring-dash-300', 'bg-gray-900');
+                          }}
+                          onDrop={async (e) => {
+                            e.preventDefault();
+                            e.currentTarget.classList.remove('ring-2', 'ring-dash-300', 'bg-gray-900');
+
+                            // First, try to handle dropped image card (from gallery)
+                            const jsonData = e.dataTransfer.getData('application/json');
+                            if (jsonData) {
+                              const handled = handleDroppedImageCard(index, jsonData);
+                              if (handled) return; // Successfully handled image card
+                            }
+
+                            // Otherwise, handle file drop
+                            const files = e.dataTransfer.files;
+                            if (files && files.length > 0) {
+                              // Check if mode supports reference images before processing
+                              if (!supportsReferenceImages()) {
+                                alert(`${getModeName()} does not support reference images. Switch to Gemini or Spicy Edit mode to use reference images.`);
+                                return;
+                              }
+                              await addLocalImages(index, files);
+                            }
+                          }}
+                          onPaste={async (e) => {
+                            const items = e.clipboardData?.items;
+                            if (!items) return;
+                            const imageFiles: File[] = [];
+                            for (let i = 0; i < items.length; i++) {
+                              if (items[i].type.startsWith('image/')) {
+                                const file = items[i].getAsFile();
+                                if (file) imageFiles.push(file);
+                              }
+                            }
+                            if (imageFiles.length > 0) {
+                              e.preventDefault();
+                              const fileList = Object.assign(imageFiles, {
+                                length: imageFiles.length,
+                                item: (idx: number) => imageFiles[idx]
+                              }) as unknown as FileList;
+                              await addLocalImages(index, fileList);
+                            }
+                          }}
+                        >
+                          <textarea
+                            className="w-full bg-transparent p-3 text-sm text-gray-200 outline-none resize-y min-h-[80px] font-mono relative z-10"
+                            placeholder={
+                              safeSettings.spicyMode?.enabled && safeSettings.spicyMode.subMode === 'extreme'
+                                ? `Describe what you want to generate... (attach face photo below for face lock)`
+                                : safeSettings.spicyMode?.enabled && safeSettings.spicyMode.subMode === 'edit'
+                                  ? `Describe the edits to apply to your source image...`
+                                  : safeSettings.spicyMode?.enabled && safeSettings.spicyMode.subMode === 'generate'
+                                    ? `Describe what you want to generate (text only, no images)...`
+                                    : `Describe image #${index + 1}... (drop reference images below)`
+                            }
+                            value={pItem.text}
+                            onChange={(e) => updatePromptText(index, e.target.value)}
+                            onFocus={() => setActivePromptIndex(index)}
+
+                          />
+
+                          {/* Mode-specific drop zone guidance */}
+                          {(() => {
+                            const dropInfo = getImageDropLabel();
+                            return (
+                              <div className={`px-3 pt-1 ${dropInfo.icon === 'none' ? 'opacity-40' : ''
+                                }`}>
+                                <p className="text-[10px] font-medium text-gray-500 flex items-center gap-1.5">
+                                  <span>{dropInfo.label}</span>
+                                  <span className="text-gray-600">—</span>
+                                  <span className="text-gray-600 font-normal">{dropInfo.hint}</span>
+                                </p>
+                              </div>
+                            );
+                          })()}
+
+                          {/* Local Image Strip */}
+                          <div className="px-3 pb-3 flex flex-wrap gap-2 items-center rounded-b-lg">
+                            {pItem.referenceImages.map(img => (
+                              <div key={img.id} className="relative w-10 h-10 rounded overflow-hidden group/img border border-gray-700">
+                                {img.previewUrl && <img src={img.previewUrl} className="w-full h-full object-cover" alt="ref" />}
+                                <button
+                                  onClick={() => removeLocalImage(index, img.id)}
+                                  className="absolute inset-0 bg-black/60 opacity-0 group-hover/img:opacity-100 flex items-center justify-center text-white"
+                                >
+                                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                                </button>
+                              </div>
+                            ))}
+                            <label
+                              className={`w-10 h-10 flex items-center justify-center border border-dashed rounded transition-colors ${supportsReferenceImages()
+                                  ? 'border-gray-700 hover:border-dash-300 hover:bg-gray-900 cursor-pointer text-gray-500 hover:text-dash-300'
+                                  : 'border-gray-800 cursor-not-allowed text-gray-700'
+                                }`}
+                              title={supportsReferenceImages() ? getImageDropLabel().hint : `${getModeName()} does not support reference images`}
+                            >
+                              <input
+                                type="file"
+                                multiple
+                                accept="image/*,video/mp4,video/quicktime,video/webm"
+                                className="hidden"
+                                onChange={(e) => addLocalImages(index, e.target.files)}
+                                disabled={!supportsReferenceImages()}
+                              />
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                            </label>
+                            {isOverLimit && <span className="text-[10px] text-red-400 font-bold ml-auto">Max {MAX_REFERENCE_IMAGES} imgs exceeded!</span>}
+                          </div>
+
+                          {prompts.length > 1 && (
+                            <button
+                              onClick={() => removePrompt(index)}
+                              className="absolute top-2 right-2 p-1 text-gray-600 hover:text-red-400 hover:bg-gray-900 rounded transition-colors opacity-0 group-hover:opacity-100 z-20"
+                              title="Remove Prompt"
+                            >
+                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+
+                <button
+                  onClick={addPrompt}
+
+                  className="w-full py-2 border border-dashed border-gray-700 hover:border-dash-300/50 hover:bg-gray-800/50 text-gray-400 hover:text-dash-200 rounded-lg text-xs font-medium transition-all flex items-center justify-center gap-2 group"
+                >
+                  <svg className="w-4 h-4 group-hover:scale-110 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" /></svg>
+                  Add Another Prompt Card
+                </button>
+              </div>
+            </div>
+
+            {/* --- FIXED BLOCK --- */}
+            <div
+              className="space-y-2 bg-gray-800/50 p-4 rounded-lg border border-gray-800 transition-all border-dashed hover:border-solid hover:border-gray-700"
+              tabIndex={0}
+              onDragOver={(e) => {
+                e.preventDefault();
+                e.currentTarget.classList.add('ring-2', 'ring-dash-300', 'bg-gray-800', 'border-dash-300');
+                e.currentTarget.classList.remove('border-gray-800');
+              }}
+              onDragLeave={(e) => {
+                e.preventDefault();
+                e.currentTarget.classList.remove('ring-2', 'ring-dash-300', 'bg-gray-800', 'border-dash-300');
+                e.currentTarget.classList.add('border-gray-800');
+              }}
+              onDrop={async (e) => {
+                e.preventDefault();
+                e.currentTarget.classList.remove('ring-2', 'ring-dash-300', 'bg-gray-800', 'border-dash-300');
+                e.currentTarget.classList.add('border-gray-800');
+
+                // Check if mode supports reference images
+                if (!supportsReferenceImages()) {
+                  alert(`${getModeName()} does not support reference images. Switch to Gemini or Spicy Edit mode to use reference images.`);
+                  return;
+                }
+
+                const files = e.dataTransfer.files;
+                if (files && files.length > 0) {
+                  const { images, nonImageCount } = await processFiles(files);
+                  if (nonImageCount > 0) {
+                    alert(`Only image files are supported. ${nonImageCount} non-image file(s) were ignored.`);
+                  }
+                  const current = safeSettings.fixedBlockImages || [];
+                  setSettings({ ...safeSettings, fixedBlockImages: [...current, ...images] });
+                }
+              }}
+              onPaste={async (e) => {
+                const items = e.clipboardData?.items;
+                if (!items) return;
+                const imageFiles: File[] = [];
+                for (let i = 0; i < items.length; i++) {
+                  if (items[i].type.startsWith('image/')) {
+                    const file = items[i].getAsFile();
+                    if (file) imageFiles.push(file);
+                  }
+                }
+                if (imageFiles.length > 0) {
+                  const fileList = Object.assign(imageFiles, {
+                    length: imageFiles.length,
+                    item: (index: number) => imageFiles[index]
+                  }) as unknown as FileList;
+                  const { images, nonImageCount } = await processFiles(fileList);
+                  if (nonImageCount > 0) {
+                    alert(`Only image files are supported. ${nonImageCount} non-image file(s) were ignored.`);
+                  }
+                  const current = safeSettings.fixedBlockImages || [];
+                  setSettings({ ...safeSettings, fixedBlockImages: [...current, ...images] });
+                }
+              }}
+            >
+              <div className="flex justify-between items-center">
+                <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider flex items-center gap-2">
+                  Fixed Block
+                  <span className="text-[9px] bg-gray-700 px-1.5 py-0.5 rounded text-gray-400">Drag, Drop or Paste</span>
                 </label>
                 <div className="flex items-center gap-2">
-                  <span className="text-[10px] text-gray-500 bg-gray-800 px-2 py-0.5 rounded border border-gray-700">
-                    {validPromptsCount} Active
-                  </span>
-                  {prompts.length > 0 && (prompts[0].text !== '' || prompts.length > 1) && (
-                    <button
-                      onClick={removeAllPrompts}
-                      className="text-[10px] flex items-center gap-1 text-red-900 hover:text-red-400 transition-colors px-1"
-                      title="Clear All"
-                    >
-                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                      Clear All
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              <button
-                onClick={() => setIsBulkModalOpen(true)}
-                className="text-xs px-3 py-1.5 rounded-md bg-gray-800 text-dash-300 border border-gray-700 hover:bg-gray-700 hover:border-dash-300 transition-all flex items-center gap-1.5"
-              >
-                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-                Bulk Input
-              </button>
-            </div>
-
-            <div className="space-y-3">
-              {prompts.map((pItem, index) => {
-                const fixedCount = safeSettings.fixedBlockEnabled ? fixedBlockImages.length : 0;
-                const totalCardRefs = pItem.referenceImages.length + fixedCount;
-                const isOverLimit = totalCardRefs > MAX_REFERENCE_IMAGES;
-
-                return (
-                  <div key={pItem.id} className="relative group animate-in slide-in-from-left-2 duration-200">
-                    <div className="flex items-start gap-2">
-                      <span className="text-xs font-mono text-gray-600 mt-3 w-4 text-right">
-                        {index + 1}
-                      </span>
-                      <div className="flex-1 relative bg-gray-950 border border-gray-800 rounded-lg focus-within:ring-1 focus-within:ring-dash-300 focus-within:border-gray-600 transition-all"
-                        onDragOver={(e) => {
-                          e.preventDefault();
-                          e.currentTarget.classList.add('ring-2', 'ring-dash-300', 'bg-gray-900');
-                        }}
-                        onDragLeave={(e) => {
-                          e.preventDefault();
-                          e.currentTarget.classList.remove('ring-2', 'ring-dash-300', 'bg-gray-900');
-                        }}
-                        onDrop={async (e) => {
-                          e.preventDefault();
-                          e.currentTarget.classList.remove('ring-2', 'ring-dash-300', 'bg-gray-900');
-
-                          // First, try to handle dropped image card (from gallery)
-                          const jsonData = e.dataTransfer.getData('application/json');
-                          if (jsonData) {
-                            const handled = handleDroppedImageCard(index, jsonData);
-                            if (handled) return; // Successfully handled image card
-                          }
-
-                          // Otherwise, handle file drop
-                          const files = e.dataTransfer.files;
-                          if (files && files.length > 0) {
-                            // Check if mode supports reference images before processing
-                            if (!supportsReferenceImages()) {
-                              alert(`${getModeName()} does not support reference images. Switch to Gemini or Spicy Edit mode to use reference images.`);
-                              return;
-                            }
-                            await addLocalImages(index, files);
-                          }
-                        }}
-                        onPaste={async (e) => {
-                          const items = e.clipboardData?.items;
-                          if (!items) return;
-                          const imageFiles: File[] = [];
-                          for (let i = 0; i < items.length; i++) {
-                            if (items[i].type.startsWith('image/')) {
-                              const file = items[i].getAsFile();
-                              if (file) imageFiles.push(file);
-                            }
-                          }
-                          if (imageFiles.length > 0) {
-                            e.preventDefault();
-                            const fileList = Object.assign(imageFiles, {
-                              length: imageFiles.length,
-                              item: (idx: number) => imageFiles[idx]
-                            }) as unknown as FileList;
-                            await addLocalImages(index, fileList);
-                          }
-                        }}
-                      >
-                        <textarea
-                          className="w-full bg-transparent p-3 text-sm text-gray-200 outline-none resize-y min-h-[80px] font-mono relative z-10"
-                          placeholder={
-                            safeSettings.spicyMode?.enabled && safeSettings.spicyMode.subMode === 'extreme'
-                              ? `Describe what you want to generate... (attach face photo below for face lock)`
-                              : safeSettings.spicyMode?.enabled && safeSettings.spicyMode.subMode === 'edit'
-                                ? `Describe the edits to apply to your source image...`
-                                : safeSettings.spicyMode?.enabled && safeSettings.spicyMode.subMode === 'generate'
-                                  ? `Describe what you want to generate (text only, no images)...`
-                                  : `Describe image #${index + 1}... (drop reference images below)`
-                          }
-                          value={pItem.text}
-                          onChange={(e) => updatePromptText(index, e.target.value)}
-                          onFocus={() => setActivePromptIndex(index)}
-          
-                        />
-
-                        {/* Mode-specific drop zone guidance */}
-                        {(() => {
-                          const dropInfo = getImageDropLabel();
-                          return (
-                            <div className={`px-3 pt-1 ${
-                              dropInfo.icon === 'none' ? 'opacity-40' : ''
-                            }`}>
-                              <p className="text-[10px] font-medium text-gray-500 flex items-center gap-1.5">
-                                <span>{dropInfo.label}</span>
-                                <span className="text-gray-600">—</span>
-                                <span className="text-gray-600 font-normal">{dropInfo.hint}</span>
-                              </p>
-                            </div>
-                          );
-                        })()}
-
-                        {/* Local Image Strip */}
-                        <div className="px-3 pb-3 flex flex-wrap gap-2 items-center rounded-b-lg">
-                          {pItem.referenceImages.map(img => (
-                            <div key={img.id} className="relative w-10 h-10 rounded overflow-hidden group/img border border-gray-700">
-                              {img.previewUrl && <img src={img.previewUrl} className="w-full h-full object-cover" alt="ref" />}
-                              <button
-                                onClick={() => removeLocalImage(index, img.id)}
-                                className="absolute inset-0 bg-black/60 opacity-0 group-hover/img:opacity-100 flex items-center justify-center text-white"
-                              >
-                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
-                              </button>
-                            </div>
-                          ))}
-                          <label
-                            className={`w-10 h-10 flex items-center justify-center border border-dashed rounded transition-colors ${
-                              supportsReferenceImages()
-                                ? 'border-gray-700 hover:border-dash-300 hover:bg-gray-900 cursor-pointer text-gray-500 hover:text-dash-300'
-                                : 'border-gray-800 cursor-not-allowed text-gray-700'
-                            }`}
-                            title={supportsReferenceImages() ? getImageDropLabel().hint : `${getModeName()} does not support reference images`}
-                          >
-                            <input
-                              type="file"
-                              multiple
-                              accept="image/*,video/mp4,video/quicktime,video/webm"
-                              className="hidden"
-                              onChange={(e) => addLocalImages(index, e.target.files)}
-                              disabled={!supportsReferenceImages()}
-                            />
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
-                          </label>
-                          {isOverLimit && <span className="text-[10px] text-red-400 font-bold ml-auto">Max {MAX_REFERENCE_IMAGES} imgs exceeded!</span>}
-                        </div>
-
-                        {prompts.length > 1 && (
-                          <button
-                            onClick={() => removePrompt(index)}
-                            className="absolute top-2 right-2 p-1 text-gray-600 hover:text-red-400 hover:bg-gray-900 rounded transition-colors opacity-0 group-hover:opacity-100 z-20"
-                            title="Remove Prompt"
-                          >
-                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                )
-              })}
-
-              <button
-                onClick={addPrompt}
-
-                className="w-full py-2 border border-dashed border-gray-700 hover:border-dash-300/50 hover:bg-gray-800/50 text-gray-400 hover:text-dash-200 rounded-lg text-xs font-medium transition-all flex items-center justify-center gap-2 group"
-              >
-                <svg className="w-4 h-4 group-hover:scale-110 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" /></svg>
-                Add Another Prompt Card
-              </button>
-            </div>
-          </div>
-
-          {/* --- FIXED BLOCK --- */}
-          <div
-            className="space-y-2 bg-gray-800/50 p-4 rounded-lg border border-gray-800 transition-all border-dashed hover:border-solid hover:border-gray-700"
-            tabIndex={0}
-            onDragOver={(e) => {
-              e.preventDefault();
-              e.currentTarget.classList.add('ring-2', 'ring-dash-300', 'bg-gray-800', 'border-dash-300');
-              e.currentTarget.classList.remove('border-gray-800');
-            }}
-            onDragLeave={(e) => {
-              e.preventDefault();
-              e.currentTarget.classList.remove('ring-2', 'ring-dash-300', 'bg-gray-800', 'border-dash-300');
-              e.currentTarget.classList.add('border-gray-800');
-            }}
-            onDrop={async (e) => {
-              e.preventDefault();
-              e.currentTarget.classList.remove('ring-2', 'ring-dash-300', 'bg-gray-800', 'border-dash-300');
-              e.currentTarget.classList.add('border-gray-800');
-
-              // Check if mode supports reference images
-              if (!supportsReferenceImages()) {
-                alert(`${getModeName()} does not support reference images. Switch to Gemini or Spicy Edit mode to use reference images.`);
-                return;
-              }
-
-              const files = e.dataTransfer.files;
-              if (files && files.length > 0) {
-                const { images, nonImageCount } = await processFiles(files);
-                if (nonImageCount > 0) {
-                  alert(`Only image files are supported. ${nonImageCount} non-image file(s) were ignored.`);
-                }
-                const current = safeSettings.fixedBlockImages || [];
-                setSettings({ ...safeSettings, fixedBlockImages: [...current, ...images] });
-              }
-            }}
-            onPaste={async (e) => {
-              const items = e.clipboardData?.items;
-              if (!items) return;
-              const imageFiles: File[] = [];
-              for (let i = 0; i < items.length; i++) {
-                if (items[i].type.startsWith('image/')) {
-                  const file = items[i].getAsFile();
-                  if (file) imageFiles.push(file);
-                }
-              }
-              if (imageFiles.length > 0) {
-                const fileList = Object.assign(imageFiles, {
-                  length: imageFiles.length,
-                  item: (index: number) => imageFiles[index]
-                }) as unknown as FileList;
-                const { images, nonImageCount } = await processFiles(fileList);
-                if (nonImageCount > 0) {
-                  alert(`Only image files are supported. ${nonImageCount} non-image file(s) were ignored.`);
-                }
-                const current = safeSettings.fixedBlockImages || [];
-                setSettings({ ...safeSettings, fixedBlockImages: [...current, ...images] });
-              }
-            }}
-          >
-            <div className="flex justify-between items-center">
-              <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider flex items-center gap-2">
-                Fixed Block
-                <span className="text-[9px] bg-gray-700 px-1.5 py-0.5 rounded text-gray-400">Drag, Drop or Paste</span>
-              </label>
-              <div className="flex items-center gap-2">
-                <span className={`text-xs ${safeSettings.fixedBlockEnabled ? 'text-dash-300' : 'text-gray-500'}`}>{safeSettings.fixedBlockEnabled ? 'Active' : 'Ignored'}</span>
-                <button onClick={() => setSettings({ ...safeSettings, fixedBlockEnabled: !safeSettings.fixedBlockEnabled })} className={`w-10 h-5 rounded-full relative transition-colors ${safeSettings.fixedBlockEnabled ? 'bg-dash-900 ring-1 ring-dash-300' : 'bg-gray-700'}`}>
-                  <div className={`absolute top-1 w-3 h-3 rounded-full bg-white transition-transform ${safeSettings.fixedBlockEnabled ? 'left-6' : 'left-1'}`} />
-                </button>
-              </div>
-            </div>
-
-            {/* Position Toggle */}
-            <div className={`flex items-center gap-2 transition-opacity ${!safeSettings.fixedBlockEnabled && 'opacity-50'}`}>
-              <span className="text-[10px] text-gray-500">Position:</span>
-              <div className="flex gap-1 bg-gray-900 rounded p-0.5">
-                <button
-                  onClick={() => setSettings({ ...safeSettings, fixedBlockPosition: 'top' })}
-                  className={`px-2 py-0.5 text-[10px] rounded transition-all ${
-                    safeSettings.fixedBlockPosition === 'top'
-                      ? 'bg-dash-900 text-dash-300 font-medium'
-                      : 'text-gray-500 hover:text-gray-300'
-                  }`}
-                >
-                  Top
-                </button>
-                <button
-                  onClick={() => setSettings({ ...safeSettings, fixedBlockPosition: 'bottom' })}
-                  className={`px-2 py-0.5 text-[10px] rounded transition-all ${
-                    safeSettings.fixedBlockPosition === 'bottom'
-                      ? 'bg-dash-900 text-dash-300 font-medium'
-                      : 'text-gray-500 hover:text-gray-300'
-                  }`}
-                >
-                  Bottom
-                </button>
-              </div>
-              <span className="text-[10px] text-gray-600 ml-auto">Applies to all prompts</span>
-            </div>
-
-            {/* Fixed Block Text */}
-            <textarea
-              className={`w-full bg-gray-950 border border-gray-700 rounded p-2 text-xs text-gray-300 font-mono transition-opacity ${!safeSettings.fixedBlockEnabled && 'opacity-50'}`}
-              rows={3}
-              value={safeSettings.fixedBlockText}
-              onChange={(e) => setSettings({ ...safeSettings, fixedBlockText: e.target.value })}
-              placeholder="Fixed text to prepend/append to every prompt..."
-            />
-
-            {/* Fixed Block Images */}
-            <div className={`flex flex-wrap gap-2 items-center transition-opacity ${!safeSettings.fixedBlockEnabled && 'opacity-50'}`}>
-              {fixedBlockImages.map(img => (
-                <div key={img.id} className="relative w-12 h-12 rounded overflow-hidden group border border-gray-700">
-                  {img.previewUrl && <img src={img.previewUrl} className="w-full h-full object-contain" alt="fixed ref" />}
-                  <button
-                    onClick={() => removeFixedBlockImage(img.id)}
-                    className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white"
-                  >
-                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                  <span className={`text-xs ${safeSettings.fixedBlockEnabled ? 'text-dash-300' : 'text-gray-500'}`}>{safeSettings.fixedBlockEnabled ? 'Active' : 'Ignored'}</span>
+                  <button onClick={() => setSettings({ ...safeSettings, fixedBlockEnabled: !safeSettings.fixedBlockEnabled })} className={`w-10 h-5 rounded-full relative transition-colors ${safeSettings.fixedBlockEnabled ? 'bg-dash-900 ring-1 ring-dash-300' : 'bg-gray-700'}`}>
+                    <div className={`absolute top-1 w-3 h-3 rounded-full bg-white transition-transform ${safeSettings.fixedBlockEnabled ? 'left-6' : 'left-1'}`} />
                   </button>
                 </div>
-              ))}
-              <label className="w-12 h-12 flex items-center justify-center border border-dashed border-gray-600 rounded hover:border-dash-300 hover:bg-gray-700 cursor-pointer text-gray-500 hover:text-dash-300 transition-colors" title="Add fixed block images">
-                <input ref={fixedBlockFileRef} type="file" multiple accept="image/*" className="hidden" onChange={addFixedBlockImages} />
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" /></svg>
-              </label>
-              {fixedBlockImages.length > 0 && (
-                <span className="text-[10px] text-gray-500">{fixedBlockImages.length} img(s)</span>
-              )}
-            </div>
-          </div>
+              </div>
 
-          {/* --- PROMPT GENERATOR --- */}
-          <PromptGenerator
-            prompts={prompts}
-            setPrompts={setPrompts}
-            hasApiKey={hasApiKey}
-            existingReferenceImage={
-              prompts[activePromptIndex]?.referenceImages?.[0] ||
-              (safeSettings.fixedBlockEnabled ? fixedBlockImages[0] : null) ||
-              null
-            }
-          />
+              {/* Position Toggle */}
+              <div className={`flex items-center gap-2 transition-opacity ${!safeSettings.fixedBlockEnabled && 'opacity-50'}`}>
+                <span className="text-[10px] text-gray-500">Position:</span>
+                <div className="flex gap-1 bg-gray-900 rounded p-0.5">
+                  <button
+                    onClick={() => setSettings({ ...safeSettings, fixedBlockPosition: 'top' })}
+                    className={`px-2 py-0.5 text-[10px] rounded transition-all ${safeSettings.fixedBlockPosition === 'top'
+                        ? 'bg-dash-900 text-dash-300 font-medium'
+                        : 'text-gray-500 hover:text-gray-300'
+                      }`}
+                  >
+                    Top
+                  </button>
+                  <button
+                    onClick={() => setSettings({ ...safeSettings, fixedBlockPosition: 'bottom' })}
+                    className={`px-2 py-0.5 text-[10px] rounded transition-all ${safeSettings.fixedBlockPosition === 'bottom'
+                        ? 'bg-dash-900 text-dash-300 font-medium'
+                        : 'text-gray-500 hover:text-gray-300'
+                      }`}
+                  >
+                    Bottom
+                  </button>
+                </div>
+                <span className="text-[10px] text-gray-600 ml-auto">Applies to all prompts</span>
+              </div>
 
-          {/* --- SHARED SETTINGS (Aspect Ratio, Image Quality, Temp) --- */}
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-1">
-              <label className="text-xs text-gray-400 block">Aspect Ratio</label>
-              <select
-                className="w-full bg-gray-950 border border-gray-700 rounded p-2 text-sm text-gray-200"
-                value={safeSettings.aspectRatio}
-                onChange={(e) => setSettings({ ...safeSettings, aspectRatio: e.target.value as any })}
+              {/* Fixed Block Text */}
+              <textarea
+                className={`w-full bg-gray-950 border border-gray-700 rounded p-2 text-xs text-gray-300 font-mono transition-opacity ${!safeSettings.fixedBlockEnabled && 'opacity-50'}`}
+                rows={3}
+                value={safeSettings.fixedBlockText}
+                onChange={(e) => setSettings({ ...safeSettings, fixedBlockText: e.target.value })}
+                placeholder="Fixed text to prepend/append to every prompt..."
+              />
 
-              >
-                {Object.entries(ASPECT_RATIO_LABELS).map(([key, label]) => (
-                  <option key={key} value={key}>{label}</option>
+              {/* Fixed Block Images */}
+              <div className={`flex flex-wrap gap-2 items-center transition-opacity ${!safeSettings.fixedBlockEnabled && 'opacity-50'}`}>
+                {fixedBlockImages.map(img => (
+                  <div key={img.id} className="relative w-12 h-12 rounded overflow-hidden group border border-gray-700">
+                    {img.previewUrl && <img src={img.previewUrl} className="w-full h-full object-contain" alt="fixed ref" />}
+                    <button
+                      onClick={() => removeFixedBlockImage(img.id)}
+                      className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white"
+                    >
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                    </button>
+                  </div>
                 ))}
-              </select>
+                <label className="w-12 h-12 flex items-center justify-center border border-dashed border-gray-600 rounded hover:border-dash-300 hover:bg-gray-700 cursor-pointer text-gray-500 hover:text-dash-300 transition-colors" title="Add fixed block images">
+                  <input ref={fixedBlockFileRef} type="file" multiple accept="image/*" className="hidden" onChange={addFixedBlockImages} />
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" /></svg>
+                </label>
+                {fixedBlockImages.length > 0 && (
+                  <span className="text-[10px] text-gray-500">{fixedBlockImages.length} img(s)</span>
+                )}
+              </div>
             </div>
 
-            {/* Image Quality */}
-            <div className="space-y-1">
-              <label className="text-xs text-gray-400 block">
-                {safeSettings.spicyMode?.enabled ? 'Quality (Spicy)' : 'Image Quality'}
-              </label>
-              {safeSettings.spicyMode?.enabled ? (
-                <select
-                  className="w-full bg-gray-950 border border-red-700/50 rounded p-2 text-sm text-red-200"
-                  value={safeSettings.spicyMode.quality}
-                  onChange={(e) => setSettings({
-                    ...safeSettings,
-                    spicyMode: { ...safeSettings.spicyMode, quality: e.target.value as SeedreamQuality }
-                  })}
-  
-                >
-                  {Object.entries(SEEDREAM_QUALITY_LABELS).map(([key, label]) => (
-                    <option key={key} value={key}>{label}</option>
-                  ))}
-                </select>
-              ) : (
+            {/* --- PROMPT GENERATOR --- */}
+            <PromptGenerator
+              prompts={prompts}
+              setPrompts={setPrompts}
+              hasApiKey={hasApiKey}
+              existingReferenceImage={
+                prompts[activePromptIndex]?.referenceImages?.[0] ||
+                (safeSettings.fixedBlockEnabled ? fixedBlockImages[0] : null) ||
+                null
+              }
+            />
+
+            {/* --- SHARED SETTINGS (Aspect Ratio, Image Quality, Temp) --- */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1">
+                <label className="text-xs text-gray-400 block">Aspect Ratio</label>
                 <select
                   className="w-full bg-gray-950 border border-gray-700 rounded p-2 text-sm text-gray-200"
-                  value={safeSettings.imageSize}
-                  onChange={(e) => setSettings({ ...safeSettings, imageSize: e.target.value as ImageSize })}
-  
+                  value={safeSettings.aspectRatio}
+                  onChange={(e) => setSettings({ ...safeSettings, aspectRatio: e.target.value as any })}
+
                 >
-                  {Object.entries(IMAGE_SIZE_LABELS).map(([key, label]) => (
+                  {Object.entries(ASPECT_RATIO_LABELS).map(([key, label]) => (
                     <option key={key} value={key}>{label}</option>
                   ))}
                 </select>
-              )}
-            </div>
+              </div>
 
-            {/* ComfyUI Settings (Extreme Mode) */}
-            {safeSettings.spicyMode?.enabled && safeSettings.spicyMode.subMode === 'extreme' && (() => {
-              const comfySettings = safeSettings.spicyMode.comfyui || DEFAULT_COMFYUI_SETTINGS;
-              const updateComfyUI = (patch: Partial<typeof comfySettings>) =>
-                setSettings({
-                  ...safeSettings,
-                  spicyMode: {
-                    ...safeSettings.spicyMode,
-                    comfyui: { ...comfySettings, ...patch }
-                  }
-                });
-              const hasRefImage = prompts.some(p => p.referenceImages.length > 0) ||
-                (safeSettings.fixedBlockEnabled && (safeSettings.fixedBlockImages?.length || 0) > 0);
+              {/* Image Quality */}
+              <div className="space-y-1">
+                <label className="text-xs text-gray-400 block">
+                  {safeSettings.spicyMode?.enabled ? 'Quality (Spicy)' : 'Image Quality'}
+                </label>
+                {safeSettings.spicyMode?.enabled ? (
+                  <select
+                    className="w-full bg-gray-950 border border-red-700/50 rounded p-2 text-sm text-red-200"
+                    value={safeSettings.spicyMode.quality}
+                    onChange={(e) => setSettings({
+                      ...safeSettings,
+                      spicyMode: { ...safeSettings.spicyMode, quality: e.target.value as SeedreamQuality }
+                    })}
 
-              return (
-                <div className="col-span-2 space-y-3 mt-2 p-3 bg-red-950/30 border border-red-500/20 rounded-lg">
-                  <div className="flex items-center gap-2" title="Advanced settings for ComfyUI Lustify SDXL. These control the diffusion process and image generation quality.">
-                    <span className="text-xs font-semibold text-red-300 uppercase tracking-wider cursor-help border-b border-dashed border-red-500/30 hover:border-red-500/60 transition-colors">
-                      ComfyUI Settings
-                    </span>
-                    <svg className="w-3 h-3 text-red-400/60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    {hasRefImage && (
-                      <span className="text-[10px] text-green-400 font-normal ml-2">
-                        ✓ Face reference attached — IP-Adapter will apply face lock
+                  >
+                    {Object.entries(SEEDREAM_QUALITY_LABELS).map(([key, label]) => (
+                      <option key={key} value={key}>{label}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <select
+                    className="w-full bg-gray-950 border border-gray-700 rounded p-2 text-sm text-gray-200"
+                    value={safeSettings.imageSize}
+                    onChange={(e) => setSettings({ ...safeSettings, imageSize: e.target.value as ImageSize })}
+
+                  >
+                    {Object.entries(IMAGE_SIZE_LABELS).map(([key, label]) => (
+                      <option key={key} value={key}>{label}</option>
+                    ))}
+                  </select>
+                )}
+              </div>
+
+              {/* ComfyUI Settings (Extreme Mode) */}
+              {safeSettings.spicyMode?.enabled && safeSettings.spicyMode.subMode === 'extreme' && (() => {
+                const comfySettings = safeSettings.spicyMode.comfyui || DEFAULT_COMFYUI_SETTINGS;
+                const updateComfyUI = (patch: Partial<typeof comfySettings>) =>
+                  setSettings({
+                    ...safeSettings,
+                    spicyMode: {
+                      ...safeSettings.spicyMode,
+                      comfyui: { ...comfySettings, ...patch }
+                    }
+                  });
+                const hasRefImage = prompts.some(p => p.referenceImages.length > 0) ||
+                  (safeSettings.fixedBlockEnabled && (safeSettings.fixedBlockImages?.length || 0) > 0);
+
+                return (
+                  <div className="col-span-2 space-y-3 mt-2 p-3 bg-red-950/30 border border-red-500/20 rounded-lg">
+                    <div className="flex items-center gap-2" title="Advanced settings for ComfyUI Lustify SDXL. These control the diffusion process and image generation quality.">
+                      <span className="text-xs font-semibold text-red-300 uppercase tracking-wider cursor-help border-b border-dashed border-red-500/30 hover:border-red-500/60 transition-colors">
+                        ComfyUI Settings
                       </span>
-                    )}
-                    {!hasRefImage && (
-                      <span className="text-[10px] text-yellow-400/60 font-normal ml-2">
-                        No face reference — text-to-image only
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Steps */}
-                  <div className="space-y-1" title="Number of denoising steps. More steps = higher quality but slower generation. 20-30 is the sweet spot for quality vs speed.">
-                    <div className="flex justify-between">
-                      <label className="text-xs text-red-300/80 cursor-help border-b border-dashed border-red-500/30 hover:border-red-500/60 transition-colors">Steps</label>
-                      <span className="text-xs text-red-300 font-mono">{comfySettings.steps}</span>
+                      <svg className="w-3 h-3 text-red-400/60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      {hasRefImage && (
+                        <span className="text-[10px] text-green-400 font-normal ml-2">
+                          ✓ Face reference attached — IP-Adapter will apply face lock
+                        </span>
+                      )}
+                      {!hasRefImage && (
+                        <span className="text-[10px] text-yellow-400/60 font-normal ml-2">
+                          No face reference — text-to-image only
+                        </span>
+                      )}
                     </div>
-                    <input type="range" min="15" max="50" step="1"
-                      className="w-full h-2 bg-red-900/50 rounded-lg appearance-none cursor-pointer accent-red-500"
-                      value={comfySettings.steps}
-                      onChange={(e) => updateComfyUI({ steps: parseInt(e.target.value) })}
-                    />
-                    <p className="text-[10px] text-red-400/60">
-                      {comfySettings.steps < 20 ? 'Fast but may lack detail' : 
-                       comfySettings.steps < 30 ? 'Balanced quality & speed' : 
-                       comfySettings.steps < 40 ? 'High quality, slower' : 'Maximum quality, slowest'}
-                    </p>
-                  </div>
 
-                  {/* CFG Scale */}
-                  <div className="space-y-1" title="Classifier-Free Guidance Scale. Controls how closely the image follows your prompt. Higher = more literal interpretation, lower = more creative freedom.">
-                    <div className="flex justify-between">
-                      <label className="text-xs text-red-300/80 cursor-help border-b border-dashed border-red-500/30 hover:border-red-500/60 transition-colors">CFG Scale</label>
-                      <span className="text-xs text-red-300 font-mono">{comfySettings.cfg}</span>
-                    </div>
-                    <input type="range" min="1" max="15" step="0.5"
-                      className="w-full h-2 bg-red-900/50 rounded-lg appearance-none cursor-pointer accent-red-500"
-                      value={comfySettings.cfg}
-                      onChange={(e) => updateComfyUI({ cfg: parseFloat(e.target.value) })}
-                    />
-                    <p className="text-[10px] text-red-400/60">
-                      {comfySettings.cfg < 5 ? 'Creative, may ignore parts of prompt' : 
-                       comfySettings.cfg < 8 ? 'Balanced adherence' : 
-                       comfySettings.cfg < 12 ? 'Strict prompt following' : 'Very literal, may over-saturate'}
-                    </p>
-                  </div>
-
-                  {/* Denoise */}
-                  <div className="space-y-1" title="Denoising strength for img2img. 1.0 = complete transformation (txt2img), lower values preserve more of the original image structure.">
-                    <div className="flex justify-between">
-                      <label className="text-xs text-red-300/80 cursor-help border-b border-dashed border-red-500/30 hover:border-red-500/60 transition-colors">Denoise</label>
-                      <span className="text-xs text-red-300 font-mono">{comfySettings.denoise.toFixed(2)}</span>
-                    </div>
-                    <input type="range" min="0.1" max="1.0" step="0.05"
-                      className="w-full h-2 bg-red-900/50 rounded-lg appearance-none cursor-pointer accent-red-500"
-                      value={comfySettings.denoise}
-                      onChange={(e) => updateComfyUI({ denoise: parseFloat(e.target.value) })}
-                    />
-                    <p className="text-[10px] text-red-400/60">
-                      {comfySettings.denoise < 0.5 ? 'Subtle changes, preserves structure' : 
-                       comfySettings.denoise < 0.8 ? 'Moderate transformation' : 
-                       'Full generation (txt2img mode)'}
-                    </p>
-                  </div>
-
-                  {/* Sampler */}
-                  <div className="space-y-1" title="Sampling algorithm. Different samplers produce different results at different speeds. Euler is fast and reliable; DPM++ offers better quality at cost of speed.">
-                    <div className="flex items-center gap-1">
-                      <label className="text-xs text-red-300/80 cursor-help border-b border-dashed border-red-500/30 hover:border-red-500/60 transition-colors">Sampler</label>
-                    </div>
-                    <select
-                      className="w-full bg-gray-950 border border-red-700/50 rounded p-2 text-sm text-red-200"
-                      value={comfySettings.sampler}
-                      onChange={(e) => updateComfyUI({ sampler: e.target.value as ComfyUISampler })}
-                    >
-                      {Object.entries(COMFYUI_SAMPLER_LABELS).map(([key, label]) => (
-                        <option key={key} value={key}>{label}</option>
-                      ))}
-                    </select>
-                    <p className="text-[10px] text-red-400/60">
-                      {comfySettings.sampler === 'euler' ? 'Fast, stable, good for most cases' : 
-                       comfySettings.sampler === 'euler_ancestral' ? 'More varied, creative results' : 
-                       comfySettings.sampler === 'dpmpp_2m' ? 'Higher quality, slower' : 
-                       'Best quality, stochastic (randomized)'}
-                    </p>
-                  </div>
-
-                  {/* Scheduler */}
-                  <div className="space-y-1" title="Noise scheduling strategy. Controls how the denoising process progresses. Karras often produces sharper details; Normal is the standard approach.">
-                    <div className="flex items-center gap-1">
-                      <label className="text-xs text-red-300/80 cursor-help border-b border-dashed border-red-500/30 hover:border-red-500/60 transition-colors">Scheduler</label>
-                    </div>
-                    <select
-                      className="w-full bg-gray-950 border border-red-700/50 rounded p-2 text-sm text-red-200"
-                      value={comfySettings.scheduler}
-                      onChange={(e) => updateComfyUI({ scheduler: e.target.value as ComfyUIScheduler })}
-                    >
-                      {Object.entries(COMFYUI_SCHEDULER_LABELS).map(([key, label]) => (
-                        <option key={key} value={key}>{label}</option>
-                      ))}
-                    </select>
-                    <p className="text-[10px] text-red-400/60">
-                      {comfySettings.scheduler === 'normal' ? 'Standard scheduling, reliable' : 
-                       comfySettings.scheduler === 'karras' ? 'Sharper details, recommended' : 
-                       'Uniform noise distribution'}
-                    </p>
-                  </div>
-
-                  {/* LoRA Selector */}
-                  <LoraSelector
-                    selectedLoraId={comfySettings.loraId}
-                    loraWeight={comfySettings.loraWeight ?? 0.8}
-                    onLoraChange={(loraId) => updateComfyUI({ loraId: loraId || undefined })}
-                    onWeightChange={(weight) => updateComfyUI({ loraWeight: weight })}
-                    onManageClick={() => setLoraModalOpen(true)}
-                  />
-
-                  {/* Trigger Word Hint */}
-                  {selectedLora && (
-                    <div className="p-2 bg-amber-900/20 border border-amber-500/30 rounded text-xs text-amber-300">
-                      <span className="font-medium">Trigger word:</span> {selectedLora.trigger_word}
-                    </div>
-                  )}
-
-                  {/* IP-Adapter Weight (only when reference image attached) */}
-                  {hasRefImage && (
-                    <div className="space-y-1" title="Controls how much the reference image influences the result. 0 = no influence, 1 = balanced, 2 = strong influence. Higher values may cause artifacts.">
+                    {/* Steps */}
+                    <div className="space-y-1" title="Number of denoising steps. More steps = higher quality but slower generation. 20-30 is the sweet spot for quality vs speed.">
                       <div className="flex justify-between">
-                        <label className="text-xs text-red-300/80 cursor-help border-b border-dashed border-red-500/30 hover:border-red-500/60 transition-colors">IP-Adapter Weight</label>
-                        <span className="text-xs text-red-300 font-mono">{comfySettings.ipAdapterWeight.toFixed(2)}</span>
+                        <label className="text-xs text-red-300/80 cursor-help border-b border-dashed border-red-500/30 hover:border-red-500/60 transition-colors">Steps</label>
+                        <span className="text-xs text-red-300 font-mono">{comfySettings.steps}</span>
                       </div>
-                      <input type="range" min="0" max="2" step="0.05"
+                      <input type="range" min="15" max="50" step="1"
                         className="w-full h-2 bg-red-900/50 rounded-lg appearance-none cursor-pointer accent-red-500"
-                        value={comfySettings.ipAdapterWeight}
-                        onChange={(e) => updateComfyUI({ ipAdapterWeight: parseFloat(e.target.value) })}
+                        value={comfySettings.steps}
+                        onChange={(e) => updateComfyUI({ steps: parseInt(e.target.value) })}
                       />
                       <p className="text-[10px] text-red-400/60">
-                        {comfySettings.ipAdapterWeight < 0.5 ? 'Subtle face/style influence' : 
-                         comfySettings.ipAdapterWeight < 1.0 ? 'Moderate influence' : 
-                         comfySettings.ipAdapterWeight < 1.5 ? 'Strong influence' : 'Very strong, may cause artifacts'}
+                        {comfySettings.steps < 20 ? 'Fast but may lack detail' :
+                          comfySettings.steps < 30 ? 'Balanced quality & speed' :
+                            comfySettings.steps < 40 ? 'High quality, slower' : 'Maximum quality, slowest'}
                       </p>
                     </div>
-                  )}
 
-                  {/* Seed */}
-                  <div className="space-y-1" title="Random seed for reproducible results. Use -1 for random generation. Same seed + same settings = same image. Useful for iterating on a specific look.">
-                    <div className="flex items-center gap-1">
-                      <label className="text-xs text-red-300/80 cursor-help border-b border-dashed border-red-500/30 hover:border-red-500/60 transition-colors">Seed</label>
-                      <span className="text-[10px] text-red-400/60">(-1 = random)</span>
+                    {/* CFG Scale */}
+                    <div className="space-y-1" title="Classifier-Free Guidance Scale. Controls how closely the image follows your prompt. Higher = more literal interpretation, lower = more creative freedom.">
+                      <div className="flex justify-between">
+                        <label className="text-xs text-red-300/80 cursor-help border-b border-dashed border-red-500/30 hover:border-red-500/60 transition-colors">CFG Scale</label>
+                        <span className="text-xs text-red-300 font-mono">{comfySettings.cfg}</span>
+                      </div>
+                      <input type="range" min="1" max="15" step="0.5"
+                        className="w-full h-2 bg-red-900/50 rounded-lg appearance-none cursor-pointer accent-red-500"
+                        value={comfySettings.cfg}
+                        onChange={(e) => updateComfyUI({ cfg: parseFloat(e.target.value) })}
+                      />
+                      <p className="text-[10px] text-red-400/60">
+                        {comfySettings.cfg < 5 ? 'Creative, may ignore parts of prompt' :
+                          comfySettings.cfg < 8 ? 'Balanced adherence' :
+                            comfySettings.cfg < 12 ? 'Strict prompt following' : 'Very literal, may over-saturate'}
+                      </p>
                     </div>
-                    <input type="number"
-                      className="w-full bg-gray-950 border border-red-700/50 rounded p-2 text-sm text-red-200 font-mono"
-                      value={comfySettings.seed}
-                      onChange={(e) => updateComfyUI({ seed: parseInt(e.target.value) || -1 })}
-                      min="-1"
-                      placeholder="-1 for random"
-                    />
-                    <p className="text-[10px] text-red-400/60">
-                      {comfySettings.seed === -1 ? 'Random seed each generation' : 'Fixed seed for reproducible results'}
-                    </p>
-                  </div>
-                </div>
-              );
-            })()}
 
-            {/* Temperature */}
-            {!safeSettings.spicyMode?.enabled && (
-              <div className="space-y-1">
+                    {/* Denoise */}
+                    <div className="space-y-1" title="Denoising strength for img2img. 1.0 = complete transformation (txt2img), lower values preserve more of the original image structure.">
+                      <div className="flex justify-between">
+                        <label className="text-xs text-red-300/80 cursor-help border-b border-dashed border-red-500/30 hover:border-red-500/60 transition-colors">Denoise</label>
+                        <span className="text-xs text-red-300 font-mono">{comfySettings.denoise.toFixed(2)}</span>
+                      </div>
+                      <input type="range" min="0.1" max="1.0" step="0.05"
+                        className="w-full h-2 bg-red-900/50 rounded-lg appearance-none cursor-pointer accent-red-500"
+                        value={comfySettings.denoise}
+                        onChange={(e) => updateComfyUI({ denoise: parseFloat(e.target.value) })}
+                      />
+                      <p className="text-[10px] text-red-400/60">
+                        {comfySettings.denoise < 0.5 ? 'Subtle changes, preserves structure' :
+                          comfySettings.denoise < 0.8 ? 'Moderate transformation' :
+                            'Full generation (txt2img mode)'}
+                      </p>
+                    </div>
+
+                    {/* Sampler */}
+                    <div className="space-y-1" title="Sampling algorithm. Different samplers produce different results at different speeds. Euler is fast and reliable; DPM++ offers better quality at cost of speed.">
+                      <div className="flex items-center gap-1">
+                        <label className="text-xs text-red-300/80 cursor-help border-b border-dashed border-red-500/30 hover:border-red-500/60 transition-colors">Sampler</label>
+                      </div>
+                      <select
+                        className="w-full bg-gray-950 border border-red-700/50 rounded p-2 text-sm text-red-200"
+                        value={comfySettings.sampler}
+                        onChange={(e) => updateComfyUI({ sampler: e.target.value as ComfyUISampler })}
+                      >
+                        {Object.entries(COMFYUI_SAMPLER_LABELS).map(([key, label]) => (
+                          <option key={key} value={key}>{label}</option>
+                        ))}
+                      </select>
+                      <p className="text-[10px] text-red-400/60">
+                        {comfySettings.sampler === 'euler' ? 'Fast, stable, good for most cases' :
+                          comfySettings.sampler === 'euler_ancestral' ? 'More varied, creative results' :
+                            comfySettings.sampler === 'dpmpp_2m' ? 'Higher quality, slower' :
+                              'Best quality, stochastic (randomized)'}
+                      </p>
+                    </div>
+
+                    {/* Scheduler */}
+                    <div className="space-y-1" title="Noise scheduling strategy. Controls how the denoising process progresses. Karras often produces sharper details; Normal is the standard approach.">
+                      <div className="flex items-center gap-1">
+                        <label className="text-xs text-red-300/80 cursor-help border-b border-dashed border-red-500/30 hover:border-red-500/60 transition-colors">Scheduler</label>
+                      </div>
+                      <select
+                        className="w-full bg-gray-950 border border-red-700/50 rounded p-2 text-sm text-red-200"
+                        value={comfySettings.scheduler}
+                        onChange={(e) => updateComfyUI({ scheduler: e.target.value as ComfyUIScheduler })}
+                      >
+                        {Object.entries(COMFYUI_SCHEDULER_LABELS).map(([key, label]) => (
+                          <option key={key} value={key}>{label}</option>
+                        ))}
+                      </select>
+                      <p className="text-[10px] text-red-400/60">
+                        {comfySettings.scheduler === 'normal' ? 'Standard scheduling, reliable' :
+                          comfySettings.scheduler === 'karras' ? 'Sharper details, recommended' :
+                            'Uniform noise distribution'}
+                      </p>
+                    </div>
+
+                    {/* LoRA Selector */}
+                    <LoraSelector
+                      selectedLoraId={comfySettings.loraId}
+                      loraWeight={comfySettings.loraWeight ?? 0.8}
+                      onLoraChange={(loraId) => updateComfyUI({ loraId: loraId || undefined })}
+                      onWeightChange={(weight) => updateComfyUI({ loraWeight: weight })}
+                      onManageClick={() => setLoraModalOpen(true)}
+                    />
+
+                    {/* Trigger Word Hint */}
+                    {selectedLora && (
+                      <div className="p-2 bg-amber-900/20 border border-amber-500/30 rounded text-xs text-amber-300">
+                        <span className="font-medium">Trigger word:</span> {selectedLora.trigger_word}
+                      </div>
+                    )}
+
+                    {/* IP-Adapter Weight (only when reference image attached) */}
+                    {hasRefImage && (
+                      <div className="space-y-1" title="Controls how much the reference image influences the result. 0 = no influence, 1 = balanced, 2 = strong influence. Higher values may cause artifacts.">
+                        <div className="flex justify-between">
+                          <label className="text-xs text-red-300/80 cursor-help border-b border-dashed border-red-500/30 hover:border-red-500/60 transition-colors">IP-Adapter Weight</label>
+                          <span className="text-xs text-red-300 font-mono">{comfySettings.ipAdapterWeight.toFixed(2)}</span>
+                        </div>
+                        <input type="range" min="0" max="2" step="0.05"
+                          className="w-full h-2 bg-red-900/50 rounded-lg appearance-none cursor-pointer accent-red-500"
+                          value={comfySettings.ipAdapterWeight}
+                          onChange={(e) => updateComfyUI({ ipAdapterWeight: parseFloat(e.target.value) })}
+                        />
+                        <p className="text-[10px] text-red-400/60">
+                          {comfySettings.ipAdapterWeight < 0.5 ? 'Subtle face/style influence' :
+                            comfySettings.ipAdapterWeight < 1.0 ? 'Moderate influence' :
+                              comfySettings.ipAdapterWeight < 1.5 ? 'Strong influence' : 'Very strong, may cause artifacts'}
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Seed */}
+                    <div className="space-y-1" title="Random seed for reproducible results. Use -1 for random generation. Same seed + same settings = same image. Useful for iterating on a specific look.">
+                      <div className="flex items-center gap-1">
+                        <label className="text-xs text-red-300/80 cursor-help border-b border-dashed border-red-500/30 hover:border-red-500/60 transition-colors">Seed</label>
+                        <span className="text-[10px] text-red-400/60">(-1 = random)</span>
+                      </div>
+                      <input type="number"
+                        className="w-full bg-gray-950 border border-red-700/50 rounded p-2 text-sm text-red-200 font-mono"
+                        value={comfySettings.seed}
+                        onChange={(e) => updateComfyUI({ seed: parseInt(e.target.value) || -1 })}
+                        min="-1"
+                        placeholder="-1 for random"
+                      />
+                      <p className="text-[10px] text-red-400/60">
+                        {comfySettings.seed === -1 ? 'Random seed each generation' : 'Fixed seed for reproducible results'}
+                      </p>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Temperature */}
+              {!safeSettings.spicyMode?.enabled && (
+                <div className="space-y-1">
+                  <div className="flex justify-between">
+                    <label className="text-xs text-gray-400 block">Temperature</label>
+                    <span className="text-xs text-gray-400 font-mono">{(safeSettings.temperature || 1).toFixed(1)}</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0"
+                    max="2"
+                    step="0.1"
+                    className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-dash-300"
+                    value={safeSettings.temperature || 1}
+                    onChange={(e) => setSettings({ ...safeSettings, temperature: parseFloat(e.target.value) })}
+
+                  />
+                </div>
+              )}
+
+              {/* Batch size */}
+              <div className="space-y-1 col-span-2">
                 <div className="flex justify-between">
-                  <label className="text-xs text-gray-400 block">Temperature</label>
-                  <span className="text-xs text-gray-400 font-mono">{(safeSettings.temperature || 1).toFixed(1)}</span>
+                  <label className="text-xs text-gray-400 block">Batch Size</label>
+                  <span className="text-[10px] text-dash-300 font-mono">
+                    x{safeSettings.outputCount}/prompt
+                  </span>
                 </div>
                 <input
                   type="range"
-                  min="0"
-                  max="2"
-                  step="0.1"
+                  min="1"
+                  max="8"
+                  step="1"
                   className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-dash-300"
-                  value={safeSettings.temperature || 1}
-                  onChange={(e) => setSettings({ ...safeSettings, temperature: parseFloat(e.target.value) })}
-  
+                  value={safeSettings.outputCount || 1}
+                  onChange={(e) => {
+                    let val = parseInt(e.target.value);
+                    setSettings({ ...safeSettings, outputCount: val })
+                  }}
+
                 />
               </div>
-            )}
 
-            {/* Batch size */}
-            <div className="space-y-1 col-span-2">
-              <div className="flex justify-between">
-                <label className="text-xs text-gray-400 block">Batch Size</label>
-                <span className="text-[10px] text-dash-300 font-mono">
-                  x{safeSettings.outputCount}/prompt
-                </span>
-              </div>
-              <input
-                type="range"
-                min="1"
-                max="8"
-                step="1"
-                className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-dash-300"
-                value={safeSettings.outputCount || 1}
-                onChange={(e) => {
-                  let val = parseInt(e.target.value);
-                  setSettings({ ...safeSettings, outputCount: val })
-                }}
+              {/* Safety Filter */}
+              {!safeSettings.spicyMode?.enabled && (
+                <div className="space-y-1 col-span-2 pt-2 border-t border-gray-800/50">
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <label className="text-xs text-gray-400 block">Safety Filter</label>
+                      <span className="text-[10px] text-gray-600">
+                        {safeSettings.safetyFilterEnabled ? 'Enabled (standard filtering)' : 'Disabled (no filtering)'}
+                      </span>
+                    </div>
+                    <button
+                      onClick={() => setSettings({ ...safeSettings, safetyFilterEnabled: !safeSettings.safetyFilterEnabled })}
 
-              />
-            </div>
-
-            {/* Safety Filter */}
-            {!safeSettings.spicyMode?.enabled && (
-              <div className="space-y-1 col-span-2 pt-2 border-t border-gray-800/50">
-                <div className="flex justify-between items-center">
-                  <div>
-                    <label className="text-xs text-gray-400 block">Safety Filter</label>
-                    <span className="text-[10px] text-gray-600">
-                      {safeSettings.safetyFilterEnabled ? 'Enabled (standard filtering)' : 'Disabled (no filtering)'}
-                    </span>
+                      className={`w-10 h-5 rounded-full relative transition-colors ${safeSettings.safetyFilterEnabled
+                          ? 'bg-green-900 ring-1 ring-green-400'
+                          : 'bg-red-900 ring-1 ring-red-400'
+                        }`}
+                    >
+                      <div className={`absolute top-1 w-3 h-3 rounded-full bg-white transition-transform ${safeSettings.safetyFilterEnabled ? 'left-6' : 'left-1'
+                        }`} />
+                    </button>
                   </div>
-                  <button
-                    onClick={() => setSettings({ ...safeSettings, safetyFilterEnabled: !safeSettings.safetyFilterEnabled })}
-    
-                    className={`w-10 h-5 rounded-full relative transition-colors ${
-                      safeSettings.safetyFilterEnabled
-                        ? 'bg-green-900 ring-1 ring-green-400'
-                        : 'bg-red-900 ring-1 ring-red-400'
-                    }`}
-                  >
-                    <div className={`absolute top-1 w-3 h-3 rounded-full bg-white transition-transform ${
-                      safeSettings.safetyFilterEnabled ? 'left-6' : 'left-1'
-                    }`} />
-                  </button>
                 </div>
-              </div>
-            )}
+              )}
 
-            {/* Spicy Mode Warning */}
-            {safeSettings.spicyMode?.enabled && safeSettings.spicyMode.subMode === 'extreme' && !hasRunPodApiKey && (
-              <div className="col-span-2 p-2 bg-red-900/20 border border-red-500/30 rounded text-xs text-red-300">
-                Set your RunPod API key to use Extreme Mode
-              </div>
-            )}
-            {safeSettings.spicyMode?.enabled && safeSettings.spicyMode.subMode !== 'extreme' && !hasKieApiKey && (
-              <div className="col-span-2 p-2 bg-red-900/20 border border-red-500/30 rounded text-xs text-red-300">
-                Set your Kie.ai API key to use Spicy Mode
-              </div>
-            )}
+              {/* Spicy Mode Warning */}
+              {safeSettings.spicyMode?.enabled && safeSettings.spicyMode.subMode === 'extreme' && !hasRunPodApiKey && (
+                <div className="col-span-2 p-2 bg-red-900/20 border border-red-500/30 rounded text-xs text-red-300">
+                  Set your RunPod API key to use Extreme Mode
+                </div>
+              )}
+              {safeSettings.spicyMode?.enabled && safeSettings.spicyMode.subMode !== 'extreme' && !hasKieApiKey && (
+                <div className="col-span-2 p-2 bg-red-900/20 border border-red-500/30 rounded text-xs text-red-300">
+                  Set your Kie.ai API key to use Spicy Mode
+                </div>
+              )}
 
-            {/* Credit Warning */}
-            {safeSettings.spicyMode?.enabled && isCriticalCredits && (
-              <div className="col-span-2 p-2 bg-red-900/20 border border-red-500/30 rounded text-xs text-red-300">
-                Low credits! Only {credits} remaining
-              </div>
-            )}
-          </div>
-
-          {/* Action Buttons */}
-          <div className="space-y-3 pt-4 border-t border-gray-800">
-            {validPromptsCount <= 1 ? (
-              <button
-                onClick={() => onGenerate(false)}
-                disabled={validPromptsCount === 0 || (
-                  safeSettings.spicyMode?.enabled
-                    ? (safeSettings.spicyMode.subMode === 'extreme' ? !hasRunPodApiKey : !hasKieApiKey)
-                    : !hasApiKey
-                )}
-                className={`w-full py-3 px-4 font-medium rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed flex flex-col items-center justify-center leading-tight ${
-                  safeSettings.spicyMode?.enabled
-                    ? 'bg-red-900/30 hover:bg-red-900/50 text-red-200 border border-red-500/30'
-                    : 'bg-gray-800 hover:bg-gray-700 text-white'
-                }`}
-              >
-                <span>Generate</span>
-                <span className="text-[10px] opacity-60 font-mono">({validPromptsCount} total)</span>
-              </button>
-            ) : (
-              <button
-                onClick={() => onGenerate(true)}
-                disabled={validPromptsCount === 0 || (
-                  safeSettings.spicyMode?.enabled
-                    ? (safeSettings.spicyMode.subMode === 'extreme' ? !hasRunPodApiKey : !hasKieApiKey)
-                    : !hasApiKey
-                )}
-                className={`w-full py-3 px-4 font-bold rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed flex flex-col items-center justify-center leading-tight ${
-                  safeSettings.spicyMode?.enabled
-                    ? 'bg-red-500 hover:bg-red-400 text-white shadow-[0_0_15px_rgba(239,68,68,0.3)]'
-                    : 'bg-dash-200 hover:bg-dash-300 text-dash-900 shadow-[0_0_15px_rgba(134,239,172,0.2)]'
-                }`}
-              >
-                <span>Batch Run</span>
-                <span className="text-[10px] opacity-60 font-mono">({totalImages} total)</span>
-              </button>
-            )}
-            {!safeSettings.spicyMode?.enabled && !hasApiKey && (
-              <p className="text-center text-xs text-red-400 animate-pulse cursor-pointer" onClick={onOpenApiKey}>Gemini API Key required to generate</p>
-            )}
-            {safeSettings.spicyMode?.enabled && safeSettings.spicyMode.subMode === 'extreme' && !hasRunPodApiKey && (
-              <p className="text-center text-xs text-red-400 animate-pulse cursor-pointer" onClick={onOpenApiKey}>RunPod API Key required for Extreme Mode</p>
-            )}
-            {safeSettings.spicyMode?.enabled && safeSettings.spicyMode.subMode !== 'extreme' && !hasKieApiKey && (
-              <p className="text-center text-xs text-red-400 animate-pulse cursor-pointer" onClick={onOpenApiKey}>Kie.ai API Key required for Spicy Mode</p>
-            )}
-          </div>
-
-          {/* Payload Preview */}
-          <div className="bg-black/30 rounded p-3 text-xs font-mono text-gray-500 break-words relative group">
-            <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
-              <button onClick={handleCopy} className="text-gray-400 hover:text-white" title="Copy Info">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
-              </button>
+              {/* Credit Warning */}
+              {safeSettings.spicyMode?.enabled && isCriticalCredits && (
+                <div className="col-span-2 p-2 bg-red-900/20 border border-red-500/30 rounded text-xs text-red-300">
+                  Low credits! Only {credits} remaining
+                </div>
+              )}
             </div>
-            <p className="font-bold mb-1">Payload Preview:</p>
-            {getCurrentPreview() || '(Empty)'}
+
+            {/* Action Buttons */}
+            <div className="space-y-3 pt-4 border-t border-gray-800">
+              {validPromptsCount <= 1 ? (
+                <button
+                  onClick={() => onGenerate(false)}
+                  disabled={validPromptsCount === 0 || (
+                    safeSettings.spicyMode?.enabled
+                      ? (safeSettings.spicyMode.subMode === 'extreme' ? !hasRunPodApiKey : !hasKieApiKey)
+                      : !hasApiKey
+                  )}
+                  className={`w-full py-3 px-4 font-medium rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed flex flex-col items-center justify-center leading-tight ${safeSettings.spicyMode?.enabled
+                      ? 'bg-red-900/30 hover:bg-red-900/50 text-red-200 border border-red-500/30'
+                      : 'bg-gray-800 hover:bg-gray-700 text-white'
+                    }`}
+                >
+                  <span>Generate</span>
+                  <span className="text-[10px] opacity-60 font-mono">({validPromptsCount} total)</span>
+                </button>
+              ) : (
+                <button
+                  onClick={() => onGenerate(true)}
+                  disabled={validPromptsCount === 0 || (
+                    safeSettings.spicyMode?.enabled
+                      ? (safeSettings.spicyMode.subMode === 'extreme' ? !hasRunPodApiKey : !hasKieApiKey)
+                      : !hasApiKey
+                  )}
+                  className={`w-full py-3 px-4 font-bold rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed flex flex-col items-center justify-center leading-tight ${safeSettings.spicyMode?.enabled
+                      ? 'bg-red-500 hover:bg-red-400 text-white shadow-[0_0_15px_rgba(239,68,68,0.3)]'
+                      : 'bg-dash-200 hover:bg-dash-300 text-dash-900 shadow-[0_0_15px_rgba(134,239,172,0.2)]'
+                    }`}
+                >
+                  <span>Batch Run</span>
+                  <span className="text-[10px] opacity-60 font-mono">({totalImages} total)</span>
+                </button>
+              )}
+              {!safeSettings.spicyMode?.enabled && !hasApiKey && (
+                <p className="text-center text-xs text-red-400 animate-pulse cursor-pointer" onClick={onOpenApiKey}>Gemini API Key required to generate</p>
+              )}
+              {safeSettings.spicyMode?.enabled && safeSettings.spicyMode.subMode === 'extreme' && !hasRunPodApiKey && (
+                <p className="text-center text-xs text-red-400 animate-pulse cursor-pointer" onClick={onOpenApiKey}>RunPod API Key required for Extreme Mode</p>
+              )}
+              {safeSettings.spicyMode?.enabled && safeSettings.spicyMode.subMode !== 'extreme' && !hasKieApiKey && (
+                <p className="text-center text-xs text-red-400 animate-pulse cursor-pointer" onClick={onOpenApiKey}>Kie.ai API Key required for Spicy Mode</p>
+              )}
+            </div>
+
+            {/* Payload Preview */}
+            <div className="bg-black/30 rounded p-3 text-xs font-mono text-gray-500 break-words relative group">
+              <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                <button onClick={handleCopy} className="text-gray-400 hover:text-white" title="Copy Info">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
+                </button>
+              </div>
+              <p className="font-bold mb-1">Payload Preview:</p>
+              {getCurrentPreview() || '(Empty)'}
+            </div>
           </div>
-        </div>
         )}
         {/* END IMAGE MODE ONLY */}
       </div>
