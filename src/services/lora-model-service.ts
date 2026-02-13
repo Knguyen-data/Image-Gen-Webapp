@@ -346,9 +346,9 @@ class LoraModelServiceImpl implements LoraModelService {
   ): Promise<string[]> {
     const RUNPOD_BASE = import.meta.env.VITE_RUNPOD_LORA_BASE_URL || '/api/runpod';
     const isLocal = RUNPOD_BASE.startsWith('http://localhost') || RUNPOD_BASE.startsWith('http://127.0.0.1');
-    const uploadUrl = isLocal
+    const uploadUrlEndpoint = isLocal
       ? `${RUNPOD_BASE}/upload-url`
-      : `${RUNPOD_BASE}/v2/${LORA_TRAINING_ENDPOINT_ID}/run`;
+      : `${RUNPOD_BASE}/v2/${LORA_TRAINING_ENDPOINT_ID}/upload-url`;
 
     const headers: Record<string, string> = {};
     if (!isLocal) {
@@ -366,7 +366,7 @@ class LoraModelServiceImpl implements LoraModelService {
 
       try {
         // Get pre-signed upload URL from handler
-        const urlResponse = await fetch(`${uploadUrl}?filename=${encodeURIComponent(filename)}&content_type=${file.type}`, {
+        const urlResponse = await fetch(`${uploadUrlEndpoint}?filename=${encodeURIComponent(filename)}&content_type=${file.type}`, {
           method: 'GET',
           headers,
         });
