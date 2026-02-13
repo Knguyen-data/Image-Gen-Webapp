@@ -6,7 +6,31 @@
 
 import { supabase } from './supabase';
 import { logger } from './logger';
+import { enqueueTrainingJob, queueManager, JobProgress } from './job-queue';
 import type { LoraModel, LoraStatus, LoraTrainingConfig } from '../types';
+
+// Event emitter for frontend to subscribe to job updates
+export const trainingEvents = {
+  listeners: new Map<string, (progress: JobProgress) => void>(),
+  
+  on(loraId: string, callback: (progress: JobProgress) => void) {
+    this.listeners.set(loraId, callback);
+  },
+  
+  off(loraId: string) {
+    this.listeners.delete(loraId);
+  },
+  
+  emit(progress: JobProgress) {
+    const callback = this.listeners.get(progress.jobId);
+    if (callback) callback(progress);
+  },
+};
+
+// Listen to queue events and re-emit
+queueManager.on('job:progress', (progress: JobProgress) => {
+  trainingEvents.emit(progress);
+});
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyRecord = any;
@@ -242,12 +266,36 @@ class LoraModelServiceImpl implements LoraModelService {
         logger.error('LoraService', 'Failed to update LoRA status', updateError);
       }
 
-      // Start background polling
-      this.pollTrainingStatus(loraId, jobId, apiKey).catch((err) => {
-        logger.error('LoraService', 'Training poll failed', err);
+      // Enqueue training job (replaces polling with event-driven updates)
+      await queueManager.initialize();
+      await queueManager.enqueueTraining({
+        loraId,
+        userId,
+        prompt: config.triggerWord,
+        imageUrls,
+        settings: {
+          maxTrainEpochs: config.steps,
+          learningRate: config.learningRate,
+          batchSize: config.networkDim,
+        },
       });
 
-      logger.info('LoraService', 'Training job submitted', { loraId, jobId });
+      // Subscribe to progress updates
+      trainingEvents.on(loraId, (progress) => {
+        // Update Supabase in real-time
+        supabase
+          .from('lora_models' as AnyRecord)
+          .update({
+            status: progress.status === 'completed' ? 'ready' : 
+                    progress.status === 'failed' ? 'failed' : 'training',
+            progress: progress.progress,
+            error_message: progress.error,
+          } as AnyRecord)
+          .eq('id', loraId)
+          .catch((err) => logger.error('Failed to update progress', err));
+      });
+
+      logger.info('LoraService', 'Training job enqueued', { loraId, jobId });
       return loraId;
     } catch (err) {
       // Mark failed on any error during setup
