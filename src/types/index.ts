@@ -126,6 +126,7 @@ export interface ComfyUIRunPodJob {
   output?: {
     success: boolean;
     outputs?: Record<string, unknown>;
+    images?: { filename: string; data: string; type: string }[];
     error?: string;
   };
   error?: string;
