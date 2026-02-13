@@ -1,5 +1,5 @@
 import React, { useRef, useState } from 'react';
-import { VideoScene, VideoSettings, ReferenceImage, ReferenceVideo, UnifiedVideoSettings } from '../types';
+import { VideoScene, VideoSettings, ReferenceImage, ReferenceVideo, UnifiedVideoSettings, VideoModel } from '../types';
 import { validateVideoFile } from '../services/kling-motion-control-service';
 import { VIDEO_CONSTRAINTS } from '../constants';
 import { getVideoDuration } from '../utils/video-dimensions';
@@ -862,12 +862,12 @@ const VideoSceneQueue: React.FC<VideoSceneQueueProps> = ({
             ) : (
               <>
                 {(() => {
-                  const model = videoSettings.model;
+                  const model: VideoModel = videoSettings.model;
                   if ((model === 'kling-2.6' || model === 'kling-2.6-pro') && videoSettings.globalReferenceVideo) {
                     return '🏃 Auto Motion Control';
                   }
                   if (model === 'kling-3' || model === 'kling-3-omni') {
-                    return (model as string) === 'kling-3-omni' ? '🎬 Auto Omni' : '🎬 Auto MultiShot';
+                    return model === 'kling-3-omni' ? '🎬 Auto Omni' : '🎬 Auto MultiShot';
                   }
                   return '✨ Auto Motion Prompts';
                 })()}

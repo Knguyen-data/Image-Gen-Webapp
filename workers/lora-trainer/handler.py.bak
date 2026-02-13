@@ -268,15 +268,15 @@ if __name__ == "__main__":
         body = await request.json()
         job_id = f"local-{len(jobs) + 1}"
         jobs[job_id] = {"status": "queued", "input": body}
-
+        
         # Start processing in background
         asyncio.create_task(process_job(job_id, body))
-
+        
         return {"id": job_id}
 
     async def process_job(job_id: str, input_body: dict):
         """Background task to process job."""
-        jobs[job_id]["status"] = "in_progress"
+        jobs[job_id]["status"] = "in_progress"]
         try:
             result = await handler({"input": input_body})
             jobs[job_id]["status"] = result.get("status", "completed")

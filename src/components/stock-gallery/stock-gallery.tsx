@@ -741,8 +741,8 @@ const StockGallery: React.FC<StockGalleryProps> = ({ onSelectVideo, onClose, mod
 
       {/* Content with Sidebar */}
       <div className="flex-1 flex overflow-hidden">
-        {/* Sidebar - Categories */}
-        {(selectedCategory || isSearchMode) && showSidebar && (
+        {/* Sidebar - Categories - show when sidebar is enabled */}
+        {showSidebar && (
           <div className="w-48 shrink-0 border-r border-gray-800 bg-gray-900/30 overflow-y-auto">
             <div className="p-3">
               <div className="flex items-center justify-between mb-2">
@@ -759,11 +759,19 @@ const StockGallery: React.FC<StockGalleryProps> = ({ onSelectVideo, onClose, mod
               <button
                 onClick={handleBack}
                 className={`w-full text-left px-2 py-1.5 rounded text-xs transition-colors mb-1 ${
-                  !selectedCategory ? 'text-dash-400 bg-dash-500/10' : 'text-gray-400 hover:text-white hover:bg-gray-800/50'
+                  !selectedCategory && !isSearchMode ? 'text-dash-400 bg-dash-500/10' : 'text-gray-400 hover:text-white hover:bg-gray-800/50'
                 }`}
               >
                 📂 All Categories
               </button>
+              {selectedCategory && (
+                <button
+                  onClick={handleBack}
+                  className="w-full text-left px-2 py-1.5 rounded text-xs transition-colors mb-1 text-gray-400 hover:text-white hover:bg-gray-800/50"
+                >
+                  ← Back to Categories
+                </button>
+              )}
               {categories.map((cat) => (
                 <button
                   key={cat.id}
@@ -795,154 +803,72 @@ const StockGallery: React.FC<StockGalleryProps> = ({ onSelectVideo, onClose, mod
         )}
 
         {/* Main content area */}
-        <div
-          ref={scrollRef}
-          onScroll={handleScroll}
-          className="flex-1 overflow-y-auto p-4"
-        >
-          {error && (
-            <div className="mb-4 p-3 rounded-lg bg-red-900/30 border border-red-500/30 text-red-300 text-sm">
-              {error}
-            </div>
-          )}
+        <div className="flex-1 flex flex-col overflow-hidden">
+          <div className="px-4 py-2 flex-shrink-0">
+            {/* Error */}
+            {error && (
+              <div className="mb-2 p-2 rounded bg-red-900/30 border border-red-500/30 text-red-300 text-xs">
+                {error}
+              </div>
+            )}
 
-          {/* Filter chips */}
-          {(selectedCategory || isSearchMode) && (
-            <div className="mb-4 flex flex-wrap gap-2 items-center">
-              {/* Mood filters */}
-              <span className="text-[10px] text-gray-500 uppercase">Mood:</span>
-              {moodCounts.slice(0, 8).map(({ mood, count }) => (
-                <button
-                  key={mood}
-                  onClick={() => handleMoodFilter(selectedMood === mood ? null : mood)}
-                  className={`px-2 py-1 rounded-full text-[10px] transition-colors flex items-center gap-1 ${
-                    selectedMood === mood
-                      ? 'bg-purple-500/30 text-purple-300 border border-purple-500/50'
-                      : 'bg-gray-800/50 text-gray-400 border border-gray-700/50 hover:border-gray-600'
-                  }`}
-                >
-                  <span>{getMoodIcon(mood)}</span>
-                  <span>{mood}</span>
-                  <span className="text-gray-600">({count})</span>
-                </button>
-              ))}
-              
-              {/* Scene type filters */}
-              {sceneTypeCounts.length > 0 && (
-                <>
-                  <span className="text-[10px] text-gray-500 uppercase ml-2">Scene:</span>
-                  {sceneTypeCounts.slice(0, 6).map(({ sceneType, count }) => (
-                    <button
-                      key={sceneType}
-                      onClick={() => handleSceneTypeFilter(selectedSceneType === sceneType ? null : sceneType)}
-                      className={`px-2 py-1 rounded-full text-[10px] transition-colors ${
-                        selectedSceneType === sceneType
-                          ? 'bg-cyan-500/30 text-cyan-300 border border-cyan-500/50'
-                          : 'bg-gray-800/50 text-gray-400 border border-gray-700/50 hover:border-gray-600'
-                      }`}
-                    >
-                      {sceneType} ({count})
-                    </button>
+            {/* Filter chips */}
+            {(selectedCategory || isSearchMode) && (
+              <div className="flex flex-wrap gap-2 items-center text-[10px]">
+                <span className="text-gray-500 uppercase">Mood:</span>
+                {moodCounts.slice(0, 6).map(({ mood, count }) => (
+                  <button
+                    key={mood}
+                    onClick={() => handleMoodFilter(selectedMood === mood ? null : mood)}
+                    className={`px-2 py-0.5 rounded-full transition-colors ${
+                      selectedMood === mood
+                        ? 'bg-purple-500/30 text-purple-300 border border-purple-500/50'
+                        : 'bg-gray-800/50 text-gray-400 border border-gray-700/50'
+                    }`}
+                  >
+                    {mood}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Video Grid */}
+          <div ref={gridContainerRef} className="flex-1 overflow-hidden relative p-2">
+            {gridContainerSize.width === 0 ? (
+              <div className="absolute inset-0 flex items-center justify-center text-xs text-yellow-400">
+                Loading... {gridContainerSize.width}×{gridContainerSize.height}
+              </div>
+            ) : videos.length === 0 ? (
+              <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-500">
+                <span className="text-2xl mb-2">🎬</span>
+                <p className="text-sm">No videos</p>
+              </div>
+            ) : (
+              <>
+                {/* Debug info */}
+                <div className="text-[10px] text-gray-500 mb-1">
+                  {columnCount} cols × {rowCount} rows = {videos.length} videos | {gridContainerSize.width}×{gridContainerSize.height}
+                </div>
+                {/* Simple fallback grid */}
+                <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${columnCount}, 1fr)` }}>
+                  {videos.slice(0, 12).map((video, idx) => (
+                    <div key={video.id + idx} className="aspect-video bg-gray-800 rounded-lg border border-gray-700 flex items-center justify-center relative overflow-hidden">
+                      <span className="text-xs text-gray-400 truncate px-2">{video.name}</span>
+                      {/* Hover overlay */}
+                      <div className="absolute inset-0 bg-black/50 opacity-0 hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                        <button className="px-2 py-1 bg-white/20 rounded text-xs">▶</button>
+                        <button className="px-2 py-1 bg-dash-600/60 rounded text-xs">+</button>
+                      </div>
+                    </div>
                   ))}
-                </>
-              )}
-              
-              {/* Clear filters */}
-              {(selectedMood || selectedSceneType) && (
-                <button
-                  onClick={clearAllFilters}
-                  className="px-2 py-1 rounded-full text-[10px] bg-red-500/20 text-red-400 border border-red-500/30 hover:bg-red-500/30"
-                >
-                  ✕ Clear filters
-                </button>
-              )}
-            </div>
-          )}
-
-          {loading && videos.length === 0 ? (
-            <div className="flex items-center justify-center h-40">
-              <div className="flex flex-col items-center gap-2">
-                <div className="w-6 h-6 border-2 border-dash-500/30 border-t-dash-500 rounded-full animate-spin" />
-                <span className="text-xs text-gray-500">Loading...</span>
-              </div>
-            </div>
-          ) : !selectedCategory && !isSearchMode ? (
-            /* Category browse grid */
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
-              {categories.map((cat) => (
-                <button
-                  key={cat.id}
-                  onClick={() => handleCategorySelect(cat)}
-                  className="aspect-video rounded-xl bg-gray-800/50 border border-gray-700/30 hover:border-dash-500/40 hover:bg-gray-800/80 transition-all flex flex-col items-center justify-center gap-2 p-4 group relative"
-                >
-                  <span className="text-3xl group-hover:scale-110 transition-transform">{cat.icon}</span>
-                  <span className="text-xs font-medium text-white text-center leading-tight">{cat.name}</span>
-                  {/* Video count badge */}
-                  {cat.videoCount != null && cat.videoCount > 0 && (
-                    <span className="absolute top-2 right-2 px-1.5 py-0.5 rounded-full bg-dash-500/20 text-dash-400 text-[10px] font-mono">
-                      {cat.videoCount}
-                    </span>
-                  )}
-                </button>
-              ))}
-            </div>
-          ) : videos.length === 0 && !loading ? (
-            <div className="flex flex-col items-center justify-center h-40 text-gray-500">
-              <span className="text-2xl mb-2">🎬</span>
-            <p className="text-sm">No videos found</p>
-            {isSearchMode && (
-              <button
-                onClick={handleClearSearch}
-                className="mt-2 text-xs text-dash-400 hover:text-dash-300"
-              >
-                Clear search
-              </button>
+                </div>
+                {videos.length > 12 && (
+                  <p className="text-xs text-gray-500 mt-2">...and {videos.length - 12} more videos</p>
+                )}
+              </>
             )}
           </div>
-        ) : (
-          /* Virtual Video Grid */
-          <div ref={gridContainerRef} className="flex-1 relative">
-            {gridContainerSize.width > 0 && gridContainerSize.height > 0 && (
-              <Grid
-                cellComponent={VideoGridCell}
-                cellProps={{
-                  videos,
-                  videoDurations,
-                  hoveredVideoId,
-                  columnCount,
-                  isSearchMode,
-                  onPreview: handlePreview,
-                  onAdd: handleAddToTimeline,
-                  onHover: handleVideoHover,
-                  onDurationExtracted: handleDurationExtracted,
-                }}
-                columnCount={columnCount}
-                columnWidth={(gridContainerSize.width - CARD_GAP * (columnCount - 1)) / columnCount}
-                height={gridContainerSize.height}
-                rowCount={rowCount}
-                rowHeight={CARD_HEIGHT + CARD_GAP}
-                width={gridContainerSize.width}
-                // @ts-expect-error react-window v2 onScroll type mismatch
-                onScroll={({ scrollTop }: { scrollTop: number }) => {
-                  // Infinite scroll - load more when near bottom
-                  const threshold = 400;
-                  const totalHeight = rowCount * (CARD_HEIGHT + CARD_GAP);
-                  if (!loading && hasMore && totalHeight - scrollTop - gridContainerSize.height < threshold) {
-                    handleLoadMore();
-                  }
-                }}
-              />
-            )}
-
-            {/* Loading indicator overlay */}
-            {loading && videos.length > 0 && (
-              <div className="absolute bottom-4 left-1/2 -translate-x-1/2 px-4 py-2 rounded-lg bg-gray-900/90 border border-gray-700/50 flex items-center gap-2">
-                <div className="w-4 h-4 border-2 border-dash-500/30 border-t-dash-500 rounded-full animate-spin" />
-                <span className="text-xs text-gray-400">Loading more...</span>
-              </div>
-            )}
-          </div>
-        )}
         </div>
       </div>
 

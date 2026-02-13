@@ -15,6 +15,9 @@ const GCS_BUCKET = 'higgfails_media';
 const GCS_BASE_URL = `https://storage.googleapis.com/${GCS_BUCKET}`;
 const GCS_API_BASE = `https://storage.googleapis.com/storage/v1/b/${GCS_BUCKET}/o`;
 
+// CORS proxy for video playback/thumbnails (workaround until CORS is configured on bucket)
+const CORS_PROXY = 'https://corsproxy.io/?';
+
 // === TYPES ===
 
 export interface StockCategory {
@@ -61,7 +64,16 @@ export type StockSceneType = typeof STOCK_SCENE_TYPES[number];
  */
 export async function listStockCategories(): Promise<StockCategory[]> {
   try {
-    // Try RPC first (most efficient — single query, server-side grouping)
+    // Try GCS first (bypasses Supabase CORS and config issues)
+    logger.info('StockGallery', 'Fetching categories from GCS...');
+    const gcsCategories = await listStockCategoriesFromGCS();
+    if (gcsCategories.length > 0) {
+      logger.info('StockGallery', `GCS returned ${gcsCategories.length} categories`);
+      return gcsCategories;
+    }
+    
+    // Fallback to Supabase RPC
+    logger.info('StockGallery', 'GCS empty, trying Supabase RPC...');
     const { data: rpcData, error: rpcError } = await supabase.rpc('get_stock_category_counts' as any);
     
     if (!rpcError && rpcData && rpcData.length > 0) {
@@ -77,9 +89,8 @@ export async function listStockCategories(): Promise<StockCategory[]> {
         }));
     }
 
-    // Fallback: paginate through all rows to count categories client-side
-    // (PostgREST defaults to 1000 row limit, so we must paginate)
-    logger.info('StockGallery', 'RPC not available, paginating for category counts');
+    // Fallback: paginate Supabase
+    logger.info('StockGallery', 'RPC failed, paginating Supabase...');
     const counts: Record<string, number> = {};
     let offset = 0;
     const pageSize = 1000;
@@ -90,16 +101,7 @@ export async function listStockCategories(): Promise<StockCategory[]> {
         .select('category')
         .range(offset, offset + pageSize - 1);
 
-      if (error) {
-        logger.warn('StockGallery', 'Supabase category fetch failed, falling back to GCS', error);
-        return listStockCategoriesFromGCS();
-      }
-
-      if (!data || data.length === 0) {
-        if (offset === 0) {
-          logger.info('StockGallery', 'No categories in Supabase, falling back to GCS');
-          return listStockCategoriesFromGCS();
-        }
+      if (error || !data || data.length === 0) {
         break;
       }
 
@@ -113,7 +115,7 @@ export async function listStockCategories(): Promise<StockCategory[]> {
       offset += pageSize;
     }
 
-    return Object.entries(counts)
+    const result = Object.entries(counts)
       .sort((a, b) => a[0].localeCompare(b[0]))
       .map(([category, count]) => ({
         id: category,
@@ -123,9 +125,17 @@ export async function listStockCategories(): Promise<StockCategory[]> {
         rawName: category,
         videoCount: count,
       }));
+
+    if (result.length > 0) {
+      return result;
+    }
+
+    // Final fallback to hardcoded
+    logger.warn('StockGallery', 'All sources empty, using hardcoded categories');
+    return getHardcodedCategories();
   } catch (error) {
     logger.error('StockGallery', 'Failed to list categories', error);
-    return listStockCategoriesFromGCS();
+    return getHardcodedCategories();
   }
 }
 
@@ -150,36 +160,40 @@ export async function listStockVideos(
   const category = categoryPath.replace(/\/$/, '');
 
   try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    // Try GCS first
+    logger.info('StockGallery', `Fetching videos from GCS for ${categoryPath}...`);
+    const gcsVideos = await listStockVideosFromGCS(categoryPath);
+    if (gcsVideos.length > 0) {
+      logger.info('StockGallery', `GCS returned ${gcsVideos.length} videos`);
+      return gcsVideos;
+    }
+
+    // Fallback to Supabase
+    logger.info('StockGallery', 'GCS empty, trying Supabase...');
     let query: any = supabase
       .from('stock_videos')
       .select('*')
       .eq('category', category);
     
-    // Apply optional filters
     if (mood) query = query.eq('mood', mood);
     if (sceneType) query = query.eq('scene_type', sceneType);
 
-    // Sort by the correct column
     const sortColumn = sortBy === 'date' ? 'created_at' : sortBy === 'size' ? 'size' : 'name';
     query = query.order(sortColumn, { ascending: sortDir === 'asc' });
     query = query.range(offset, offset + limit - 1);
 
     const { data, error } = await query;
 
-    if (error) {
-      logger.warn('StockGallery', 'Supabase video list failed, falling back to GCS', error);
-      return listStockVideosFromGCS(categoryPath);
+    if (!error && data && data.length > 0) {
+      return mapSupabaseRows(data);
     }
 
-    if (!data || data.length === 0) {
-      return listStockVideosFromGCS(categoryPath);
-    }
-
-    return mapSupabaseRows(data);
+    // Try hardcoded fallback
+    logger.warn('StockGallery', 'Supabase empty, using hardcoded videos');
+    return getVideosForHardcodedCategory(categoryPath);
   } catch (error) {
     logger.error('StockGallery', 'Failed to list videos', error);
-    return listStockVideosFromGCS(categoryPath);
+    return getVideosForHardcodedCategory(categoryPath);
   }
 }
 
@@ -399,7 +413,7 @@ async function listStockCategoriesFromGCS(): Promise<StockCategory[]> {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout
 
-    const response = await fetch(`${GCS_API_BASE}?delimiter=/&maxResults=200`, {
+    const response = await fetch(`${GCS_API_BASE}?prefix=&delimiter=/&maxResults=100`, {
       signal: controller.signal
     });
     clearTimeout(timeoutId);
@@ -449,13 +463,13 @@ async function listStockVideosFromGCS(categoryPath: string): Promise<StockVideo[
 
     do {
       attempt++;
-      const params = new URLSearchParams({ prefix: categoryPath, maxResults: '500' });
+      const params = new URLSearchParams({ prefix: categoryPath, pageSize: '500' });
       if (pageToken) params.set('pageToken', pageToken);
 
       const response = await fetch(`${GCS_API_BASE}?${params}`, {
         signal: controller.signal
       });
-      
+
       clearTimeout(timeoutId);
 
       if (!response.ok) {
@@ -476,7 +490,8 @@ async function listStockVideosFromGCS(categoryPath: string): Promise<StockVideo[
         if (fileName.includes('/')) continue;
 
         const size = parseInt(item.size || '0', 10);
-        const url = `${GCS_BASE_URL}/${encodeGCSPath(name)}`;
+        const rawUrl = `${GCS_BASE_URL}/${encodeGCSPath(name)}`;
+        const url = `${CORS_PROXY}${encodeURIComponent(rawUrl)}`;
 
         allVideos.push({
           id: name,

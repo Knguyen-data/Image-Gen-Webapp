@@ -565,7 +565,7 @@ const VideoEditorModalCapCutStyle: React.FC<VideoEditorModalProps> = ({
       {/* Top bar - CapCut style */}
       <div className="h-14 flex items-center justify-between px-6 bg-[#1E293B]/95 backdrop-blur-xl border-b border-slate-700/50">
         <div className="flex items-center gap-3">
-          <div className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse shadow-lg shadow-cyan-400/50" />
+          <div className="w-2 h-2 rounded-full bg-lime-400 animate-pulse shadow-lg shadow-lime-400/50" />
           <h1 className="text-base font-semibold text-white">
             Video Editor
           </h1>
@@ -579,7 +579,7 @@ const VideoEditorModalCapCutStyle: React.FC<VideoEditorModalProps> = ({
           <button
             onClick={handleExport}
             disabled={isExporting || layers.every(l => l.clips.length === 0)}
-            className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white text-sm font-medium transition-all duration-200 border border-cyan-500/20 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2 shadow-lg shadow-cyan-500/20"
+            className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-lime-600 to-green-600 hover:from-lime-500 hover:to-green-500 text-white text-sm font-medium transition-all duration-200 border border-lime-500/20 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2 shadow-lg shadow-lime-500/20"
           >
             {isExporting ? (
               <>
@@ -664,12 +664,12 @@ const VideoEditorModalCapCutStyle: React.FC<VideoEditorModalProps> = ({
                   onClick={() => setSelectedClipId(clip.id)}
                   className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-all ${
                     selectedClipId === clip.id
-                      ? 'bg-blue-500/10 border border-blue-500/30'
+                      ? 'bg-green-500/10 border border-green-500/30'
                       : 'bg-slate-800/40 border border-transparent hover:bg-slate-800/60 hover:border-slate-700/50'
                   }`}
                 >
                   <div className="w-12 h-8 bg-slate-900 rounded flex items-center justify-center">
-                    <svg className="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-4 h-4 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
                     </svg>
                   </div>
@@ -677,7 +677,7 @@ const VideoEditorModalCapCutStyle: React.FC<VideoEditorModalProps> = ({
                     <div className="text-[11px] text-slate-300 truncate">{clip.name}</div>
                     <div className="text-[9px] text-slate-500 font-mono">{clip.durationSec.toFixed(1)}s</div>
                   </div>
-                  <span className="text-[8px] px-1.5 py-0.5 rounded-full bg-blue-500/15 text-blue-400 font-medium">B-ROLL</span>
+                  <span className="text-[8px] px-1.5 py-0.5 rounded-full bg-green-500/15 text-green-400 font-medium">B-ROLL</span>
                 </div>
               ))}
               {mediaTab === 'generated' && layers.every(l => l.clips.length === 0) && (
@@ -687,7 +687,7 @@ const VideoEditorModalCapCutStyle: React.FC<VideoEditorModalProps> = ({
                 <div className="space-y-3">
                   <button
                     onClick={() => document.getElementById('media-panel-import')?.click()}
-                    className="w-full py-8 rounded-xl border-2 border-dashed border-slate-700/50 hover:border-lime-500/40 text-slate-500 hover:text-lime-400 transition-all flex flex-col items-center gap-2"
+                    className="w-full py-8 rounded-xl border-2 border-limeed border-slate-700/50 hover:border-lime-500/40 text-slate-500 hover:text-lime-400 transition-all flex flex-col items-center gap-2"
                   >
                     <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
@@ -708,7 +708,7 @@ const VideoEditorModalCapCutStyle: React.FC<VideoEditorModalProps> = ({
                 <div className="space-y-3">
                   <button
                     onClick={() => setShowStockGallery(true)}
-                    className="w-full py-8 rounded-xl border-2 border-dashed border-slate-700/50 hover:border-purple-500/40 text-slate-500 hover:text-purple-400 transition-all flex flex-col items-center gap-2"
+                    className="w-full py-8 rounded-xl border-2 border-lime-500/40 text-lime-400 transition-all flex flex-col items-center gap-2"
                   >
                     <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
@@ -759,7 +759,7 @@ const VideoEditorModalCapCutStyle: React.FC<VideoEditorModalProps> = ({
               onClick={() => setFitMode(m => m === 'fit' ? '100' : 'fit')}
               className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-150 ${
                 fitMode === '100'
-                  ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30'
+                  ? 'bg-lime-500/20 text-lime-400 border border-lime-500/30'
                   : 'text-slate-400 hover:text-white hover:bg-slate-800/50 border border-transparent'
               }`}
               title="Toggle Fit/Fill"
@@ -774,7 +774,7 @@ const VideoEditorModalCapCutStyle: React.FC<VideoEditorModalProps> = ({
               onClick={() => setRippleMode(!rippleMode)}
               className={`px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all duration-150 flex items-center gap-1.5 ${
                 rippleMode
-                  ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
+                  ? 'bg-green-500/20 text-green-400 border border-green-500/30'
                   : 'text-slate-400 hover:text-white hover:bg-slate-800/50 border border-transparent'
               }`}
               title="Ripple Edit: Shifts clips after edit point"
@@ -789,7 +789,7 @@ const VideoEditorModalCapCutStyle: React.FC<VideoEditorModalProps> = ({
               onClick={() => setSnapToGrid(!snapToGrid)}
               className={`px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all duration-150 flex items-center gap-1.5 ${
                 snapToGrid
-                  ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30'
+                  ? 'bg-lime-500/20 text-lime-400 border border-lime-500/30'
                   : 'text-slate-400 hover:text-white hover:bg-slate-800/50 border border-transparent'
               }`}
               title="Snap to Grid"
@@ -804,7 +804,7 @@ const VideoEditorModalCapCutStyle: React.FC<VideoEditorModalProps> = ({
               onClick={() => setShowWaveforms(!showWaveforms)}
               className={`px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all duration-150 flex items-center gap-1.5 ${
                 showWaveforms
-                  ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30'
+                  ? 'bg-lime-500/20 text-lime-400 border border-lime-500/30'
                   : 'text-slate-400 hover:text-white hover:bg-slate-800/50 border border-transparent'
               }`}
               title="Show Waveforms"
@@ -853,7 +853,7 @@ const VideoEditorModalCapCutStyle: React.FC<VideoEditorModalProps> = ({
         <div className="flex-1 flex items-center justify-center relative overflow-hidden">
           {isLoading && (
             <div className="absolute inset-0 bg-[#0F172A]/90 flex flex-col items-center justify-center z-20">
-              <div className="w-12 h-12 border-4 border-cyan-400 border-t-transparent rounded-full animate-spin mb-4 shadow-lg shadow-cyan-400/20" />
+              <div className="w-12 h-12 border-4 border-lime-400 border-t-transparent rounded-full animate-spin mb-4 shadow-lg shadow-lime-400/20" />
               <p className="text-sm text-slate-300 font-medium">{loadingMessage}</p>
             </div>
           )}
@@ -910,7 +910,7 @@ const VideoEditorModalCapCutStyle: React.FC<VideoEditorModalProps> = ({
                 </div>
                 <div className="w-full h-2.5 bg-slate-800 rounded-full overflow-hidden">
                   <div
-                    className="h-full bg-gradient-to-r from-cyan-500 to-blue-500 transition-all duration-300 rounded-full shadow-lg shadow-cyan-500/30"
+                    className="h-full bg-gradient-to-r from-lime-500 to-green-500 transition-all duration-300 rounded-full shadow-lg shadow-lime-500/30"
                     style={{ width: `${exportProgress}%` }}
                   />
                 </div>
@@ -953,7 +953,7 @@ const VideoEditorModalCapCutStyle: React.FC<VideoEditorModalProps> = ({
           {/* Play/Pause - CapCut style */}
           <button
             onClick={isPlaying ? handlePause : handlePlay}
-            className="p-3.5 rounded-full bg-gradient-to-r from-cyan-600 to-blue-600 text-white hover:from-cyan-500 hover:to-blue-500 transition-all duration-150 shadow-lg shadow-cyan-500/20"
+            className="p-3.5 rounded-full bg-gradient-to-r from-lime-600 to-green-600 text-white hover:from-lime-500 hover:to-green-500 transition-all duration-150 shadow-lg shadow-lime-500/20"
             title={isPlaying ? 'Pause (Space)' : 'Play (Space)'}
           >
             {isPlaying ? (
@@ -992,7 +992,7 @@ const VideoEditorModalCapCutStyle: React.FC<VideoEditorModalProps> = ({
 
           {/* Timecode display - CapCut style */}
           <div className="flex items-center gap-2 ml-4 px-4 py-2 bg-slate-800/60 rounded-lg border border-slate-700/50">
-            <span className="text-sm font-mono text-cyan-400">{formatTimecode(currentTime)}</span>
+            <span className="text-sm font-mono text-lime-400">{formatTimecode(currentTime)}</span>
             <span className="text-xs text-slate-600">/</span>
             <span className="text-sm font-mono text-slate-400">{formatTimecode(duration)}</span>
           </div>
@@ -1212,10 +1212,10 @@ const VideoEditorModalCapCutStyle: React.FC<VideoEditorModalProps> = ({
 
                 {/* Playhead indicator - CapCut style */}
                 <div
-                  className="absolute top-0 bottom-0 w-0.5 bg-cyan-400 z-30 shadow-lg shadow-cyan-400/30"
+                  className="absolute top-0 bottom-0 w-0.5 bg-lime-400 z-30 shadow-lg shadow-lime-400/30"
                   style={{ left: `${currentTime * pixelsPerSecond + 100}px` }}
                 >
-                  <div className="w-3 h-3 bg-cyan-400 rounded-full -ml-[5.5px] -mt-0.5 shadow-lg shadow-cyan-400/50" />
+                  <div className="w-3 h-3 bg-lime-400 rounded-full -ml-[5.5px] -mt-0.5 shadow-lg shadow-lime-400/50" />
                 </div>
               </div>
             </div>
@@ -1309,7 +1309,7 @@ const VideoEditorModalCapCutStyle: React.FC<VideoEditorModalProps> = ({
           <button
             onClick={handleExport}
             disabled={isExporting || layers.every(l => l.clips.length === 0)}
-            className="px-5 py-2 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-150 flex items-center gap-2 shadow-lg shadow-cyan-500/20"
+            className="px-5 py-2 rounded-xl bg-gradient-to-r from-lime-600 to-green-600 hover:from-lime-500 hover:to-green-500 text-white text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-150 flex items-center gap-2 shadow-lg shadow-lime-500/20"
           >
             {isExporting ? (
               <>

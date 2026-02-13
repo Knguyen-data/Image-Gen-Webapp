@@ -18,6 +18,11 @@ export default defineConfig(({ mode }) => {
           ignored: ['**/agent/**', '**/.beads/**', '**/node_modules/**'],
         },
         proxy: {
+          '/api/gcs': {
+            target: 'https://storage.googleapis.com',
+            changeOrigin: true,
+            rewrite: (path) => path.replace(/^\/api\/gcs/, '/storage/v1/b/higgfails_media/o'),
+          },
           '/api/freepik': {
             target: 'https://api.freepik.com',
             changeOrigin: true,
