@@ -1,0 +1,12 @@
+name = "r2-upload-url"
+main = "index.js"
+compatibility_date = "2025-01-01"
+
+[vars]
+R2_BUCKET = "lora-training-images"
+
+# These will be set in Cloudflare Dashboard
+# R2_ENDPOINT = "https://ACCOUNT_ID.r2.cloudflarestorage.com"
+# R2_ACCESS_KEY_ID = "your-access-key"
+# R2_SECRET_ACCESS_KEY = "your-secret-key"
+# R2_PUBLIC_ENDPOINT = "https://r2-media-upload.tnguyen633.workers.dev"

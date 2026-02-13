@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import type { EditorLayerInfo } from '../../services/video-editor-service';
 
 interface TimelineTrackCapCutStyleProps {
@@ -16,6 +16,9 @@ interface TimelineTrackCapCutStyleProps {
   onDragOver: (clipId: string) => void;
   onDragEnd: () => void;
   showWaveforms: boolean;
+  isDropTarget?: boolean;
+  currentTime: number;
+  onSeek: (time: number) => void;
 }
 
 const TimelineTrackCapCutStyle: React.FC<TimelineTrackCapCutStyleProps> = ({
@@ -33,19 +36,18 @@ const TimelineTrackCapCutStyle: React.FC<TimelineTrackCapCutStyleProps> = ({
   onDragOver,
   onDragEnd,
   showWaveforms,
+  isDropTarget = false,
+  currentTime,
+  onSeek,
 }) => {
-  const [resizing, setResizing] = useState<{
-    clipId: string;
-    side: 'left' | 'right';
-    startX: number;
-    originalStart: number;
-    originalEnd: number;
-  } | null>(null);
+  const safeLayer = layer || { clips: [], index: -1 };
+  const [hoveredClip, setHoveredClip] = useState<string | null>(null);
+  const trackRef = useRef<HTMLDivElement>(null);
 
   const handleResizeStart = useCallback(
     (e: React.MouseEvent, clipId: string, side: 'left' | 'right') => {
       e.stopPropagation();
-      const clip = layer.clips.find(c => c.id === clipId);
+      const clip = safeLayer.clips.find(c => c.id === clipId);
       if (!clip) return;
 
       setResizing({
@@ -56,7 +58,7 @@ const TimelineTrackCapCutStyle: React.FC<TimelineTrackCapCutStyleProps> = ({
         originalEnd: clip.endSec,
       });
     },
-    [layer.clips]
+    [safeLayer.clips]
   );
 
   const handleResizeMove = useCallback(
@@ -81,8 +83,7 @@ const TimelineTrackCapCutStyle: React.FC<TimelineTrackCapCutStyleProps> = ({
     setResizing(null);
   }, []);
 
-  // Global mouse event handlers for resizing
-  React.useEffect(() => {
+  useEffect(() => {
     if (!resizing) return;
 
     document.addEventListener('mousemove', handleResizeMove);
@@ -94,26 +95,59 @@ const TimelineTrackCapCutStyle: React.FC<TimelineTrackCapCutStyleProps> = ({
     };
   }, [resizing, handleResizeMove, handleResizeEnd]);
 
+  const handleTrackClick = useCallback((e: React.MouseEvent) => {
+    if (e.target === trackRef.current || (e.target as HTMLElement).classList.contains('track-bg')) {
+      const rect = trackRef.current?.getBoundingClientRect();
+      if (rect) {
+        const x = e.clientX - rect.left;
+        const time = x / pixelsPerSecond;
+        onSeek(Math.max(0, time));
+      }
+    }
+  }, [pixelsPerSecond, onSeek]);
+
+  const getTypeColor = (type: string) => {
+    switch (type) {
+      case 'generated':
+        return 'from-purple-600/80 to-blue-600/80';
+      case 'broll':
+        return 'from-emerald-600/80 to-teal-600/80';
+      case 'stock':
+        return 'from-amber-600/80 to-orange-600/80';
+      default:
+        return 'from-slate-600/80 to-slate-700/80';
+    }
+  };
+
   return (
-    <div className="relative h-12 border-b border-slate-800/30">
+    <div
+      ref={trackRef}
+      className="relative h-12 border-b border-slate-800/30 track-bg cursor-crosshair"
+      onClick={handleTrackClick}
+    >
       {layer.clips.map((clip) => {
         const isSelected = selectedClipId === clip.id;
         const isDragOver = dragOverClipId === clip.id;
         const clipWidth = (clip.endSec - clip.startSec) * pixelsPerSecond;
         const clipLeft = clip.startSec * pixelsPerSecond;
+        const isHovered = hoveredClip === clip.id;
 
         return (
           <div
             key={clip.id}
-            className={`absolute top-1 bottom-1 cursor-pointer group ${
-              isDragOver ? 'ring-2 ring-cyan-500' : ''
-            }`}
+            className={`absolute top-1 bottom-1 group ${isDragOver ? 'ring-2 ring-lime-500' : ''}`}
             style={{
               left: `${clipLeft}px`,
               width: `${clipWidth}px`,
+              cursor: resizing ? 'grabbing' : 'grab',
             }}
+            onMouseEnter={() => setHoveredClip(clip.id)}
+            onMouseLeave={() => setHoveredClip(null)}
             draggable
-            onDragStart={() => onDragStart(clip.id)}
+            onDragStart={(e) => {
+              e.dataTransfer.setData('text/plain', clip.id);
+              onDragStart(clip.id);
+            }}
             onDragOver={(e) => {
               e.preventDefault();
               onDragOver(clip.id);
@@ -124,34 +158,29 @@ const TimelineTrackCapCutStyle: React.FC<TimelineTrackCapCutStyleProps> = ({
               onSelectClip(clip.id);
             }}
           >
-            {/* Clip content - CapCut style */}
             <div
-              className={`relative h-full rounded-lg overflow-hidden transition-all duration-150 ${
+              className={`relative h-full rounded-lg overflow-hidden transition-all duration-200 ${
                 isSelected
-                  ? 'ring-2 ring-cyan-400 shadow-lg shadow-cyan-400/30'
-                  : 'ring-1 ring-slate-600/50'
-              } ${
-                clip.type === 'generated'
-                  ? 'bg-gradient-to-br from-purple-600/80 to-blue-600/80'
-                  : clip.type === 'broll'
-                  ? 'bg-gradient-to-br from-emerald-600/80 to-teal-600/80'
-                  : 'bg-gradient-to-br from-amber-600/80 to-orange-600/80'
-              }`}
+                  ? 'ring-2 ring-lime-400 shadow-lg shadow-lime-400/20'
+                  : 'ring-1 ring-slate-600/50 hover:ring-slate-500/70'
+              } bg-gradient-to-br ${getTypeColor(clip.type)}`}
             >
-              {/* Clip label */}
-              <div className="absolute inset-0 flex items-center px-2">
-                <span className="text-xs font-medium text-white truncate">
+              {isHovered && !isSelected && (
+                <div className="absolute inset-0 bg-white/10 animate-pulse" />
+              )}
+
+              <div className="absolute inset-0 flex items-center px-2 pointer-events-none">
+                <span className="text-xs font-medium text-white truncate drop-shadow-lg">
                   {clip.name || 'Clip'}
                 </span>
               </div>
 
-              {/* Waveform visualization (placeholder) */}
               {showWaveforms && (
                 <div className="absolute bottom-0 left-0 right-0 h-6 bg-black/20 flex items-end justify-around px-1 pointer-events-none">
-                  {Array.from({ length: Math.floor(clipWidth / 4) }).map((_, i) => (
+                  {Array.from({ length: Math.max(5, Math.floor(clipWidth / 3)) }).map((_, i) => (
                     <div
                       key={i}
-                      className="w-0.5 bg-white/30 rounded-full"
+                      className="w-0.5 bg-white/40 rounded-full"
                       style={{
                         height: `${Math.random() * 60 + 20}%`,
                       }}
@@ -160,7 +189,13 @@ const TimelineTrackCapCutStyle: React.FC<TimelineTrackCapCutStyleProps> = ({
                 </div>
               )}
 
-              {/* Transition indicator */}
+              <div
+                className="absolute inset-0"
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                }}
+              />
+
               {clip.transition && (
                 <button
                   onClick={(e) => {
@@ -168,84 +203,99 @@ const TimelineTrackCapCutStyle: React.FC<TimelineTrackCapCutStyleProps> = ({
                     const rect = e.currentTarget.getBoundingClientRect();
                     onTransitionClick(clip.id, { x: rect.left, y: rect.top });
                   }}
-                  className="absolute top-1 right-1 p-1 rounded bg-black/50 text-white/80 hover:text-white transition-colors"
+                  className="absolute top-1 right-1 p-1 rounded bg-black/60 text-white/80 hover:text-white transition-colors z-10"
                   title={`Transition: ${clip.transition.type}`}
                 >
                   <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth="2"
-                      d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"
-                    />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
                   </svg>
                 </button>
               )}
 
-              {/* Left resize handle - CapCut/OpenCut style */}
-              {isSelected && (
-                <>
-                  <div
-                    className="absolute left-0 top-0 bottom-0 w-2 cursor-ew-resize bg-cyan-400 hover:bg-cyan-300 transition-colors z-10 flex items-center justify-center group/handle"
-                    onMouseDown={(e) => handleResizeStart(e, clip.id, 'left')}
-                  >
-                    <div className="w-0.5 h-6 bg-slate-900 rounded-full opacity-60" />
-                  </div>
-
-                  {/* Right resize handle - CapCut/OpenCut style */}
-                  <div
-                    className="absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize bg-cyan-400 hover:bg-cyan-300 transition-colors z-10 flex items-center justify-center group/handle"
-                    onMouseDown={(e) => handleResizeStart(e, clip.id, 'right')}
-                  >
-                    <div className="w-0.5 h-6 bg-slate-900 rounded-full opacity-60" />
-                  </div>
-                </>
-              )}
-
-              {/* Context menu trigger (right-click) */}
               <div
-                className="absolute inset-0"
-                onContextMenu={(e) => {
-                  e.preventDefault();
-                  // Context menu could be added here
-                }}
+                className={`absolute top-0 bottom-0 w-3 bg-gradient-to-r from-white/20 to-transparent opacity-0 transition-opacity ${
+                  isHovered || isSelected ? 'opacity-100' : ''
+                } cursor-w-resize hover:bg-white/30`}
+                style={{ left: 0 }}
+                onClick={(e) => e.stopPropagation()}
+                onMouseDown={(e) => handleResizeStart(e, clip.id, 'left')}
               />
-            </div>
 
-            {/* Quick actions on hover - CapCut style */}
-            {isSelected && (
-              <div className="absolute -top-8 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity duration-150 flex items-center gap-1 bg-slate-900/95 backdrop-blur-sm rounded-lg px-2 py-1 shadow-lg border border-slate-700/50">
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onRemoveClip(clip.id);
-                  }}
-                  className="p-1 rounded text-red-400 hover:bg-red-900/30 transition-colors"
-                  title="Delete clip"
-                >
-                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth="2"
-                      d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                    />
-                  </svg>
-                </button>
-              </div>
-            )}
+              <div
+                className={`absolute top-0 bottom-0 w-3 bg-gradient-to-l from-white/20 to-transparent opacity-0 transition-opacity ${
+                  isHovered || isSelected ? 'opacity-100' : ''
+                } cursor-e-resize hover:bg-white/30`}
+                style={{ right: 0 }}
+                onClick={(e) => e.stopPropagation()}
+                onMouseDown={(e) => handleResizeStart(e, clip.id, 'right')}
+              />
+
+              {isSelected && (
+                <div className="absolute -top-6 left-1/2 -translate-x-1/2 flex items-center gap-1 bg-slate-900/95 backdrop-blur-sm rounded-lg px-2 py-1 shadow-lg border border-slate-700/50 opacity-100 transition-all">
+                  <span className="text-[10px] text-slate-400 font-mono">
+                    {clip.startSec.toFixed(1)}s
+                  </span>
+                  <span className="text-slate-600">→</span>
+                  <span className="text-[10px] text-slate-400 font-mono">
+                    {clip.endSec.toFixed(1)}s
+                  </span>
+                  <span className="text-slate-600">|</span>
+                  <span className="text-[10px] text-lime-400 font-mono">
+                    {(clip.endSec - clip.startSec).toFixed(1)}s
+                  </span>
+                </div>
+              )}
+
+              {isSelected && (
+                <div className="absolute -top-7 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onRemoveClip(clip.id);
+                    }}
+                    className="p-1 rounded bg-red-500/80 text-white hover:bg-red-500 transition-colors"
+                    title="Delete clip"
+                  >
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         );
       })}
 
-      {/* Empty track placeholder */}
       {layer.clips.length === 0 && (
-        <div className="absolute inset-0 flex items-center justify-center">
-          <div className="text-slate-600 text-xs border-2 border-dashed border-slate-700/30 rounded-lg px-4 py-2">
-            Drop clips here
+        <div className={`absolute inset-0 flex items-center justify-center transition-all ${isDropTarget ? 'bg-lime-500/10' : ''}`}>
+          <div className={`text-xs border-2 border-dashed rounded-lg px-4 py-2 transition-all ${
+            isDropTarget
+              ? 'border-lime-500 text-lime-400 bg-lime-500/5'
+              : 'border-slate-700/30 text-slate-600'
+          }`}>
+            {isDropTarget ? 'Drop here' : 'Drop clips here'}
           </div>
         </div>
       )}
+
+      <style>{`
+        .cursor-crosshair {
+          cursor: crosshair;
+        }
+        .cursor-grab {
+          cursor: grab;
+        }
+        .cursor-grabbing {
+          cursor: grabbing;
+        }
+        .cursor-w-resize {
+          cursor: w-resize;
+        }
+        .cursor-e-resize {
+          cursor: e-resize;
+        }
+      `}</style>
     </div>
   );
 };

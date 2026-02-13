@@ -1,0 +1,14 @@
+[
+  {
+    "allowedOrigins": [
+      "http://localhost:3000",
+      "http://localhost:5173",
+      "https://dash.genai.video",
+      "https://dash-preview.genai.video"
+    ],
+    "allowedMethods": ["GET", "PUT", "POST", "HEAD"],
+    "allowedHeaders": ["*"],
+    "exposeHeaders": ["ETag", "x-amz-meta-*"],
+    "maxAgeSeconds": 3600
+  }
+]

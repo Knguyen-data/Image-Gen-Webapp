@@ -445,6 +445,10 @@ const VideoEditorModalCapCutStyle: React.FC<VideoEditorModalProps> = ({
 
   // --- Add Dragged Media to Layer ---
   const handleAddMediaToLayer = async (layerIndex: number) => {
+    if (typeof layerIndex !== 'number' || layerIndex < 0 || !Number.isInteger(layerIndex)) {
+      logger.warn('VideoEditor', 'Invalid layer index', { layerIndex });
+      return;
+    }
     if (!draggedMedia || !draggedMedia.url) return;
 
     setIsLoading(true);
@@ -719,45 +723,154 @@ const VideoEditorModalCapCutStyle: React.FC<VideoEditorModalProps> = ({
             <div className="flex-1 overflow-y-auto p-2 space-y-1.5">
               {mediaTab === 'generated' && (
                 <>
-                  {/* Generated Images */}
                   {images.filter(img => img.status === 'success' || !img.status).map(img => {
                     const imageUrl = img.base64 ? `data:${img.mimeType};base64,${img.base64}` : '';
                     return (
-                      <div
-                        key={img.id}
-                        draggable
-                        onDragStart={() => {
-                          setDraggedMedia({
-                            type: 'image',
-                            url: imageUrl,
-                            name: img.promptUsed || 'Generated Image',
-                            duration: 3,
-                          });
-                        }}
-                        onDragEnd={() => {
-                          setDraggedMedia(null);
-                          setDropTargetLayerIndex(null);
-                        }}
-                        onClick={() => {
-                          if (imageUrl) {
-                            handleAddImageToTimeline({
-                              url: imageUrl,
-                              name: img.promptUsed || 'Generated Image',
-                              duration: 3,
-                            });
-                          }
-                        }}
-                        className="flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-all bg-slate-800/40 border border-transparent hover:bg-slate-800/60 hover:border-slate-700/50"
-                      >
+                      <div key={img.id} draggable
+                        onDragStart={() => { if (img.base64) setDraggedMedia({ type: 'image', url: imageUrl, name: img.promptUsed || 'Generated Image', duration: 3 }); }}
+                        onDragEnd={() => { setDraggedMedia(null); setDropTargetLayerIndex(null); }}
+                        onClick={() => { if (imageUrl) handleAddImageToTimeline({ url: imageUrl, name: img.promptUsed || 'Generated Image', duration: 3 }); }}
+                        className="flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-all bg-slate-800/40 border border-transparent hover:bg-slate-800/60">
                         <div className="w-12 h-8 bg-slate-900 rounded overflow-hidden flex items-center justify-center">
-                          {imageUrl ? (
-                            <img src={imageUrl} alt={img.promptUsed} className="w-full h-full object-cover" />
-                          ) : (
-                            <svg className="w-4 h-4 text-lime-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                            </svg>
+                          {imageUrl ? <img src={imageUrl} alt={img.promptUsed} className="w-full h-full object-cover" /> : (
+                            <svg className="w-4 h-4 text-lime-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
                           )}
                         </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="text-[11px] text-slate-300 truncate">{img.promptUsed || 'Generated Image'}</div>
+                          <div className="text-[9px] text-slate-500 font-mono">{new Date(img.createdAt).toLocaleDateString()}</div>
+                        </div>
+                        <span className="text-[8px] px-1.5 py-0.5 rounded-full bg-lime-500/15 text-lime-400 font-medium">IMG</span>
+                      </div>
+                    );
+                  })}
+                  {layers.flatMap(l => l.clips.filter(c => c.type === 'generated')).map(clip => (
+                    <div key={clip.id} draggable onClick={() => setSelectedClipId(clip.id)}
+                      className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-all ${selectedClipId === clip.id ? 'bg-lime-500/10 border border-lime-500/30' : 'bg-slate-800/40 border border-transparent hover:bg-slate-800/60'}`}>
+                      <div className="w-12 h-8 bg-slate-900 rounded flex items-center justify-center">
+                        <svg className="w-4 h-4 text-lime-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-[11px] text-slate-300 truncate">{clip.name}</div>
+                        <div className="text-[9px] text-slate-500 font-mono">{clip.durationSec.toFixed(1)}s</div>
+                      </div>
+                      <span className="text-[8px] px-1.5 py-0.5 rounded-full bg-lime-500/15 text-lime-400 font-medium">VID</span>
+                    </div>
+                  ))}
+                  {images.filter(img => img.status === 'success' || !img.status).length === 0 && layers.flatMap(l => l.clips.filter(c => c.type === 'generated')).length === 0 && (
+                    <div className="text-center py-8 text-slate-600 text-xs">No generated media yet.<br /><span className="text-slate-500">Generate images or videos first.</span></div>
+                  )}
+                </>
+              )}
+              {mediaTab === 'imported' && (
+                <>
+                  {layers.flatMap(l => l.clips.filter(c => c.type === 'broll')).map(clip => (
+                    <div key={clip.id} draggable onClick={() => setSelectedClipId(clip.id)}
+                      className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-all ${selectedClipId === clip.id ? 'bg-green-500/10 border border-green-500/30' : 'bg-slate-800/40 border border-transparent hover:bg-slate-800/60'}`}>
+                      <div className="w-12 h-8 bg-slate-900 rounded flex items-center justify-center">
+                        <svg className="w-4 h-4 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-[11px] text-slate-300 truncate">{clip.name}</div>
+                        <div className="text-[9px] text-slate-500 font-mono">{clip.durationSec.toFixed(1)}s</div>
+                      </div>
+                      <span className="text-[8px] px-1.5 py-0.5 rounded-full bg-green-500/15 text-green-400 font-medium">B-ROLL</span>
+                    </div>
+                  ))}
+                  {layers.flatMap(l => l.clips.filter(c => c.type === 'broll')).length === 0 && (
+                    <div className="text-center py-8 text-slate-600 text-xs">No imported clips</div>
+                  )}
+                  <div className="space-y-3">
+                    <button onClick={() => document.getElementById('media-panel-import')?.click()}
+                      className="w-full py-8 rounded-xl border-2 border-lime-500/40 text-lime-400 transition-all flex flex-col items-center gap-2">
+                      <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
+                      <span className="text-xs font-medium">Import Video</span>
+                    </button>
+                    <input id="media-panel-import" type="file" accept="video/*" multiple className="hidden" onChange={(e) => e.target.files && handleImportBroll(e.target.files)} />
+                  </div>
+                </>
+              )}
+              {mediaTab === 'stock' && (
+                <div className="space-y-3">
+                  <button onClick={() => setShowStockGallery(true)}
+                    className="w-full py-8 rounded-xl border-2 border-lime-500/40 text-lime-400 transition-all flex flex-col items-center gap-2">
+                    <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" /></svg>
+                    <span className="text-xs font-medium">Browse Stock</span>
+                  </button>
+                </div>
+              )}
+            </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="text-[11px] text-slate-300 truncate">{img.promptUsed || 'Generated Image'}</div>
+                          <div className="text-[9px] text-slate-500 font-mono">{new Date(img.createdAt).toLocaleDateString()}</div>
+                        </div>
+                        <span className="text-[8px] px-1.5 py-0.5 rounded-full bg-lime-500/15 text-lime-400 font-medium">IMG</span>
+                      </div>
+                    );
+                  })}
+                  {layers.flatMap(l => l.clips.filter(c => c.type === 'generated')).map(clip => (
+                    <div key={clip.id} draggable onClick={() => setSelectedClipId(clip.id)}
+                      className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-all ${selectedClipId === clip.id ? 'bg-lime-500/10 border border-lime-500/30' : 'bg-slate-800/40 border border-transparent hover:bg-slate-800/60'}`}>
+                      <div className="w-12 h-8 bg-slate-900 rounded flex items-center justify-center">
+                        <svg className="w-4 h-4 text-lime-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-[11px] text-slate-300 truncate">{clip.name}</div>
+                        <div className="text-[9px] text-slate-500 font-mono">{clip.durationSec.toFixed(1)}s</div>
+                      </div>
+                      <span className="text-[8px] px-1.5 py-0.5 rounded-full bg-lime-500/15 text-lime-400 font-medium">VID</span>
+                    </div>
+                  ))}
+                  {images.filter(img => img.status === 'success' || !img.status).length === 0 && layers.flatMap(l => l.clips.filter(c => c.type === 'generated')).length === 0 && (
+                    <div className="text-center py-8 text-slate-600 text-xs">No generated media yet.<br /><span className="text-slate-500">Generate images or videos first.</span></div>
+                  )}
+                </>
+              )}
+              {mediaTab === 'imported' && layers.flatMap(l => l.clips.filter(c => c.type === 'broll')).map(clip => (
+                <div key={clip.id} draggable onClick={() => setSelectedClipId(clip.id)}
+                  className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-all ${selectedClipId === clip.id ? 'bg-green-500/10 border border-green-500/30' : 'bg-slate-800/40 border border-transparent hover:bg-slate-800/60'}`}>
+                  <div className="w-12 h-8 bg-slate-900 rounded flex items-center justify-center">
+                    <svg className="w-4 h-4 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                    </svg>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[11px] text-slate-300 truncate">{clip.name}</div>
+                    <div className="text-[9px] text-slate-500 font-mono">{clip.durationSec.toFixed(1)}s</div>
+                  </div>
+                  <span className="text-[8px] px-1.5 py-0.5 rounded-full bg-green-500/15 text-green-400 font-medium">B-ROLL</span>
+                </div>
+              ))}
+              {mediaTab === 'imported' && layers.flatMap(l => l.clips.filter(c => c.type === 'broll')).length === 0 && (
+                <div className="text-center py-8 text-slate-600 text-xs">No imported clips</div>
+              )}
+              {mediaTab === 'imported' && (
+                <div className="space-y-3">
+                  <button onClick={() => document.getElementById('media-panel-import')?.click()}
+                    className="w-full py-8 rounded-xl border-2 border-lime-500/40 text-lime-400 transition-all flex flex-col items-center gap-2">
+                    <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                    </svg>
+                    <span className="text-xs font-medium">Import Video</span>
+                  </button>
+                  <input id="media-panel-import" type="file" accept="video/*" multiple className="hidden" onChange={(e) => e.target.files && handleImportBroll(e.target.files)} />
+                </div>
+              )}
+              {mediaTab === 'stock' && (
+                <div className="space-y-3">
+                  <button onClick={() => setShowStockGallery(true)}
+                    className="w-full py-8 rounded-xl border-2 border-lime-500/40 text-lime-400 transition-all flex flex-col items-center gap-2">
+                    <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                    </svg>
+                    <span className="text-xs font-medium">Browse Stock</span>
+                  </button>
+                </div>
+              )}
+            </div>
                         <div className="flex-1 min-w-0">
                           <div className="text-[11px] text-slate-300 truncate">{img.promptUsed || 'Generated Image'}</div>
                           <div className="text-[9px] text-slate-500 font-mono">{new Date(img.createdAt).toLocaleDateString()}</div>
@@ -788,19 +901,12 @@ const VideoEditorModalCapCutStyle: React.FC<VideoEditorModalProps> = ({
                         <div className="text-[11px] text-slate-300 truncate">{clip.name}</div>
                         <div className="text-[9px] text-slate-500 font-mono">{clip.durationSec.toFixed(1)}s</div>
                       </div>
-                      <span className="text-[8px] px-1.5 py-0.5 rounded-full bg-lime-500/15 text-lime-400 font-medium">VID</span>
-                    </div>
-                  ))}
-                  {/* Empty state */}
-                  {images.filter(img => img.status === 'success' || !img.status).length === 0 && layers.flatMap(l => l.clips.filter(c => c.type === 'generated')).length === 0 && (
-                    <div className="text-center py-8 text-slate-600 text-xs">
-                      No generated media yet.<br />
-                      <span className="text-slate-500">Generate images or videos first.</span>
-                    </div>
-                  )}
-                </>
-              )}
-              {mediaTab === 'imported' && layers.flatMap(l => l.clips.filter(c => c.type === 'broll')).map(clip => (
+                       <span className="text-[8px] px-1.5 py-0.5 rounded-full bg-lime-500/15 text-lime-400 font-medium">VID</span>
+                      </div>
+                    ))}
+                  </>
+                )}
+                {mediaTab === 'imported' && (
                 <div
                   key={clip.id}
                   draggable
@@ -819,14 +925,14 @@ const VideoEditorModalCapCutStyle: React.FC<VideoEditorModalProps> = ({
                   <div className="flex-1 min-w-0">
                     <div className="text-[11px] text-slate-300 truncate">{clip.name}</div>
                     <div className="text-[9px] text-slate-500 font-mono">{clip.durationSec.toFixed(1)}s</div>
+                   </div>
+                   <span className="text-[8px] px-1.5 py-0.5 rounded-full bg-green-500/15 text-green-400 font-medium">B-ROLL</span>
                   </div>
-                  <span className="text-[8px] px-1.5 py-0.5 rounded-full bg-green-500/15 text-green-400 font-medium">B-ROLL</span>
-                </div>
-              ))}
-              {mediaTab === 'generated' && layers.flatMap(l => l.clips.filter(c => c.type === 'generated')).length === 0 && layers.every(l => l.clips.length === 0) && (
-                <div className="text-center py-8 text-slate-600 text-xs">No clips yet</div>
-              )}
-              {mediaTab === 'imported' && (
+                ))}
+                {mediaTab === 'imported' && layers.flatMap(l => l.clips.filter(c => c.type === 'broll')).length === 0 && (
+                  <div className="text-center py-8 text-slate-600 text-xs">No imported clips</div>
+                )}
+                {mediaTab === 'imported' && (
                 <div className="space-y-3">
                   <button
                     onClick={() => document.getElementById('media-panel-import')?.click()}
@@ -1337,8 +1443,14 @@ const VideoEditorModalCapCutStyle: React.FC<VideoEditorModalProps> = ({
             {/* Time ruler - CapCut style */}
             <div className="sticky top-0 z-20 bg-[#1E293B]/95 backdrop-blur border-b border-slate-700/20">
               <div
-                className="flex items-end h-7 relative"
+                className="flex items-end h-7 relative cursor-pointer"
                 style={{ minWidth: `${Math.max(duration * pixelsPerSecond + 200, 800)}px`, paddingLeft: '100px' }}
+                onClick={(e) => {
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  const x = e.clientX - rect.left - 100;
+                  const time = Math.max(0, x / pixelsPerSecond);
+                  handleSeek(time);
+                }}
               >
                 {Array.from({ length: Math.ceil(duration) + 1 }, (_, i) => (
                   <div
@@ -1355,7 +1467,7 @@ const VideoEditorModalCapCutStyle: React.FC<VideoEditorModalProps> = ({
 
                 {/* Playhead indicator - CapCut style */}
                 <div
-                  className="absolute top-0 bottom-0 w-0.5 bg-lime-400 z-30 shadow-lg shadow-lime-400/30"
+                  className="absolute top-0 bottom-0 w-0.5 bg-lime-400 z-30 pointer-events-none shadow-[0_0_10px_rgba(132,204,22,0.5)]"
                   style={{ left: `${currentTime * pixelsPerSecond + 100}px` }}
                 >
                   <div className="w-3 h-3 bg-lime-400 rounded-full -ml-[5.5px] -mt-0.5 shadow-lg shadow-lime-400/50" />
@@ -1395,7 +1507,7 @@ const VideoEditorModalCapCutStyle: React.FC<VideoEditorModalProps> = ({
                 {layers.map((layer) => (
                   <div
                     key={layer.index}
-                    className={`relative h-12 ${dropTargetLayerIndex === layer.index ? 'bg-lime-500/10 ring-2 ring-lime-500/30' : ''}`}
+                    className={`relative h-12 ${dropTargetLayerIndex === layer.index ? 'bg-lime-500/10' : ''}`}
                     onDragOver={(e) => {
                       e.preventDefault();
                       if (draggedMedia) {
@@ -1431,6 +1543,9 @@ const VideoEditorModalCapCutStyle: React.FC<VideoEditorModalProps> = ({
                       onDragOver={handleDragOver}
                       onDragEnd={handleDragEnd}
                       showWaveforms={showWaveforms}
+                      isDropTarget={dropTargetLayerIndex === layer.index}
+                      currentTime={currentTime}
+                      onSeek={handleSeek}
                     />
                   </div>
                 ))}

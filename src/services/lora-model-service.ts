@@ -647,3 +647,4 @@ export const DEFAULT_LORA_TRAINING_CONFIG: Partial<LoraTrainingConfig> = {
   networkAlpha: 32,
   resolution: 1024,
 };
+
