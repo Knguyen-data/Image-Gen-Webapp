@@ -75,7 +75,9 @@ const VideoTrimmerModal: React.FC<VideoTrimmerModalProps> = ({
 
   // Handle slider change
   const handleStartChange = (value: number) => {
-    const newStart = Math.min(value, endTime - 1);
+    if (isNaN(value)) return;
+    const clamped = Math.max(0, value);
+    const newStart = Math.min(clamped, endTime - 1);
     setStartTime(newStart);
     if (videoRef.current && !isPlaying) {
       videoRef.current.currentTime = newStart;
@@ -83,7 +85,9 @@ const VideoTrimmerModal: React.FC<VideoTrimmerModalProps> = ({
   };
 
   const handleEndChange = (value: number) => {
-    const newEnd = Math.max(value, startTime + 1);
+    if (isNaN(value)) return;
+    const clamped = Math.min(value, duration);
+    const newEnd = Math.max(clamped, startTime + 1);
     setEndTime(newEnd);
   };
 

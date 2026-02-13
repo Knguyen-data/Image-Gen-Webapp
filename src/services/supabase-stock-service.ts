@@ -62,12 +62,12 @@ export type StockSceneType = typeof STOCK_SCENE_TYPES[number];
 export async function listStockCategories(): Promise<StockCategory[]> {
   try {
     // Try RPC first (most efficient — single query, server-side grouping)
-    const { data: rpcData, error: rpcError } = await supabase.rpc('get_stock_category_counts');
+    const { data: rpcData, error: rpcError } = await supabase.rpc('get_stock_category_counts' as any);
     
     if (!rpcError && rpcData && rpcData.length > 0) {
-      return (rpcData as Array<{ category: string; count: number }>)
+      return ((rpcData as unknown) as Array<{ category: string; video_count: number }>)
         .sort((a, b) => a.category.localeCompare(b.category))
-        .map(({ category, count }) => ({
+        .map(({ category, video_count: count }) => ({
           id: category,
           name: formatCategoryName(category),
           icon: getCategoryIcon(category),
@@ -308,9 +308,10 @@ function mapSupabaseRows(rows: any[]): StockVideo[] {
 export async function getMoodCounts(): Promise<{ mood: string; count: number }[]> {
   try {
     // Try RPC first
-    const { data: rpcData, error: rpcError } = await supabase.rpc('get_stock_mood_counts');
+    const { data: rpcData, error: rpcError } = await supabase.rpc('get_stock_mood_counts' as any);
     if (!rpcError && rpcData && rpcData.length > 0) {
-      return (rpcData as Array<{ mood: string; count: number }>)
+      return ((rpcData as unknown) as Array<{ mood: string; video_count: number }>)
+        .map(({ mood, video_count: count }) => ({ mood, count }))
         .sort((a, b) => b.count - a.count);
     }
 
@@ -352,10 +353,10 @@ export async function getMoodCounts(): Promise<{ mood: string; count: number }[]
 export async function getSceneTypeCounts(): Promise<{ sceneType: string; count: number }[]> {
   try {
     // Try RPC first
-    const { data: rpcData, error: rpcError } = await supabase.rpc('get_stock_scene_counts');
+    const { data: rpcData, error: rpcError } = await supabase.rpc('get_stock_scene_counts' as any);
     if (!rpcError && rpcData && rpcData.length > 0) {
-      return (rpcData as Array<{ scene_type: string; count: number }>)
-        .map(r => ({ sceneType: r.scene_type, count: r.count }))
+      return ((rpcData as unknown) as Array<{ scene_type: string; video_count: number }>)
+        .map(({ scene_type, video_count: count }) => ({ sceneType: scene_type, count }))
         .sort((a, b) => b.count - a.count);
     }
 

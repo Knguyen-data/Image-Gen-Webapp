@@ -1,23 +1,30 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, Suspense, lazy } from 'react';
 import LeftPanel from './components/left-panel';
 import RightPanel from './components/right-panel';
 import ApiKeyModal from './components/api-key-modal';
-import ModifyImageModal from './components/modify-image-modal';
-import AuthPage from './components/auth-page';
 import AnimatedBackground from './components/animated-background';
 import { useAuth } from './hooks/use-auth';
 import { RecoveryModal } from './components/recovery-modal';
-import SettingsPage from './components/settings-page';
-import { CompareModal } from './components/compare-modal';
 import { BatchActionsToolbar } from './components/batch-actions-toolbar';
-import { SaveCollectionModal } from './components/save-collection-modal';
-import { SavePayloadDialog } from './components/save-payload-dialog';
-import { SavedPayloadsPage } from './components/saved-payloads-page';
-import VideoEditorModal from './components/video-editor/video-editor-modal';
+
+// Lazy-loaded heavy components
+const VideoEditorModalCapCutStyle = lazy(() => import('./components/video-editor/video-editor-modal-capcut-style'));
+const SettingsPage = lazy(() => import('./components/settings-page'));
+const ModifyImageModal = lazy(() => import('./components/modify-image-modal'));
+const CompareModal = lazy(() => import('./components/compare-modal'));
+const SaveCollectionModal = lazy(() => import('./components/save-collection-modal').then(m => ({ default: m.SaveCollectionModal })));
+const SavePayloadDialog = lazy(() => import('./components/save-payload-dialog').then(m => ({ default: m.SavePayloadDialog })));
+const SavedPayloadsPage = lazy(() => import('./components/saved-payloads-page').then(m => ({ default: m.SavedPayloadsPage })));
+const AuthPage = lazy(() => import('./components/auth-page'));
+const ActivityPanel = lazy(() => import('./components/activity-panel'));
+const PromptLibraryPanel = lazy(() => import('./components/prompt-library-panel'));
+
+// Suspense fallback components
+import { SuspenseFallback, ModalSuspenseFallback, PanelSuspenseFallback } from './components/suspense-fallback';
 import { AppSettings, Run, GeneratedImage, PromptItem, ReferenceImage, ReferenceVideo, AppMode, VideoScene, VideoSettings, GeneratedVideo, VideoModel, KlingProDuration, KlingProAspectRatio, Kling3ImageListItem, VeoGenerationType } from './types';
 import { DEFAULT_SETTINGS } from './constants';
 import { generateImage, modifyImage } from './services/gemini-service';
-import { getAllRunsFromDB, saveRunToDB, deleteRunFromDB, type PendingRequest, type SavedPayload, saveVideoCollection, getAllSavedPayloads, saveSavedPayload, updateSavedPayload, getSavedPayloadByPayloadId, deleteSavedPayloadByPayloadId } from './services/db';
+import { getAllRunsFromDB, saveRunToDB, deleteRunFromDB, saveRunToDBWithSync, type PendingRequest, type SavedPayload, saveVideoCollection, getAllSavedPayloads, saveSavedPayload, updateSavedPayload, getSavedPayloadByPayloadId, deleteSavedPayloadByPayloadId } from './services/db';
 import JSZip from 'jszip';
 import { getAllGeneratedVideosFromDB, saveGeneratedVideoToDB, deleteGeneratedVideoFromDB } from './services/indexeddb-video-storage';
 import { processBatchQueue, QueueTask, calculateOptimalBatchSize, BATCH_DELAYS } from './services/batch-queue';
@@ -27,6 +34,9 @@ import { generateWithSeedream, mapAspectRatio } from './services/seedream-servic
 import { uploadBase64ToR2, uploadUrlToR2 } from './services/supabase-storage-service';
 // Video effects handled by Freepik VFX API (server-side)
 import { generateWithSeedreamTxt2Img } from './services/seedream-txt2img-service';
+// Extreme Mode - ComfyUI RunPod
+import { generateWithComfyUI, mapAspectRatioToDimensions } from './services/comfyui-runpod-service';
+import { COMFYUI_RUNPOD_ENDPOINT_ID } from './constants';
 import { generateMotionVideo } from './services/kling-motion-control-service';
 import { createFreepikProI2VTask, pollFreepikProI2VTask, createKling3Task, pollKling3Task, createKling3OmniTask, createKling3OmniReferenceTask, pollKling3OmniTask, pollKling3OmniReferenceTask, createAndPollWithRetry } from './services/freepik-kling-service';
 import { createVeoTask, pollVeoTask, getVeo1080pVideo, requestVeo4kVideo, pollVeo4kTask, extendVeoTask } from './services/veo3-service';
@@ -35,8 +45,6 @@ import type { VeoTaskResult, VeoSettings } from './components/veo3';
 import { logger } from './services/logger';
 import { generateThumbnail, base64ToBlob, blobToBase64 } from './services/image-blob-manager';
 import { useActivityQueue } from './hooks/use-activity-queue';
-import ActivityPanel from './components/activity-panel';
-import PromptLibraryPanel from './components/prompt-library-panel';
 import { SavedPrompt } from './types/prompt-library';
 import { requestManager } from './services/request-manager';
 
@@ -51,8 +59,9 @@ const AppInner: React.FC = () => {
   const [apiKey, setApiKey] = useState('');
   const [kieApiKey, setKieApiKey] = useState('');
   const [freepikApiKey, setFreepikApiKey] = useState('');
+  const [runpodApiKey, setRunpodApiKey] = useState('');
   const [isKeyModalOpen, setIsKeyModalOpen] = useState(false);
-  const [keyModalMode, setKeyModalMode] = useState<'gemini' | 'spicy' | 'freepik'>('gemini');
+  const [keyModalMode, setKeyModalMode] = useState<'gemini' | 'spicy' | 'freepik' | 'runpod'>('gemini');
   const [showSettings, setShowSettings] = useState(false);
 
   // Crash Recovery State
@@ -152,6 +161,17 @@ const AppInner: React.FC = () => {
       initAutoBackup();
     });
     
+    // Initialize resilient DB and sync service
+    import('./services/db-resilient').then(({ initResilientDB }) => {
+      initResilientDB();
+    });
+    
+    import('./services/supabase-sync-service').then(({ getSyncService }) => {
+      const syncService = getSyncService();
+      syncService.startAutoSync();
+      logger.info('App', 'Supabase sync service initialized');
+    });
+    
     const loadData = async () => {
       logger.info('App', 'Loading application data');
       try {
@@ -172,6 +192,12 @@ const AppInner: React.FC = () => {
         if (savedFreepikKey) {
           setFreepikApiKey(savedFreepikKey);
           logger.debug('App', 'Loaded Freepik API key from storage');
+        }
+
+        const savedRunPodKey = localStorage.getItem('raw_studio_runpod_api_key');
+        if (savedRunPodKey) {
+          setRunpodApiKey(savedRunPodKey);
+          logger.debug('App', 'Loaded RunPod API key from storage');
         }
 
         // Prompt for Gemini key if missing
@@ -609,12 +635,17 @@ INSTRUCTIONS:
   // --- BATCH QUEUE LOGIC ---
   const handleGenerate = async () => {
     const isSpicyMode = settings.spicyMode?.enabled;
-    const effectiveApiKey = isSpicyMode ? kieApiKey : apiKey;
+    const isExtremeMode = isSpicyMode && settings.spicyMode?.subMode === 'extreme';
+    const effectiveApiKey = isExtremeMode ? runpodApiKey : (isSpicyMode ? kieApiKey : apiKey);
 
-    logger.info('App', `Starting generation in ${isSpicyMode ? 'Spicy' : 'Gemini'} mode`);
+    logger.info('App', `Starting generation in ${isExtremeMode ? 'Extreme' : isSpicyMode ? 'Spicy' : 'Gemini'} mode`);
 
     if (!effectiveApiKey) {
-      if (isSpicyMode) {
+      if (isExtremeMode) {
+        logger.warn('App', 'No RunPod API key, showing modal');
+        setKeyModalMode('runpod');
+        setIsKeyModalOpen(true);
+      } else if (isSpicyMode) {
         logger.warn('App', 'No Kie.ai API key, showing modal');
         setKeyModalMode('spicy');
         setIsKeyModalOpen(true);
@@ -636,7 +667,7 @@ INSTRUCTIONS:
     // Fixed block images count toward refs when enabled
     const fixedBlockRefs = settings.fixedBlockEnabled ? (settings.fixedBlockImages || []) : [];
 
-    // Spicy Edit Mode requires at least one reference image
+    // Spicy Edit Mode requires at least one reference image (Extreme mode optional)
     const isSpicyEditMode = isSpicyMode && settings.spicyMode?.subMode === 'edit';
     if (isSpicyEditMode) {
       for (const item of validItems) {
@@ -673,7 +704,7 @@ INSTRUCTIONS:
     });
 
     const newRunId = crypto.randomUUID();
-    const countPerPrompt = settings.outputCount || 1;
+    const countPerPrompt = Math.max(1, Math.min(8, settings.outputCount || 1));
 
     // Construct summary
     const summaryPrompt = validItems.map(p => p.text).join(' || ');
@@ -757,7 +788,7 @@ INSTRUCTIONS:
       createdAt: Date.now(),
       promptUsed: task.prompt,
       settingsSnapshot: task.settings,
-      generatedBy: isSpicyMode ? (settings.spicyMode?.subMode === 'generate' ? 'seedream-txt2img' : 'seedream-edit') : 'gemini',
+      generatedBy: isExtremeMode ? 'comfyui-lustify' : (isSpicyMode ? (settings.spicyMode?.subMode === 'generate' ? 'seedream-txt2img' : 'seedream-edit') : 'gemini'),
       status: 'generating' as const
     }));
 
@@ -765,10 +796,10 @@ INSTRUCTIONS:
     newRun.images = [...placeholderImages];
     setRuns(prev => prev.map(r => r.id === newRunId ? { ...r, images: [...placeholderImages] } : r));
 
-    const provider = isSpicyMode ? 'seedream' : 'gemini';
+    const provider = isExtremeMode ? 'comfyui' : (isSpicyMode ? 'seedream' : 'gemini');
     const batchSize = calculateOptimalBatchSize(taskQueue.length, provider);
-    const batchDelayMs = isSpicyMode ? BATCH_DELAYS.seedream : BATCH_DELAYS.gemini;
-    setLoadingStatus(`Queued ${taskQueue.length} images${isSpicyMode ? ' (Spicy)' : ''} (batches of ${batchSize})...`);
+    const batchDelayMs = isExtremeMode ? BATCH_DELAYS.comfyui : (isSpicyMode ? BATCH_DELAYS.seedream : BATCH_DELAYS.gemini);
+    setLoadingStatus(`Queued ${taskQueue.length} images${isExtremeMode ? ' (Extreme)' : isSpicyMode ? ' (Spicy)' : ''} (batches of ${batchSize})...`);
 
     // Update job to active status
     updateJob(jobId, { status: 'active' });
@@ -779,7 +810,38 @@ INSTRUCTIONS:
       await processBatchQueue(
         taskQueue,
         async (task) => {
-          if (isSpicyMode) {
+          if (isExtremeMode) {
+            // Extreme Mode - ComfyUI Lustify via RunPod
+            const comfySettings = task.settings.spicyMode?.comfyui || {
+              steps: 20, cfg: 8, denoise: 1.0, sampler: 'euler', scheduler: 'normal', seed: -1,
+              ipAdapterWeight: 1.0, ipAdapterFaceidWeight: 1.0
+            };
+            const dimensions = mapAspectRatioToDimensions(task.settings.aspectRatio);
+            const faceRef = task.refs.length > 0 ? task.refs[0].base64 : undefined;
+
+            const result = await generateWithComfyUI(
+              COMFYUI_RUNPOD_ENDPOINT_ID,
+              runpodApiKey,
+              task.prompt,
+              comfySettings,
+              dimensions,
+              faceRef,
+              (stage, detail) => {
+                setLoadingStatus(`🔥 Extreme: ${detail || stage}`);
+              }
+            );
+
+            const generatedImage: GeneratedImage = {
+              id: crypto.randomUUID(),
+              base64: result.base64,
+              mimeType: result.mimeType,
+              createdAt: Date.now(),
+              promptUsed: task.prompt,
+              settingsSnapshot: task.settings,
+              generatedBy: 'comfyui-lustify'
+            };
+            return generatedImage;
+          } else if (isSpicyMode) {
             const subMode = task.settings.spicyMode?.subMode || 'edit';
 
             if (subMode === 'generate') {
@@ -1027,8 +1089,12 @@ INSTRUCTIONS:
   // --- DELETE LOGIC ---
   const handleDeleteRun = async (id: string) => {
     if (confirm("Delete this entire run history?")) {
-      await deleteRunFromDB(id);
-      setRuns(prev => prev.filter(r => r.id !== id));
+      try {
+        await deleteRunFromDB(id);
+        setRuns(prev => prev.filter(r => r.id !== id));
+      } catch (e) {
+        logger.error('App', 'Delete run failed', e);
+      }
     }
   };
 
@@ -1058,13 +1124,15 @@ INSTRUCTIONS:
 
   // --- VIDEO HANDLERS ---
   const handleDeleteVideo = async (videoId: string) => {
-    setGeneratedVideos(prev => prev.filter(v => v.id !== videoId));
+    const prev = generatedVideos;
+    setGeneratedVideos(p => p.filter(v => v.id !== videoId));
     // Also delete from IndexedDB
     try {
       await deleteGeneratedVideoFromDB(videoId);
       logger.debug('App', 'Deleted video from IndexedDB', { videoId });
     } catch (e) {
-      logger.warn('App', 'Failed to delete video from IndexedDB', e);
+      setGeneratedVideos(prev);
+      logger.error('App', 'Delete video failed', e);
     }
   };
 
@@ -2472,21 +2540,25 @@ INSTRUCTIONS:
       
       {/* Settings Page (full-page overlay) */}
       {showSettings && (
-        <SettingsPage
-          onClose={() => setShowSettings(false)}
-          apiKey={apiKey}
-          setApiKey={setApiKey}
-          kieApiKey={kieApiKey}
-          setKieApiKey={setKieApiKey}
-          freepikApiKey={freepikApiKey}
-          setFreepikApiKey={setFreepikApiKey}
-          credits={credits}
-          creditsLoading={creditsLoading}
-          creditsError={creditsError}
-          isLowCredits={isLowCredits}
-          isCriticalCredits={isCriticalCredits}
-          refreshCredits={refreshCredits}
-        />
+        <Suspense fallback={<SuspenseFallback message="Loading settings..." minHeight="100vh" />}>
+          <SettingsPage
+            onClose={() => setShowSettings(false)}
+            apiKey={apiKey}
+            setApiKey={setApiKey}
+            kieApiKey={kieApiKey}
+            setKieApiKey={setKieApiKey}
+            freepikApiKey={freepikApiKey}
+            setFreepikApiKey={setFreepikApiKey}
+            runpodApiKey={runpodApiKey}
+            setRunpodApiKey={setRunpodApiKey}
+            credits={credits}
+            creditsLoading={creditsLoading}
+            creditsError={creditsError}
+            isLowCredits={isLowCredits}
+            isCriticalCredits={isCriticalCredits}
+            refreshCredits={refreshCredits}
+          />
+        </Suspense>
       )}
 
       <ApiKeyModal
@@ -2499,17 +2571,23 @@ INSTRUCTIONS:
         setKieApiKey={setKieApiKey}
         freepikApiKey={freepikApiKey}
         setFreepikApiKey={setFreepikApiKey}
+        runpodApiKey={runpodApiKey}
+        setRunpodApiKey={setRunpodApiKey}
       />
 
-      <ModifyImageModal
-        isOpen={!!modifyingImage}
-        sourceImage={modifyingImage}
-        onClose={() => setModifyingImage(null)}
-        onSubmit={handleModifyImage}
-        isLoading={isModifying}
-        hasGeminiKey={!!apiKey}
-        hasKieApiKey={!!kieApiKey}
-      />
+      {modifyingImage && (
+        <Suspense fallback={<ModalSuspenseFallback />}>
+          <ModifyImageModal
+            isOpen={!!modifyingImage}
+            sourceImage={modifyingImage}
+            onClose={() => setModifyingImage(null)}
+            onSubmit={handleModifyImage}
+            isLoading={isModifying}
+            hasGeminiKey={!!apiKey}
+            hasKieApiKey={!!kieApiKey}
+          />
+        </Suspense>
+      )}
 
       {/* Crash Recovery Modal */}
       {showRecoveryModal && (
@@ -2522,11 +2600,13 @@ INSTRUCTIONS:
       )}
 
       {/* Activity Panel - replaces old toast */}
-      <ActivityPanel
-        jobs={activityJobs}
-        logs={activityLogs}
-        onClearCompleted={clearCompletedJobs}
-      />
+      <Suspense fallback={<PanelSuspenseFallback />}>
+        <ActivityPanel
+          jobs={activityJobs}
+          logs={activityLogs}
+          onClearCompleted={clearCompletedJobs}
+        />
+      </Suspense>
 
       {/* Settings gear button - fixed position */}
       <button
@@ -2547,6 +2627,23 @@ INSTRUCTIONS:
             <p className="text-gray-400 font-mono text-sm">Loading Gallery...</p>
           </div>
         </div>
+      ) : showVideoEditor ? (
+        <Suspense fallback={<ModalSuspenseFallback />}>
+          <VideoEditorModalCapCutStyle
+            isOpen={true}
+            onClose={() => setShowVideoEditor(false)}
+            videos={generatedVideos.filter(v => v.status === 'success' && v.url)}
+            onExportComplete={(video) => {
+              setGeneratedVideos(prev => [video, ...prev]);
+              import('./services/indexeddb-video-storage').then(({ saveGeneratedVideoToDB }) => {
+                saveGeneratedVideoToDB(video).catch(e =>
+                  console.warn('Failed to persist editor export to IndexedDB', e)
+                );
+              });
+              setShowVideoEditor(false);
+            }}
+          />
+        </Suspense>
       ) : (
         <>
           <LeftPanel
@@ -2562,6 +2659,7 @@ INSTRUCTIONS:
             }}
             hasApiKey={!!apiKey}
             hasKieApiKey={!!kieApiKey}
+            hasRunPodApiKey={!!runpodApiKey}
             credits={credits}
             creditsLoading={creditsLoading}
             creditsError={creditsError}
@@ -2583,22 +2681,24 @@ INSTRUCTIONS:
             onVeoExtend={handleVeoExtend}
             isVeoUpgrading={isVeoUpgrading}
           />
-          <PromptLibraryPanel
-            onLoadPrompt={handleLoadSavedPrompt}
-            currentPrompt={prompts[0]?.text || ''}
-            currentNegativePrompt=""
-            currentReferenceImages={prompts[0]?.referenceImages?.map(img => ({
-              id: img.id,
-              base64: img.base64,
-              mimeType: img.mimeType,
-            }))}
-            currentSettings={{
-              model: settings.spicyMode?.enabled ? 'seedream' : 'gemini',
-              aspectRatio: settings.aspectRatio,
-              temperature: settings.temperature,
-              imageSize: settings.imageSize,
-            }}
-          />
+          <Suspense fallback={<PanelSuspenseFallback />}>
+            <PromptLibraryPanel
+              onLoadPrompt={handleLoadSavedPrompt}
+              currentPrompt={prompts[0]?.text || ''}
+              currentNegativePrompt=""
+              currentReferenceImages={prompts[0]?.referenceImages?.map(img => ({
+                id: img.id,
+                base64: img.base64,
+                mimeType: img.mimeType,
+              }))}
+              currentSettings={{
+                model: settings.spicyMode?.enabled ? 'seedream' : 'gemini',
+                aspectRatio: settings.aspectRatio,
+                temperature: settings.temperature,
+                imageSize: settings.imageSize,
+              }}
+            />
+          </Suspense>
           <RightPanel
             runs={runs}
             onDeleteRun={handleDeleteRun}
@@ -2622,27 +2722,13 @@ INSTRUCTIONS:
 
           {/* Video Compare Modal */}
           {showCompareModal && selectedVideoUrls.length >= 2 && (
-            <CompareModal
-              videoUrls={selectedVideoUrls}
-              onClose={() => setShowCompareModal(false)}
-            />
+            <Suspense fallback={<ModalSuspenseFallback />}>
+              <CompareModal
+                videoUrls={selectedVideoUrls}
+                onClose={() => setShowCompareModal(false)}
+              />
+            </Suspense>
           )}
-
-          {/* Video Editor Modal */}
-          <VideoEditorModal
-            isOpen={showVideoEditor}
-            onClose={() => setShowVideoEditor(false)}
-            videos={generatedVideos.filter(v => v.status === 'success' && v.url)}
-            onExportComplete={(video) => {
-              setGeneratedVideos(prev => [video, ...prev]);
-              import('./services/indexeddb-video-storage').then(({ saveGeneratedVideoToDB }) => {
-                saveGeneratedVideoToDB(video).catch(e =>
-                  console.warn('Failed to persist editor export to IndexedDB', e)
-                );
-              });
-              setShowVideoEditor(false);
-            }}
-          />
 
           {/* Batch Actions Toolbar */}
           {selectMode && selectedVideos.length > 0 && (
@@ -2659,11 +2745,13 @@ INSTRUCTIONS:
 
           {/* Save Collection Modal */}
           {showSaveCollectionModal && (
-            <SaveCollectionModal
-              videoIds={selectedVideos}
-              onClose={() => setShowSaveCollectionModal(false)}
-              onSaved={(name, description, tags) => handleSaveCollection(name, description, tags)}
-            />
+            <Suspense fallback={<ModalSuspenseFallback />}>
+              <SaveCollectionModal
+                videoIds={selectedVideos}
+                onClose={() => setShowSaveCollectionModal(false)}
+                onSaved={(name, description, tags) => handleSaveCollection(name, description, tags)}
+              />
+            </Suspense>
           )}
 
           {/* Upload Progress Overlay */}
@@ -2686,30 +2774,34 @@ INSTRUCTIONS:
 
           {/* Save Payload Dialog */}
           {showSavePayloadDialog && saveDialogPayload && (
-            <SavePayloadDialog
-              payload={saveDialogPayload}
-              onClose={() => setShowSavePayloadDialog(false)}
-              onRetryNow={() => {
-                retryPayload(saveDialogPayload.payloadId);
-                setShowSavePayloadDialog(false);
-              }}
+            <Suspense fallback={<ModalSuspenseFallback />}>
+              <SavePayloadDialog
+                payload={saveDialogPayload}
+                onClose={() => setShowSavePayloadDialog(false)}
+                onRetryNow={() => {
+                  retryPayload(saveDialogPayload.payloadId);
+                  setShowSavePayloadDialog(false);
+                }}
               onViewSaved={() => {
                 setShowSavePayloadDialog(false);
                 setCurrentView('saved-payloads');
               }}
             />
+            </Suspense>
           )}
 
           {/* Saved Payloads Page */}
           {currentView === 'saved-payloads' && (
             <div className="fixed inset-0 bg-white dark:bg-gray-900 z-40 overflow-auto">
-              <SavedPayloadsPage
-                payloads={savedPayloads}
-                onRetry={retryPayload}
-                onDelete={handleDeletePayload}
-                onClose={() => setCurrentView('main')}
-                onRefresh={loadSavedPayloads}
-              />
+              <Suspense fallback={<SuspenseFallback message="Loading saved payloads..." minHeight="100vh" />}>
+                <SavedPayloadsPage
+                  payloads={savedPayloads}
+                  onRetry={retryPayload}
+                  onDelete={handleDeletePayload}
+                  onClose={() => setCurrentView('main')}
+                  onRefresh={loadSavedPayloads}
+                />
+              </Suspense>
             </div>
           )}
         </>
@@ -2733,7 +2825,11 @@ const App: React.FC = () => {
 
   // Show auth page if not authenticated
   if (!isAuthenticated) {
-    return <AuthPage onAuthenticated={() => {}} />;
+    return (
+      <Suspense fallback={<SuspenseFallback message="Loading..." minHeight="100vh" />}>
+        <AuthPage onAuthenticated={() => {}} />
+      </Suspense>
+    );
   }
 
   return <AppInner />;

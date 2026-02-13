@@ -4,7 +4,7 @@ import { logger } from '../services/logger';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
-type SettingsSection = 'api-keys' | 'credits' | 'about';
+type SettingsSection = 'api-keys' | 'credits' | 'video-processing' | 'about';
 
 interface ProviderStatus {
   configured: boolean;
@@ -24,6 +24,9 @@ interface SettingsPageProps {
   // Freepik
   freepikApiKey: string;
   setFreepikApiKey: (key: string) => void;
+  // RunPod / Extreme Mode
+  runpodApiKey: string;
+  setRunpodApiKey: (key: string) => void;
   // Credits
   credits: number | null;
   creditsLoading: boolean;
@@ -234,6 +237,8 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
   setKieApiKey,
   freepikApiKey,
   setFreepikApiKey,
+  runpodApiKey,
+  setRunpodApiKey,
   credits,
   creditsLoading,
   creditsError,
@@ -247,12 +252,14 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
   const [geminiInput, setGeminiInput] = useState(apiKey);
   const [kieInput, setKieInput] = useState(kieApiKey);
   const [freepikInput, setFreepikInput] = useState(freepikApiKey);
+  const [runpodInput, setRunpodInput] = useState(runpodApiKey);
   
 
   // ── Provider statuses ───
   const [geminiStatus, setGeminiStatus] = useState<ProviderStatus>({ configured: !!apiKey, validating: false, error: '' });
   const [kieStatus, setKieStatus] = useState<ProviderStatus>({ configured: !!kieApiKey, validating: false, error: '' });
   const [freepikStatus, setFreepikStatus] = useState<ProviderStatus>({ configured: !!freepikApiKey, validating: false, error: '' });
+  const [runpodStatus, setRunpodStatus] = useState<ProviderStatus>({ configured: !!runpodApiKey, validating: false, error: '' });
 
   // ── Credits timestamp ───
   const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null);
@@ -261,6 +268,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
   useEffect(() => { setGeminiStatus(s => ({ ...s, configured: !!apiKey })); }, [apiKey]);
   useEffect(() => { setKieStatus(s => ({ ...s, configured: !!kieApiKey })); }, [kieApiKey]);
   useEffect(() => { setFreepikStatus(s => ({ ...s, configured: !!freepikApiKey })); }, [freepikApiKey]);
+  useEffect(() => { setRunpodStatus(s => ({ ...s, configured: !!runpodApiKey })); }, [runpodApiKey]);
 
   // Set initial lastRefreshed
   useEffect(() => {
@@ -352,6 +360,43 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
     setFreepikStatus({ configured: true, validating: false, error: '' });
   }, [freepikInput, setFreepikApiKey]);
 
+  const handleSaveRunpod = useCallback(async () => {
+    const key = sanitizeKey(runpodInput);
+    if (!key) { setRunpodStatus(s => ({ ...s, error: 'Please enter an API key' })); return; }
+    if (key.length < 20) {
+      setRunpodStatus(s => ({ ...s, error: 'API key seems too short (minimum 20 characters)' }));
+      return;
+    }
+
+    setRunpodStatus(s => ({ ...s, validating: true, error: '' }));
+    try {
+      const response = await fetch('https://api.runpod.ai/v2/rj1ppodzmtdoiz/health', {
+        method: 'GET',
+        headers: { Authorization: `Bearer ${key}` },
+      });
+      if (response.status === 401) {
+        throw new Error('Invalid RunPod API key (401 Unauthorized)');
+      }
+      // Other errors are OK — endpoint might be cold/sleeping
+
+      setRunpodApiKey(key);
+      localStorage.setItem('raw_studio_runpod_api_key', key);
+      logger.info('Settings', 'RunPod API key saved');
+      setRunpodStatus({ configured: true, validating: false, error: '' });
+    } catch (err: any) {
+      if (err.message?.includes('401')) {
+        logger.error('Settings', 'RunPod validation failed', err);
+        setRunpodStatus(s => ({ ...s, validating: false, error: err.message || 'Invalid API key' }));
+      } else {
+        // Network errors or non-401 errors — key is probably fine, endpoint may be cold
+        setRunpodApiKey(key);
+        localStorage.setItem('raw_studio_runpod_api_key', key);
+        logger.warn('Settings', 'RunPod health check failed but saving key anyway', err);
+        setRunpodStatus({ configured: true, validating: false, error: '' });
+      }
+    }
+  }, [runpodInput, setRunpodApiKey]);
+
 
   const handleRefreshCredits = useCallback(async () => {
     await refreshCredits();
@@ -359,7 +404,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
   }, [refreshCredits]);
 
   // ── Count configured providers for badge ───
-  const configuredCount = [!!apiKey, !!kieApiKey, !!freepikApiKey]
+  const configuredCount = [!!apiKey, !!kieApiKey, !!freepikApiKey, !!runpodApiKey]
     .filter(Boolean).length;
 
   // ── Render sections ───
@@ -439,6 +484,29 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
           disabled={freepikStatus.validating}
         />
       </ProviderCard>
+
+      {/* RunPod / Extreme Mode */}
+      <ProviderCard
+        name="RunPod / Extreme Mode ⚡"
+        description="ComfyUI Lustify SDXL (NSFW generation)"
+        icon={
+          <svg className="w-5 h-5 text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+        }
+        accentColor="orange-400"
+        accentBorder="border-orange-500/20"
+        accentBg="bg-orange-900/60"
+        status={runpodStatus}
+        link={{ url: 'https://www.runpod.io/console/user/settings', label: 'Get RunPod API Key' }}
+        onSave={handleSaveRunpod}
+      >
+        <SecretInput
+          value={runpodInput}
+          onChange={(v) => { setRunpodInput(v); setRunpodStatus(s => ({ ...s, error: '' })); }}
+          placeholder="Enter RunPod API key..."
+          accentColor="orange-400"
+          disabled={runpodStatus.validating}
+        />
+      </ProviderCard>
     </div>
   );
 
@@ -516,6 +584,95 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
 
 
 
+  const renderVideoProcessing = () => (
+    <div className="space-y-5">
+      <div>
+        <h2 className="text-lg font-bold text-white">Video Processing</h2>
+        <p className="text-sm text-gray-500 mt-1">
+          AI-powered video enhancement services for upscaling and frame interpolation.
+        </p>
+      </div>
+
+      {/* Video Upscaling (Real-ESRGAN) */}
+      <div className="bg-gray-900/80 border border-purple-500/20 rounded-xl overflow-hidden">
+        <div className="p-5 space-y-4">
+          <div className="flex items-start justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-purple-900/60 rounded-lg flex items-center justify-center flex-shrink-0">
+                <svg className="w-5 h-5 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" /></svg>
+              </div>
+              <div>
+                <h3 className="text-white font-semibold text-sm">Video Upscaling (Real-ESRGAN)</h3>
+                <p className="text-gray-500 text-xs mt-0.5">AI upscaling for generated videos using Real-ESRGAN</p>
+              </div>
+            </div>
+            <span className={`inline-flex items-center gap-1.5 text-xs font-medium ${runpodApiKey ? 'text-green-400' : 'text-yellow-500'}`}>
+              <span className={`w-2 h-2 rounded-full ${runpodApiKey ? 'bg-green-400' : 'bg-yellow-500'}`} />
+              {runpodApiKey ? 'Active' : 'Needs RunPod Key'}
+            </span>
+          </div>
+
+          <div className="space-y-2">
+            <div className="flex items-center gap-3">
+              <div className="flex-1 bg-gray-950 border border-purple-500/20 rounded-lg px-3 py-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-gray-400">2× Upscale</span>
+                  <span className="text-xs text-purple-400 font-medium">720p → 1440p</span>
+                </div>
+              </div>
+              <div className="flex-1 bg-gray-950 border border-purple-500/20 rounded-lg px-3 py-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-gray-400">4× Upscale</span>
+                  <span className="text-xs text-purple-400 font-medium">720p → 4K</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="text-xs text-gray-500 bg-gray-950/50 border border-gray-800 rounded-lg px-3 py-2 flex items-center gap-2">
+            <svg className="w-3.5 h-3.5 text-gray-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+            Uses RunPod serverless infrastructure — no separate API key needed
+          </div>
+        </div>
+      </div>
+
+      {/* Frame Interpolation (RIFE) */}
+      <div className="bg-gray-900/80 border border-indigo-500/20 rounded-xl overflow-hidden">
+        <div className="p-5 space-y-4">
+          <div className="flex items-start justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-indigo-900/60 rounded-lg flex items-center justify-center flex-shrink-0">
+                <svg className="w-5 h-5 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+              </div>
+              <div>
+                <h3 className="text-white font-semibold text-sm">Frame Interpolation (RIFE v4.6)</h3>
+                <p className="text-gray-500 text-xs mt-0.5">Smooth video frame interpolation using RIFE</p>
+              </div>
+            </div>
+            <span className="inline-flex items-center gap-1.5 text-xs font-medium text-green-400">
+              <span className="w-2 h-2 bg-green-400 rounded-full" />
+              Available
+            </span>
+          </div>
+
+          <div className="space-y-2">
+            <div className="bg-gray-950 border border-indigo-500/20 rounded-lg px-3 py-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-gray-400">Effect</span>
+                <span className="text-xs text-indigo-400 font-medium">Doubles framerate • Smoother AI videos</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="text-xs text-gray-500 bg-gray-950/50 border border-gray-800 rounded-lg px-3 py-2 flex items-center gap-2">
+            <svg className="w-3.5 h-3.5 text-gray-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+            Deployed on Modal.com — no additional API key required
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
   const renderAbout = () => (
     <div className="space-y-5">
       <div>
@@ -534,7 +691,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
         <div className="border-t border-gray-800 pt-4 space-y-2">
           <div className="flex justify-between text-xs">
             <span className="text-gray-500">Providers</span>
-            <span className="text-gray-300">Gemini · Kie.ai · Freepik</span>
+            <span className="text-gray-300">Gemini · Kie.ai · Freepik · RunPod</span>
           </div>
           <div className="flex justify-between text-xs">
             <span className="text-gray-500">Storage</span>
@@ -542,7 +699,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
           </div>
           <div className="flex justify-between text-xs">
             <span className="text-gray-500">Keys configured</span>
-            <span className="text-gray-300">{configuredCount} / 3</span>
+            <span className="text-gray-300">{configuredCount} / 4</span>
           </div>
         </div>
 
@@ -582,7 +739,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
             onClick={() => setSection('api-keys')}
             badge={
               <span className="text-[10px] bg-gray-800 text-gray-400 px-1.5 py-0.5 rounded-full">
-                {configuredCount}/3
+                {configuredCount}/4
               </span>
             }
           />
@@ -598,6 +755,12 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
                 <span className="w-2 h-2 bg-yellow-500 rounded-full" />
               ) : null
             }
+          />
+          <NavItem
+            label="Video Processing"
+            icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 4v16M17 4v16M3 8h4m10 0h4M3 12h18M3 16h4m10 0h4M4 20h16a1 1 0 001-1V5a1 1 0 00-1-1H4a1 1 0 00-1 1v14a1 1 0 001 1z" /></svg>}
+            active={section === 'video-processing'}
+            onClick={() => setSection('video-processing')}
           />
           <NavItem
             label="About"
@@ -624,7 +787,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
         <div className="max-w-2xl mx-auto p-8">
           {section === 'api-keys' && renderApiKeys()}
           {section === 'credits' && renderCredits()}
-
+          {section === 'video-processing' && renderVideoProcessing()}
           {section === 'about' && renderAbout()}
         </div>
       </div>

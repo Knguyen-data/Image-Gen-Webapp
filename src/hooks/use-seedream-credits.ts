@@ -45,13 +45,32 @@ export const useSeedreamCredits = (
 
   // Auto-fetch whenever API key exists (works for both spicy mode and video mode)
   useEffect(() => {
+    let cancelled = false;
+
     if (apiKey) {
-      refresh();
+      setLoading(true);
+      setError(null);
+      fetchCreditBalance(apiKey)
+        .then((balance) => {
+          if (!cancelled) setCredits(balance);
+        })
+        .catch((err) => {
+          if (!cancelled) {
+            const message = err instanceof Error ? err.message : 'Failed to fetch credits';
+            setError(message);
+            console.error('[useSeedreamCredits] Error:', message);
+          }
+        })
+        .finally(() => {
+          if (!cancelled) setLoading(false);
+        });
     } else {
       setCredits(null);
       setError(null);
     }
-  }, [apiKey, refresh]);
+
+    return () => { cancelled = true; };
+  }, [apiKey]);
 
   return {
     credits,

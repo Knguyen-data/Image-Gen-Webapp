@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { AppSettings, PromptItem, ReferenceImage, ImageSize, SeedreamQuality, AppMode, VideoScene, VideoSettings, VideoModel, KlingProDuration, KlingProAspectRatio, VeoGenerationType } from '../types';
-import { ASPECT_RATIO_LABELS, IMAGE_SIZE_LABELS, SEEDREAM_QUALITY_LABELS, DEFAULT_SETTINGS, MAX_REFERENCE_IMAGES } from '../constants';
+import { AppSettings, PromptItem, ReferenceImage, ImageSize, SeedreamQuality, AppMode, VideoScene, VideoSettings, VideoModel, KlingProDuration, KlingProAspectRatio, VeoGenerationType, ComfyUISampler, ComfyUIScheduler, ComfyUISettings } from '../types';
+import { ASPECT_RATIO_LABELS, IMAGE_SIZE_LABELS, SEEDREAM_QUALITY_LABELS, DEFAULT_SETTINGS, MAX_REFERENCE_IMAGES, MAX_PROMPTS, DEFAULT_COMFYUI_SETTINGS, COMFYUI_SAMPLER_LABELS, COMFYUI_SCHEDULER_LABELS } from '../constants';
 import BulkInputModal from './bulk-input-modal';
 import VideoSceneQueue from './video-scene-queue';
 import VideoTrimmerModal from './video-trimmer-modal';
@@ -11,6 +11,10 @@ import { VeoGenerationPanel } from './veo3';
 import type { VeoSettings, VeoTaskResult } from './veo3';
 import { useMentionAutocomplete, MentionOption } from '../hooks/use-mention-autocomplete';
 import MentionDropdown from './mention-dropdown';
+import LoraSelector from './lora/lora-selector';
+import LoraManagementModal from './lora/lora-management-modal';
+import type { LoraModel } from '../types';
+import { supabase } from '../services/supabase';
 
 interface LeftPanelProps {
   prompts: PromptItem[];
@@ -22,6 +26,7 @@ interface LeftPanelProps {
   onOpenApiKey: () => void;
   hasApiKey: boolean;
   hasKieApiKey: boolean;
+  hasRunPodApiKey: boolean;
   // Spicy Mode props
   credits: number | null;
   creditsLoading: boolean;
@@ -65,6 +70,7 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
   onOpenApiKey,
   hasApiKey,
   hasKieApiKey,
+  hasRunPodApiKey,
   credits,
   creditsLoading,
   creditsError,
@@ -114,6 +120,34 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
   const [videoRefFile, setVideoRefFile] = useState<File | null>(null);
   const [videoRefPromptIndex, setVideoRefPromptIndex] = useState(0);
 
+  // LoRA modal state
+  const [loraModalOpen, setLoraModalOpen] = useState(false);
+  const [loras, setLoras] = useState<LoraModel[]>([]);
+  const [loraLoading, setLoraLoading] = useState(false);
+
+  // Fetch user's LoRAs on mount
+  useEffect(() => {
+    const fetchLoras = async () => {
+      setLoraLoading(true);
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          const { listUserLoras } = await import('../services/lora-model-service');
+          const allLoras = await listUserLoras(user.id);
+          setLoras(allLoras);
+        }
+      } catch (err) {
+        console.error('Failed to fetch LoRAs:', err);
+      } finally {
+        setLoraLoading(false);
+      }
+    };
+    fetchLoras();
+  }, []);
+
+  // Get selected LoRA details
+  const selectedLora = loras.find(l => l.id === (safeSettings.spicyMode?.comfyui?.loraId || comfySettings.loraId));
+
   // Use parent video model state (no local shadow)
   const selectedVideoModel = videoModelProp;
   const setSelectedVideoModel = setVideoModelProp;
@@ -122,6 +156,73 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
 
   // Helper to ensure settings exist before access
   const safeSettings: AppSettings = settings || DEFAULT_SETTINGS;
+
+  // Check if current mode supports reference images
+  const supportsReferenceImages = (): boolean => {
+    // Extreme mode (ComfyUI) supports reference images via IP-Adapter
+    if (safeSettings.spicyMode?.enabled && safeSettings.spicyMode.subMode === 'extreme') {
+      return true;
+    }
+    // Spicy Edit mode supports reference images
+    if (safeSettings.spicyMode?.enabled && safeSettings.spicyMode.subMode === 'edit') {
+      return true;
+    }
+    // Gemini mode supports reference images
+    if (!safeSettings.spicyMode?.enabled) {
+      return true;
+    }
+    // Spicy Generate mode (txt2img) does NOT support reference images
+    return false;
+  };
+
+  // Get mode name for error messages
+  const getModeName = (): string => {
+    if (safeSettings.spicyMode?.enabled && safeSettings.spicyMode.subMode === 'extreme') {
+      return 'Extreme Mode (ComfyUI)';
+    }
+    if (safeSettings.spicyMode?.enabled && safeSettings.spicyMode.subMode === 'generate') {
+      return 'Spicy Generate Mode (Seedream Txt2Img)';
+    }
+    if (safeSettings.spicyMode?.enabled && safeSettings.spicyMode.subMode === 'edit') {
+      return 'Spicy Edit Mode (Seedream Edit)';
+    }
+    return 'Gemini Mode';
+  };
+
+  // Get mode-specific image guidance
+  const getImageDropLabel = (): { label: string; hint: string; icon: string; maxRecommended: number } => {
+    if (safeSettings.spicyMode?.enabled && safeSettings.spicyMode.subMode === 'extreme') {
+      return {
+        label: '🧬 Face Reference',
+        hint: 'Drop a clear face photo for face consistency (IPAdapter FaceID)',
+        icon: 'face',
+        maxRecommended: 1,
+      };
+    }
+    if (safeSettings.spicyMode?.enabled && safeSettings.spicyMode.subMode === 'edit') {
+      return {
+        label: '🖼️ Source Image',
+        hint: 'Drop the image you want to edit with your prompt',
+        icon: 'edit',
+        maxRecommended: 1,
+      };
+    }
+    if (safeSettings.spicyMode?.enabled && safeSettings.spicyMode.subMode === 'generate') {
+      return {
+        label: '🚫 No Images',
+        hint: 'Text-to-image only — no reference images in Generate mode',
+        icon: 'none',
+        maxRecommended: 0,
+      };
+    }
+    // Gemini default
+    return {
+      label: '📎 Reference Images',
+      hint: 'Drop images for style/content guidance (up to 10)',
+      icon: 'ref',
+      maxRecommended: 10,
+    };
+  };
 
   // --- VIDEO MODEL SELECTOR HANDLER ---
   const handleModelSelect = (model: VideoModel) => {
@@ -162,8 +263,47 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
     return { images, nonImageCount };
   };
 
+  // Handle dropped image card (from gallery)
+  const handleDroppedImageCard = (promptIndex: number, jsonData: string): boolean => {
+    try {
+      const refImage: ReferenceImage = JSON.parse(jsonData);
+      if (!refImage.base64 || !refImage.mimeType) {
+        console.warn('Invalid image card data');
+        return false;
+      }
+
+      // Check if mode supports reference images
+      if (!supportsReferenceImages()) {
+        alert(`${getModeName()} does not support reference images. Switch to Gemini or Spicy Edit mode to use reference images.`);
+        return false;
+      }
+
+      const newPrompts = [...prompts];
+      const currentRefCount = newPrompts[promptIndex].referenceImages.length;
+
+      if (currentRefCount >= MAX_REFERENCE_IMAGES) {
+        alert(`Maximum of ${MAX_REFERENCE_IMAGES} reference images per prompt reached.`);
+        return false;
+      }
+
+      newPrompts[promptIndex].referenceImages = [...newPrompts[promptIndex].referenceImages, refImage];
+      setPrompts(newPrompts);
+      return true;
+    } catch (e) {
+      console.warn('Failed to parse dropped image card:', e);
+      return false;
+    }
+  };
+
   // --- FIXED BLOCK IMAGES ---
   const addFixedBlockImages = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    // Check if mode supports reference images
+    if (!supportsReferenceImages()) {
+      alert(`${getModeName()} does not support reference images. Switch to Gemini or Spicy Edit mode to use reference images.`);
+      if (fixedBlockFileRef.current) fixedBlockFileRef.current.value = '';
+      return;
+    }
+
     const { images, nonImageCount } = await processFiles(e.target.files);
     if (nonImageCount > 0) {
       alert(`Only image files are supported. ${nonImageCount} non-image file(s) were ignored.`);
@@ -183,6 +323,12 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
 
   const addLocalImages = async (promptIndex: number, files: FileList | null) => {
     if (!files) return;
+
+    // Check if mode supports reference images
+    if (!supportsReferenceImages()) {
+      alert(`${getModeName()} does not support reference images. Switch to Gemini or Spicy Edit mode to use reference images.`);
+      return;
+    }
 
     // Check if any dropped file is a video (image mode only)
     if (!isVideoMode) {
@@ -244,6 +390,10 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
   };
 
   const addPrompt = () => {
+    if (prompts.length >= MAX_PROMPTS) {
+      alert(`Maximum ${MAX_PROMPTS} prompts allowed. Remove some prompts first.`);
+      return;
+    }
     setPrompts([...prompts, { id: crypto.randomUUID(), text: '', referenceImages: [] }]);
     setTimeout(() => setActivePromptIndex(prompts.length), 50);
   };
@@ -272,7 +422,17 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
 
   const handleBulkProcess = (newLines: string[]) => {
     if (newLines.length === 0) return;
-    const newItems: PromptItem[] = newLines.map(text => ({
+
+    const existingCount = (prompts.length === 1 && prompts[0].text.trim() === '') ? 0 : prompts.length;
+    const available = MAX_PROMPTS - existingCount;
+    const linesToUse = newLines.slice(0, available);
+
+    if (linesToUse.length < newLines.length) {
+      alert(`Only ${linesToUse.length} of ${newLines.length} prompts added. Maximum ${MAX_PROMPTS} prompts allowed.`);
+    }
+    if (linesToUse.length === 0) return;
+
+    const newItems: PromptItem[] = linesToUse.map(text => ({
       id: crypto.randomUUID(),
       text,
       referenceImages: []
@@ -366,6 +526,9 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
       return 'Kling 2.6 Motion Control';
     }
     if (safeSettings.spicyMode?.enabled) {
+      if (safeSettings.spicyMode.subMode === 'extreme') {
+        return 'ComfyUI Lustify (RunPod)';
+      }
       return `Seedream 4.5 ${safeSettings.spicyMode.subMode === 'edit' ? 'Edit' : 'Txt2Img'}`;
     }
     return 'Gemini Nano Banana Pro';
@@ -403,6 +566,14 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
         onCancel={() => {
           setVideoRefOpen(false);
           setVideoRefFile(null);
+        }}
+      />
+
+      <LoraManagementModal
+        isOpen={loraModalOpen}
+        onClose={() => setLoraModalOpen(false)}
+        onLoraCreated={(lora) => {
+          setLoras(prev => [...prev, lora]);
         }}
       />
 
@@ -512,6 +683,25 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
                     title="Generate mode - text only, no image needed"
                   >
                     Generate
+                  </button>
+                  <button
+                    onClick={() => setSettings({
+                      ...safeSettings,
+                      spicyMode: {
+                        ...safeSettings.spicyMode,
+                        subMode: 'extreme',
+                        comfyui: safeSettings.spicyMode.comfyui || DEFAULT_COMFYUI_SETTINGS
+                      }
+                    })}
+
+                    className={`px-3 py-1 text-xs rounded-md transition-all ${
+                      safeSettings.spicyMode.subMode === 'extreme'
+                        ? 'bg-gradient-to-r from-red-600 to-red-800 text-white font-medium ring-1 ring-red-400/50'
+                        : 'text-gray-400 hover:text-white'
+                    }`}
+                    title="Extreme mode - ComfyUI Lustify (RunPod)"
+                  >
+                    Extreme
                   </button>
                 </div>
               )}
@@ -639,8 +829,8 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
                   <VideoSceneQueue
                     scenes={videoScenes}
                     setScenes={setVideoScenes}
-                    videoSettings={videoSettings}
-                    setVideoSettings={setVideoSettings}
+                    videoSettings={videoSettings as any}
+                    setVideoSettings={setVideoSettings as any}
                     onOpenVideoTrimmer={handleOpenVideoTrimmer}
                     appMode={appMode}
                     onGenerate={onVideoGenerate}
@@ -784,8 +974,8 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
                   <VideoSceneQueue
                     scenes={videoScenes}
                     setScenes={setVideoScenes}
-                    videoSettings={videoSettings}
-                    setVideoSettings={setVideoSettings}
+                    videoSettings={videoSettings as any}
+                    setVideoSettings={setVideoSettings as any}
                     onOpenVideoTrimmer={handleOpenVideoTrimmer}
                     appMode={appMode}
                     onGenerate={onVideoGenerate}
@@ -1390,8 +1580,22 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
                         onDrop={async (e) => {
                           e.preventDefault();
                           e.currentTarget.classList.remove('ring-2', 'ring-dash-300', 'bg-gray-900');
+
+                          // First, try to handle dropped image card (from gallery)
+                          const jsonData = e.dataTransfer.getData('application/json');
+                          if (jsonData) {
+                            const handled = handleDroppedImageCard(index, jsonData);
+                            if (handled) return; // Successfully handled image card
+                          }
+
+                          // Otherwise, handle file drop
                           const files = e.dataTransfer.files;
                           if (files && files.length > 0) {
+                            // Check if mode supports reference images before processing
+                            if (!supportsReferenceImages()) {
+                              alert(`${getModeName()} does not support reference images. Switch to Gemini or Spicy Edit mode to use reference images.`);
+                              return;
+                            }
                             await addLocalImages(index, files);
                           }
                         }}
@@ -1417,12 +1621,36 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
                       >
                         <textarea
                           className="w-full bg-transparent p-3 text-sm text-gray-200 outline-none resize-y min-h-[80px] font-mono relative z-10"
-                          placeholder={`Describe image #${index + 1}...`}
+                          placeholder={
+                            safeSettings.spicyMode?.enabled && safeSettings.spicyMode.subMode === 'extreme'
+                              ? `Describe what you want to generate... (attach face photo below for face lock)`
+                              : safeSettings.spicyMode?.enabled && safeSettings.spicyMode.subMode === 'edit'
+                                ? `Describe the edits to apply to your source image...`
+                                : safeSettings.spicyMode?.enabled && safeSettings.spicyMode.subMode === 'generate'
+                                  ? `Describe what you want to generate (text only, no images)...`
+                                  : `Describe image #${index + 1}... (drop reference images below)`
+                          }
                           value={pItem.text}
                           onChange={(e) => updatePromptText(index, e.target.value)}
                           onFocus={() => setActivePromptIndex(index)}
           
                         />
+
+                        {/* Mode-specific drop zone guidance */}
+                        {(() => {
+                          const dropInfo = getImageDropLabel();
+                          return (
+                            <div className={`px-3 pt-1 ${
+                              dropInfo.icon === 'none' ? 'opacity-40' : ''
+                            }`}>
+                              <p className="text-[10px] font-medium text-gray-500 flex items-center gap-1.5">
+                                <span>{dropInfo.label}</span>
+                                <span className="text-gray-600">—</span>
+                                <span className="text-gray-600 font-normal">{dropInfo.hint}</span>
+                              </p>
+                            </div>
+                          );
+                        })()}
 
                         {/* Local Image Strip */}
                         <div className="px-3 pb-3 flex flex-wrap gap-2 items-center rounded-b-lg">
@@ -1437,8 +1665,22 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
                               </button>
                             </div>
                           ))}
-                          <label className="w-10 h-10 flex items-center justify-center border border-dashed border-gray-700 rounded hover:border-dash-300 hover:bg-gray-900 cursor-pointer text-gray-500 hover:text-dash-300 transition-colors" title="Click or Drag onto card">
-                            <input type="file" multiple accept="image/*,video/mp4,video/quicktime,video/webm" className="hidden" onChange={(e) => addLocalImages(index, e.target.files)} />
+                          <label
+                            className={`w-10 h-10 flex items-center justify-center border border-dashed rounded transition-colors ${
+                              supportsReferenceImages()
+                                ? 'border-gray-700 hover:border-dash-300 hover:bg-gray-900 cursor-pointer text-gray-500 hover:text-dash-300'
+                                : 'border-gray-800 cursor-not-allowed text-gray-700'
+                            }`}
+                            title={supportsReferenceImages() ? getImageDropLabel().hint : `${getModeName()} does not support reference images`}
+                          >
+                            <input
+                              type="file"
+                              multiple
+                              accept="image/*,video/mp4,video/quicktime,video/webm"
+                              className="hidden"
+                              onChange={(e) => addLocalImages(index, e.target.files)}
+                              disabled={!supportsReferenceImages()}
+                            />
                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
                           </label>
                           {isOverLimit && <span className="text-[10px] text-red-400 font-bold ml-auto">Max {MAX_REFERENCE_IMAGES} imgs exceeded!</span>}
@@ -1488,6 +1730,13 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
               e.preventDefault();
               e.currentTarget.classList.remove('ring-2', 'ring-dash-300', 'bg-gray-800', 'border-dash-300');
               e.currentTarget.classList.add('border-gray-800');
+
+              // Check if mode supports reference images
+              if (!supportsReferenceImages()) {
+                alert(`${getModeName()} does not support reference images. Switch to Gemini or Spicy Edit mode to use reference images.`);
+                return;
+              }
+
               const files = e.dataTransfer.files;
               if (files && files.length > 0) {
                 const { images, nonImageCount } = await processFiles(files);
@@ -1656,6 +1905,195 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
               )}
             </div>
 
+            {/* ComfyUI Settings (Extreme Mode) */}
+            {safeSettings.spicyMode?.enabled && safeSettings.spicyMode.subMode === 'extreme' && (() => {
+              const comfySettings = safeSettings.spicyMode.comfyui || DEFAULT_COMFYUI_SETTINGS;
+              const updateComfyUI = (patch: Partial<typeof comfySettings>) =>
+                setSettings({
+                  ...safeSettings,
+                  spicyMode: {
+                    ...safeSettings.spicyMode,
+                    comfyui: { ...comfySettings, ...patch }
+                  }
+                });
+              const hasRefImage = prompts.some(p => p.referenceImages.length > 0) ||
+                (safeSettings.fixedBlockEnabled && (safeSettings.fixedBlockImages?.length || 0) > 0);
+
+              return (
+                <div className="col-span-2 space-y-3 mt-2 p-3 bg-red-950/30 border border-red-500/20 rounded-lg">
+                  <div className="flex items-center gap-2" title="Advanced settings for ComfyUI Lustify SDXL. These control the diffusion process and image generation quality.">
+                    <span className="text-xs font-semibold text-red-300 uppercase tracking-wider cursor-help border-b border-dashed border-red-500/30 hover:border-red-500/60 transition-colors">
+                      ComfyUI Settings
+                    </span>
+                    <svg className="w-3 h-3 text-red-400/60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    {hasRefImage && (
+                      <span className="text-[10px] text-green-400 font-normal ml-2">
+                        ✓ Face reference attached — IP-Adapter will apply face lock
+                      </span>
+                    )}
+                    {!hasRefImage && (
+                      <span className="text-[10px] text-yellow-400/60 font-normal ml-2">
+                        No face reference — text-to-image only
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Steps */}
+                  <div className="space-y-1" title="Number of denoising steps. More steps = higher quality but slower generation. 20-30 is the sweet spot for quality vs speed.">
+                    <div className="flex justify-between">
+                      <label className="text-xs text-red-300/80 cursor-help border-b border-dashed border-red-500/30 hover:border-red-500/60 transition-colors">Steps</label>
+                      <span className="text-xs text-red-300 font-mono">{comfySettings.steps}</span>
+                    </div>
+                    <input type="range" min="15" max="50" step="1"
+                      className="w-full h-2 bg-red-900/50 rounded-lg appearance-none cursor-pointer accent-red-500"
+                      value={comfySettings.steps}
+                      onChange={(e) => updateComfyUI({ steps: parseInt(e.target.value) })}
+                    />
+                    <p className="text-[10px] text-red-400/60">
+                      {comfySettings.steps < 20 ? 'Fast but may lack detail' : 
+                       comfySettings.steps < 30 ? 'Balanced quality & speed' : 
+                       comfySettings.steps < 40 ? 'High quality, slower' : 'Maximum quality, slowest'}
+                    </p>
+                  </div>
+
+                  {/* CFG Scale */}
+                  <div className="space-y-1" title="Classifier-Free Guidance Scale. Controls how closely the image follows your prompt. Higher = more literal interpretation, lower = more creative freedom.">
+                    <div className="flex justify-between">
+                      <label className="text-xs text-red-300/80 cursor-help border-b border-dashed border-red-500/30 hover:border-red-500/60 transition-colors">CFG Scale</label>
+                      <span className="text-xs text-red-300 font-mono">{comfySettings.cfg}</span>
+                    </div>
+                    <input type="range" min="1" max="15" step="0.5"
+                      className="w-full h-2 bg-red-900/50 rounded-lg appearance-none cursor-pointer accent-red-500"
+                      value={comfySettings.cfg}
+                      onChange={(e) => updateComfyUI({ cfg: parseFloat(e.target.value) })}
+                    />
+                    <p className="text-[10px] text-red-400/60">
+                      {comfySettings.cfg < 5 ? 'Creative, may ignore parts of prompt' : 
+                       comfySettings.cfg < 8 ? 'Balanced adherence' : 
+                       comfySettings.cfg < 12 ? 'Strict prompt following' : 'Very literal, may over-saturate'}
+                    </p>
+                  </div>
+
+                  {/* Denoise */}
+                  <div className="space-y-1" title="Denoising strength for img2img. 1.0 = complete transformation (txt2img), lower values preserve more of the original image structure.">
+                    <div className="flex justify-between">
+                      <label className="text-xs text-red-300/80 cursor-help border-b border-dashed border-red-500/30 hover:border-red-500/60 transition-colors">Denoise</label>
+                      <span className="text-xs text-red-300 font-mono">{comfySettings.denoise.toFixed(2)}</span>
+                    </div>
+                    <input type="range" min="0.1" max="1.0" step="0.05"
+                      className="w-full h-2 bg-red-900/50 rounded-lg appearance-none cursor-pointer accent-red-500"
+                      value={comfySettings.denoise}
+                      onChange={(e) => updateComfyUI({ denoise: parseFloat(e.target.value) })}
+                    />
+                    <p className="text-[10px] text-red-400/60">
+                      {comfySettings.denoise < 0.5 ? 'Subtle changes, preserves structure' : 
+                       comfySettings.denoise < 0.8 ? 'Moderate transformation' : 
+                       'Full generation (txt2img mode)'}
+                    </p>
+                  </div>
+
+                  {/* Sampler */}
+                  <div className="space-y-1" title="Sampling algorithm. Different samplers produce different results at different speeds. Euler is fast and reliable; DPM++ offers better quality at cost of speed.">
+                    <div className="flex items-center gap-1">
+                      <label className="text-xs text-red-300/80 cursor-help border-b border-dashed border-red-500/30 hover:border-red-500/60 transition-colors">Sampler</label>
+                    </div>
+                    <select
+                      className="w-full bg-gray-950 border border-red-700/50 rounded p-2 text-sm text-red-200"
+                      value={comfySettings.sampler}
+                      onChange={(e) => updateComfyUI({ sampler: e.target.value as ComfyUISampler })}
+                    >
+                      {Object.entries(COMFYUI_SAMPLER_LABELS).map(([key, label]) => (
+                        <option key={key} value={key}>{label}</option>
+                      ))}
+                    </select>
+                    <p className="text-[10px] text-red-400/60">
+                      {comfySettings.sampler === 'euler' ? 'Fast, stable, good for most cases' : 
+                       comfySettings.sampler === 'euler_ancestral' ? 'More varied, creative results' : 
+                       comfySettings.sampler === 'dpmpp_2m' ? 'Higher quality, slower' : 
+                       'Best quality, stochastic (randomized)'}
+                    </p>
+                  </div>
+
+                  {/* Scheduler */}
+                  <div className="space-y-1" title="Noise scheduling strategy. Controls how the denoising process progresses. Karras often produces sharper details; Normal is the standard approach.">
+                    <div className="flex items-center gap-1">
+                      <label className="text-xs text-red-300/80 cursor-help border-b border-dashed border-red-500/30 hover:border-red-500/60 transition-colors">Scheduler</label>
+                    </div>
+                    <select
+                      className="w-full bg-gray-950 border border-red-700/50 rounded p-2 text-sm text-red-200"
+                      value={comfySettings.scheduler}
+                      onChange={(e) => updateComfyUI({ scheduler: e.target.value as ComfyUIScheduler })}
+                    >
+                      {Object.entries(COMFYUI_SCHEDULER_LABELS).map(([key, label]) => (
+                        <option key={key} value={key}>{label}</option>
+                      ))}
+                    </select>
+                    <p className="text-[10px] text-red-400/60">
+                      {comfySettings.scheduler === 'normal' ? 'Standard scheduling, reliable' : 
+                       comfySettings.scheduler === 'karras' ? 'Sharper details, recommended' : 
+                       'Uniform noise distribution'}
+                    </p>
+                  </div>
+
+                  {/* LoRA Selector */}
+                  <LoraSelector
+                    selectedLoraId={comfySettings.loraId}
+                    loraWeight={comfySettings.loraWeight ?? 0.8}
+                    onLoraChange={(loraId) => updateComfyUI({ loraId: loraId || undefined })}
+                    onWeightChange={(weight) => updateComfyUI({ loraWeight: weight })}
+                    onManageClick={() => setLoraModalOpen(true)}
+                  />
+
+                  {/* Trigger Word Hint */}
+                  {selectedLora && (
+                    <div className="p-2 bg-amber-900/20 border border-amber-500/30 rounded text-xs text-amber-300">
+                      <span className="font-medium">Trigger word:</span> {selectedLora.trigger_word}
+                    </div>
+                  )}
+
+                  {/* IP-Adapter Weight (only when reference image attached) */}
+                  {hasRefImage && (
+                    <div className="space-y-1" title="Controls how much the reference image influences the result. 0 = no influence, 1 = balanced, 2 = strong influence. Higher values may cause artifacts.">
+                      <div className="flex justify-between">
+                        <label className="text-xs text-red-300/80 cursor-help border-b border-dashed border-red-500/30 hover:border-red-500/60 transition-colors">IP-Adapter Weight</label>
+                        <span className="text-xs text-red-300 font-mono">{comfySettings.ipAdapterWeight.toFixed(2)}</span>
+                      </div>
+                      <input type="range" min="0" max="2" step="0.05"
+                        className="w-full h-2 bg-red-900/50 rounded-lg appearance-none cursor-pointer accent-red-500"
+                        value={comfySettings.ipAdapterWeight}
+                        onChange={(e) => updateComfyUI({ ipAdapterWeight: parseFloat(e.target.value) })}
+                      />
+                      <p className="text-[10px] text-red-400/60">
+                        {comfySettings.ipAdapterWeight < 0.5 ? 'Subtle face/style influence' : 
+                         comfySettings.ipAdapterWeight < 1.0 ? 'Moderate influence' : 
+                         comfySettings.ipAdapterWeight < 1.5 ? 'Strong influence' : 'Very strong, may cause artifacts'}
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Seed */}
+                  <div className="space-y-1" title="Random seed for reproducible results. Use -1 for random generation. Same seed + same settings = same image. Useful for iterating on a specific look.">
+                    <div className="flex items-center gap-1">
+                      <label className="text-xs text-red-300/80 cursor-help border-b border-dashed border-red-500/30 hover:border-red-500/60 transition-colors">Seed</label>
+                      <span className="text-[10px] text-red-400/60">(-1 = random)</span>
+                    </div>
+                    <input type="number"
+                      className="w-full bg-gray-950 border border-red-700/50 rounded p-2 text-sm text-red-200 font-mono"
+                      value={comfySettings.seed}
+                      onChange={(e) => updateComfyUI({ seed: parseInt(e.target.value) || -1 })}
+                      min="-1"
+                      placeholder="-1 for random"
+                    />
+                    <p className="text-[10px] text-red-400/60">
+                      {comfySettings.seed === -1 ? 'Random seed each generation' : 'Fixed seed for reproducible results'}
+                    </p>
+                  </div>
+                </div>
+              );
+            })()}
+
             {/* Temperature */}
             {!safeSettings.spicyMode?.enabled && (
               <div className="space-y-1">
@@ -1727,7 +2165,12 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
             )}
 
             {/* Spicy Mode Warning */}
-            {safeSettings.spicyMode?.enabled && !hasKieApiKey && (
+            {safeSettings.spicyMode?.enabled && safeSettings.spicyMode.subMode === 'extreme' && !hasRunPodApiKey && (
+              <div className="col-span-2 p-2 bg-red-900/20 border border-red-500/30 rounded text-xs text-red-300">
+                Set your RunPod API key to use Extreme Mode
+              </div>
+            )}
+            {safeSettings.spicyMode?.enabled && safeSettings.spicyMode.subMode !== 'extreme' && !hasKieApiKey && (
               <div className="col-span-2 p-2 bg-red-900/20 border border-red-500/30 rounded text-xs text-red-300">
                 Set your Kie.ai API key to use Spicy Mode
               </div>
@@ -1746,7 +2189,11 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
             {validPromptsCount <= 1 ? (
               <button
                 onClick={() => onGenerate(false)}
-                disabled={validPromptsCount === 0 || (safeSettings.spicyMode?.enabled ? !hasKieApiKey : !hasApiKey)}
+                disabled={validPromptsCount === 0 || (
+                  safeSettings.spicyMode?.enabled
+                    ? (safeSettings.spicyMode.subMode === 'extreme' ? !hasRunPodApiKey : !hasKieApiKey)
+                    : !hasApiKey
+                )}
                 className={`w-full py-3 px-4 font-medium rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed flex flex-col items-center justify-center leading-tight ${
                   safeSettings.spicyMode?.enabled
                     ? 'bg-red-900/30 hover:bg-red-900/50 text-red-200 border border-red-500/30'
@@ -1759,7 +2206,11 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
             ) : (
               <button
                 onClick={() => onGenerate(true)}
-                disabled={validPromptsCount === 0 || (safeSettings.spicyMode?.enabled ? !hasKieApiKey : !hasApiKey)}
+                disabled={validPromptsCount === 0 || (
+                  safeSettings.spicyMode?.enabled
+                    ? (safeSettings.spicyMode.subMode === 'extreme' ? !hasRunPodApiKey : !hasKieApiKey)
+                    : !hasApiKey
+                )}
                 className={`w-full py-3 px-4 font-bold rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed flex flex-col items-center justify-center leading-tight ${
                   safeSettings.spicyMode?.enabled
                     ? 'bg-red-500 hover:bg-red-400 text-white shadow-[0_0_15px_rgba(239,68,68,0.3)]'
@@ -1773,7 +2224,10 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
             {!safeSettings.spicyMode?.enabled && !hasApiKey && (
               <p className="text-center text-xs text-red-400 animate-pulse cursor-pointer" onClick={onOpenApiKey}>Gemini API Key required to generate</p>
             )}
-            {safeSettings.spicyMode?.enabled && !hasKieApiKey && (
+            {safeSettings.spicyMode?.enabled && safeSettings.spicyMode.subMode === 'extreme' && !hasRunPodApiKey && (
+              <p className="text-center text-xs text-red-400 animate-pulse cursor-pointer" onClick={onOpenApiKey}>RunPod API Key required for Extreme Mode</p>
+            )}
+            {safeSettings.spicyMode?.enabled && safeSettings.spicyMode.subMode !== 'extreme' && !hasKieApiKey && (
               <p className="text-center text-xs text-red-400 animate-pulse cursor-pointer" onClick={onOpenApiKey}>Kie.ai API Key required for Spicy Mode</p>
             )}
           </div>

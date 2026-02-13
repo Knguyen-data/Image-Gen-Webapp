@@ -60,6 +60,7 @@ export const pollFreepikTask = async (
       const response = await fetch(`${pollUrl}/${taskId}`, {
         method: 'GET',
         headers: { 'x-freepik-api-key': apiKey },
+        signal: AbortSignal.timeout(30000),
       });
 
       if (!response.ok) {
@@ -182,6 +183,7 @@ export const createFreepikMotionTask = async (
       prompt: prompt || 'The character is performing the action.',
       cfg_scale: cfgScale,
     }),
+    signal: AbortSignal.timeout(30000),
   });
 
   if (!response.ok) await handleFreepikError(response, 'motion task creation');
@@ -236,6 +238,7 @@ export const createFreepikProI2VTask = async (
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'x-freepik-api-key': apiKey },
     body: JSON.stringify(body),
+    signal: AbortSignal.timeout(30000),
   });
 
   if (!response.ok) await handleFreepikError(response, 'Pro I2V task creation');
@@ -351,6 +354,7 @@ export const createKling3Task = async (
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'x-freepik-api-key': apiKey },
     body: JSON.stringify(body),
+    signal: AbortSignal.timeout(30000),
   });
 
   if (!response.ok) await handleFreepikError(response, 'Kling 3 task creation');
@@ -482,6 +486,7 @@ export const createKling3OmniTask = async (
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'x-freepik-api-key': apiKey },
     body: JSON.stringify(body),
+    signal: AbortSignal.timeout(30000),
   });
 
   // Capture raw response text before parsing
@@ -576,6 +581,7 @@ export const createKling3OmniReferenceTask = async (
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'x-freepik-api-key': apiKey },
     body: JSON.stringify(body),
+    signal: AbortSignal.timeout(30000),
   });
 
   // Capture raw response text before parsing

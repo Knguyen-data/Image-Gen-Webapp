@@ -8,9 +8,9 @@ interface VeoResultsViewProps {
   error?: string;
   progress?: string;
   onDownload?: (url: string) => void;
-  onExtend?: () => void;
-  onGet1080p?: () => void;
-  onGet4k?: () => void;
+  onExtend?: (taskId: string) => void;
+  onGet1080p?: (taskId: string) => void;
+  onGet4k?: (taskId: string) => void;
   onRetry?: () => void;
 }
 
@@ -147,7 +147,7 @@ const VeoResultsView: React.FC<VeoResultsViewProps> = ({
 
           {onExtend && (
             <button
-              onClick={onExtend}
+              onClick={() => onExtend(taskId)}
               className="flex items-center justify-center px-4 py-2 bg-gray-800 hover:bg-gray-700 text-white rounded-lg transition-colors text-sm"
             >
               <svg
@@ -171,7 +171,7 @@ const VeoResultsView: React.FC<VeoResultsViewProps> = ({
         <div className="grid grid-cols-2 gap-2">
           {onGet1080p && (
             <button
-              onClick={onGet1080p}
+              onClick={() => onGet1080p(taskId)}
               className="flex items-center justify-center px-4 py-2 bg-dash-600/20 hover:bg-dash-600/30 text-dash-400 border border-dash-600/30 rounded-lg transition-colors text-sm"
             >
               Get 1080P
@@ -180,7 +180,7 @@ const VeoResultsView: React.FC<VeoResultsViewProps> = ({
 
           {onGet4k && (
             <button
-              onClick={onGet4k}
+              onClick={() => onGet4k(taskId)}
               className="flex items-center justify-center px-4 py-2 bg-dash-600/20 hover:bg-dash-600/30 text-dash-400 border border-dash-600/30 rounded-lg transition-colors text-sm"
             >
               Request 4K

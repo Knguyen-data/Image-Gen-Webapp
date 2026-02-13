@@ -24,13 +24,15 @@ export interface PromptItem {
 // Seedream 4.5 Edit Types (Spicy Mode)
 export type SeedreamAspectRatio = '1:1' | '4:3' | '3:4' | '16:9' | '9:16' | '2:3' | '3:2' | '21:9';
 export type SeedreamQuality = 'basic' | 'high';
-export type SpicySubMode = 'edit' | 'generate';
-export type GenerationModel = 'gemini' | 'seedream-edit' | 'seedream-txt2img';
+export type SpicySubMode = 'edit' | 'generate' | 'extreme';
+export type GenerationModel = 'gemini' | 'seedream-edit' | 'seedream-txt2img' | 'comfyui-lustify';
 
 export interface SpicyModeSettings {
   enabled: boolean;
   quality: SeedreamQuality;
   subMode: SpicySubMode;
+  // Extreme Mode (ComfyUI) settings
+  comfyui?: ComfyUISettings;
 }
 
 export interface AppSettings {
@@ -100,7 +102,73 @@ export interface SeedreamTask {
   costTime?: number;
 }
 
-// Video Generation Types
+// ComfyUI RunPod Types (Extreme Spicy Mode)
+export type ComfyUISampler = 'euler' | 'euler_ancestral' | 'dpmpp_2m' | 'dpmpp_sde';
+export type ComfyUIScheduler = 'normal' | 'karras' | 'sgm_uniform';
+
+export interface ComfyUISettings {
+  steps: number;        // 15-50, default 20
+  cfg: number;          // 1-15, default 8
+  denoise: number;      // 0-1, default 1.0
+  sampler: ComfyUISampler;    // default 'euler'
+  scheduler: ComfyUIScheduler; // default 'normal'
+  seed: number;         // -1 = random
+  ipAdapterWeight: number;     // 0-2, default 1.0 (face strength)
+  ipAdapterFaceidWeight: number; // 0-2, default 1.0
+  loraId?: string;      // selected LoRA model ID
+  loraWeight?: number;  // 0.0-2.0, default 0.8
+  loraFilename?: string; // internal: resolved filename for ComfyUI workflow
+}
+
+export interface ComfyUIRunPodJob {
+  id: string;
+  status: 'IN_QUEUE' | 'IN_PROGRESS' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
+  output?: {
+    success: boolean;
+    outputs?: Record<string, unknown>;
+    images?: { filename: string; data: string; type: string }[];
+    error?: string;
+  };
+  error?: string;
+}
+
+export type ComfyUIDimensions = { width: number; height: number };
+
+// LoRA Model Types (for Extreme Spicy Mode face training)
+export type LoraStatus = 'uploading' | 'training' | 'ready' | 'failed';
+export type LoraModelStatus = LoraStatus;
+
+export interface LoraModel {
+  id: string;
+  name: string;
+  trigger_word?: string; // DB column name
+  triggerWord?: string;
+  status: LoraStatus;
+  created_at?: string; // DB column name
+  createdAt?: number;
+  file_size_bytes?: number; // DB column name
+  fileSize?: number;
+  error_message?: string; // DB column name
+  errorMessage?: string;
+  training_progress?: number; // DB column name
+  trainingProgress?: number;
+  training_images_count?: number;
+  training_job_id?: string;
+  storage_url?: string;
+  user_id?: string;
+}
+
+export interface LoraTrainingConfig {
+  name: string;
+  triggerWord: string;
+  photos: File[]; // 10-25 face photos
+  steps: number; // default 1000
+  learningRate: number; // default 1e-4
+  networkDim?: number; // default 32
+  networkAlpha?: number; // default 16
+  resolution?: number; // default 1024
+}
+
 export type VideoRefMode = 'global' | 'per-scene';
 
 export interface ReferenceVideo {

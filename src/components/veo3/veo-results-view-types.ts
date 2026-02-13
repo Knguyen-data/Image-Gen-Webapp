@@ -1,5 +1,6 @@
 // Type definitions for Veo 3.1 results
 import { VeoRecordInfoResponse } from '../../services/veo3-types';
+import { VeoModel, VeoAspectRatio } from '../../types';
 
 export interface VeoTaskResult {
   taskId: string;
@@ -7,9 +8,14 @@ export interface VeoTaskResult {
   result?: VeoRecordInfoResponse;
   error?: string;
   progress?: string;
+  videoUrls?: string[];
 }
 
 export interface VeoSettings {
-  // Placeholder for Veo settings if needed
-  // Currently managed in VeoGenerationPanel component state
+  model: VeoModel;
+  aspectRatio: VeoAspectRatio;
+  enableTranslation: boolean;
+  seeds?: number;
+  watermark?: string;
+  callBackUrl?: string;
 }

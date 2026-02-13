@@ -135,7 +135,14 @@ export const openDB = async (): Promise<IDBDatabase> => {
       console.warn("DB upgrade blocked — close other tabs using this app");
     };
 
-    request.onsuccess = () => resolve(request.result);
+    request.onsuccess = () => {
+      const db = request.result;
+      db.onversionchange = () => {
+        db.close();
+        window.location.reload();
+      };
+      resolve(db);
+    };
     request.onerror = () => {
       console.error("IndexedDB Error:", request.error);
 
@@ -730,4 +737,83 @@ export const deleteSavedPayloadByPayloadId = async (payloadId: string): Promise<
       reject(tx.error);
     };
   });
+};
+
+// ============ Supabase Sync Integration ============
+
+import { getSyncService } from './supabase-sync-service';
+import { logger } from './logger';
+
+/**
+ * Save a run with automatic Supabase sync
+ */
+export const saveRunToDBWithSync = async (run: Run): Promise<void> => {
+  // First save to IndexedDB
+  await saveRunToDB(run);
+  
+  // Then queue for Supabase sync
+  try {
+    const syncService = getSyncService();
+    syncService.enqueue('runs', 'create', run.id, run);
+    logger.debug('DB', `Queued run ${run.id} for sync`);
+  } catch (err) {
+    logger.warn('DB', 'Failed to queue run for sync', err);
+  }
+};
+
+/**
+ * Delete a run with automatic Supabase sync
+ */
+export const deleteRunFromDBWithSync = async (id: string): Promise<void> => {
+  // First delete from IndexedDB
+  await deleteRunFromDB(id);
+  
+  // Then queue for Supabase sync
+  try {
+    const syncService = getSyncService();
+    syncService.enqueue('runs', 'delete', id, { id });
+    logger.debug('DB', `Queued run deletion ${id} for sync`);
+  } catch (err) {
+    logger.warn('DB', 'Failed to queue run deletion for sync', err);
+  }
+};
+
+/**
+ * Sync all local runs to Supabase (useful for initial migration)
+ */
+export const syncAllRunsToSupabase = async (): Promise<{ success: number; failed: number }> => {
+  const runs = await getAllRunsFromDB();
+  const syncService = getSyncService();
+  
+  let success = 0;
+  let failed = 0;
+  
+  for (const run of runs) {
+    try {
+      syncService.enqueue('runs', 'create', run.id, run);
+      success++;
+    } catch (err) {
+      logger.warn('DB', `Failed to queue run ${run.id} for sync`, err);
+      failed++;
+    }
+  }
+  
+  logger.info('DB', `Queued ${success} runs for sync (${failed} failed)`);
+  return { success, failed };
+};
+
+/**
+ * Pull runs from Supabase and merge with local
+ */
+export const pullRunsFromSupabase = async (): Promise<Run[]> => {
+  try {
+    const syncService = getSyncService();
+    const remoteRuns = await syncService.pullRuns();
+    
+    logger.info('DB', `Pulled ${remoteRuns.length} runs from Supabase`);
+    return remoteRuns;
+  } catch (err) {
+    logger.error('DB', 'Failed to pull runs from Supabase', err);
+    return [];
+  }
 };

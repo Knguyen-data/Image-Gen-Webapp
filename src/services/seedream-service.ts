@@ -55,8 +55,8 @@ export const uploadImageBase64 = async (
 
   // Handle both real Response API and test mocks
   const text = await (('text' in response)
-    ? response.text()
-    : JSON.stringify(await response.json()));
+    ? (response as Response).text()
+    : JSON.stringify(await (response as any).json()));
   if (!text) throw new Error('Empty response from server');
   const result = JSON.parse(text);
 
@@ -120,8 +120,8 @@ export const createEditTask = async (
 
   // Handle both real Response API and test mocks
   const text = await (('text' in response)
-    ? response.text()
-    : JSON.stringify(await response.json()));
+    ? (response as Response).text()
+    : JSON.stringify(await (response as any).json()));
   if (!text) throw new Error('Empty response from server');
   const result = JSON.parse(text);
 
@@ -155,8 +155,8 @@ export const queryTask = async (
 
   // Handle both real Response API and test mocks
   const text = await (('text' in response)
-    ? response.text()
-    : JSON.stringify(await response.json()));
+    ? (response as Response).text()
+    : JSON.stringify(await (response as any).json()));
   if (!text) throw new Error('Empty response from server');
   const result = JSON.parse(text);
 

@@ -33,7 +33,14 @@ const openPromptLibraryDB = (): Promise<IDBDatabase> => {
       console.warn('Prompt Library DB upgrade blocked — close other tabs');
     };
 
-    request.onsuccess = () => resolve(request.result);
+    request.onsuccess = () => {
+      const db = request.result;
+      db.onversionchange = () => {
+        db.close();
+        window.location.reload();
+      };
+      resolve(db);
+    };
     request.onerror = () => {
       console.error('Prompt Library DB Error:', request.error);
       reject(request.error);

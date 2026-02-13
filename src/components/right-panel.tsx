@@ -1,11 +1,11 @@
-import React, { useState, useEffect, useCallback } from 'react';
+﻿import React, { useState, useEffect, useCallback } from 'react';
 import { Run, GeneratedImage, AppMode, GeneratedVideo } from '../types';
 import ImageCard from './image-card';
 import VideoCard from './video-card';
 import StockGallery from './stock-gallery/stock-gallery';
 import { saveAndRevealVideo } from '../services/video-file-service';
 import JSZip from 'jszip';
-import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
+import { Panel, Group, Separator } from 'react-resizable-panels';
 import {
   ImagePlus,
   Video,
@@ -28,7 +28,7 @@ import {
   PanelRightClose,
   PanelLeftOpen,
   PanelRightOpen,
-  FolderVideo,
+  Folder,
   Film,
   Image,
   SkipBack,
@@ -281,25 +281,26 @@ const EditingWorkspace: React.FC<EditingWorkspaceProps> = ({ allImages, generate
 
       {/* Main content with resizable panels */}
       <div className="flex-1 overflow-hidden">
-        <PanelGroup direction="vertical" className="h-full">
+        <Group orientation="vertical" className="h-full">
           {/* Top section: Asset tray + Preview + Properties */}
           <Panel defaultSize={65} minSize={40}>
-            <PanelGroup direction="horizontal" className="h-full">
+            <Group orientation="horizontal" className="h-full">
               {/* Left Panel: Asset Tray */}
               {!leftCollapsed && (
                 <>
-                  <Panel 
-                    defaultSize={18} 
-                    minSize={15} 
+                  <Panel
+                    defaultSize={18}
+                    minSize={15}
                     maxSize={30}
                     collapsible
+                    collapsedSize={5}
                     className="transition-all duration-200"
                   >
                     <div className="h-full flex flex-col bg-gray-900/30 border-r border-gray-800">
                       {/* Tabs */}
                       <div className="flex border-b border-gray-800">
                         {[
-                          { id: 'stock' as const, icon: FolderVideo, label: 'Stock' },
+                          { id: 'stock' as const, icon: Folder, label: 'Stock' },
                           { id: 'videos' as const, icon: Film, label: 'Videos' },
                           { id: 'images' as const, icon: Image, label: 'Images' },
                         ].map(({ id, icon: TabIcon, label }) => (
@@ -337,7 +338,7 @@ const EditingWorkspace: React.FC<EditingWorkspaceProps> = ({ allImages, generate
                                   <AssetItem
                                     key={video.id}
                                     thumbnail={video.thumbnailUrl || null}
-                                    name={video.promptUsed || 'Generated video'}
+                                    name={video.prompt || 'Generated video'}
                                     badge={video.duration ? `${video.duration}s` : undefined}
                                     type="video"
                                   />
@@ -382,7 +383,7 @@ const EditingWorkspace: React.FC<EditingWorkspaceProps> = ({ allImages, generate
                       </div>
                     </div>
                   </Panel>
-                  <PanelResizeHandle className="w-1 bg-gray-800 hover:bg-dash-500/50 transition-colors cursor-col-resize opacity-0 hover:opacity-100" />
+                  <Separator className="w-1 bg-gray-800 hover:bg-dash-500/50 transition-colors cursor-col-resize opacity-0 hover:opacity-100" />
                 </>
               )}
 
@@ -414,12 +415,13 @@ const EditingWorkspace: React.FC<EditingWorkspaceProps> = ({ allImages, generate
               {/* Right Panel: Properties */}
               {!rightCollapsed && (
                 <>
-                  <PanelResizeHandle className="w-1 bg-gray-800 hover:bg-dash-500/50 transition-colors cursor-col-resize opacity-0 hover:opacity-100" />
-                  <Panel 
-                    defaultSize={18} 
-                    minSize={15} 
+                  <Separator className="w-1 bg-gray-800 hover:bg-dash-500/50 transition-colors cursor-col-resize opacity-0 hover:opacity-100" />
+                  <Panel
+                    defaultSize={18}
+                    minSize={15}
                     maxSize={25}
                     collapsible
+                    collapsedSize={5}
                     className="transition-all duration-200"
                   >
                     <div 
@@ -440,13 +442,13 @@ const EditingWorkspace: React.FC<EditingWorkspaceProps> = ({ allImages, generate
                   </Panel>
                 </>
               )}
-            </PanelGroup>
+            </Group>
           </Panel>
 
           {/* Resize handle */}
-          <PanelResizeHandle className="h-1 bg-gray-800 hover:bg-dash-500/50 transition-colors cursor-row-resize opacity-0 hover:opacity-100 flex items-center justify-center">
+          <Separator className="h-1 bg-gray-800 hover:bg-dash-500/50 transition-colors cursor-row-resize opacity-0 hover:opacity-100 flex items-center justify-center">
             <GripVertical className="w-4 h-4 text-gray-600 rotate-90" strokeWidth={1.5} />
-          </PanelResizeHandle>
+          </Separator>
 
           {/* Bottom: Timeline */}
           <Panel defaultSize={35} minSize={20} maxSize={50}>
@@ -498,7 +500,7 @@ const EditingWorkspace: React.FC<EditingWorkspaceProps> = ({ allImages, generate
               </div>
             </div>
           </Panel>
-        </PanelGroup>
+        </Group>
       </div>
     </div>
   );
@@ -620,7 +622,7 @@ const RightPanel: React.FC<RightPanelProps> = ({
       return;
     }
 
-    const img = new Image();
+    const img = new window.Image();
     img.onload = () => {
       const aspectRatio = `${img.naturalWidth}/${img.naturalHeight}`;
       setLightboxAspectRatio(aspectRatio);
@@ -1009,7 +1011,7 @@ const RightPanel: React.FC<RightPanelProps> = ({
             </button>
             <button
               className={`px-3 py-1.5 rounded text-sm transition-all duration-150 flex items-center gap-1.5 ${appMode === 'editing' ? 'bg-dash-700 text-white' : 'text-gray-400 hover:text-gray-200 hover:scale-[1.02]'}`}
-              onClick={() => setAppMode('editing')}
+              onClick={() => { setAppMode('editing'); onOpenVideoEditor?.(); }}
               title="Editing Workspace"
             >
               <Clapperboard className="w-3.5 h-3.5" strokeWidth={1.5} />
@@ -1117,7 +1119,10 @@ const RightPanel: React.FC<RightPanelProps> = ({
                         >
                           <ImageCard
                             image={img}
-                            onRetry={onRetryImage}
+                            selected={false}
+                            onToggleSelect={() => {}}
+                            onOpen={() => {}}
+                            onRetry={() => onRetryImage(img)}
                             onDelete={() => onDeleteImage(img.runId, img.id)}
                             appMode={appMode}
                           />
@@ -1200,12 +1205,6 @@ const RightPanel: React.FC<RightPanelProps> = ({
               )}
             </div>
           </div>
-        ) : appMode === 'editing' ? (
-          // EDITING MODE: Full resizable workspace with OpenCut mounting points
-          <EditingWorkspace
-            allImages={allImages}
-            generatedVideos={generatedVideos}
-          />
         ) : (
           // IMAGE MODE: Show only images (unchanged)
           runs.length === 0 ? (

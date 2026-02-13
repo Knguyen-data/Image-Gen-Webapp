@@ -8,9 +8,10 @@ if (!supabaseUrl || !supabaseAnonKey) {
   console.warn('Supabase credentials not configured. Running in offline mode.');
 }
 
+// createClient throws if URL is empty -- use a dummy placeholder for offline mode
 export const supabase = createClient<Database>(
-  supabaseUrl || '',
-  supabaseAnonKey || '',
+  supabaseUrl || 'https://placeholder.supabase.co',
+  supabaseAnonKey || 'placeholder-key',
   {
     auth: {
       autoRefreshToken: true,
