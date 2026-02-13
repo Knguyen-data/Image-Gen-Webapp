@@ -4,9 +4,9 @@ compatibility_date = "2025-01-01"
 
 [vars]
 R2_BUCKET = "lora-training-images"
+R2_ENDPOINT = "https://490be35332b2cf733dcf21f04469aa7a.r2.cloudflarestorage.com"
+R2_PUBLIC_ENDPOINT = "https://r2-media-upload.tnguyen633.workers.dev"
 
-# These will be set in Cloudflare Dashboard
-# R2_ENDPOINT = "https://ACCOUNT_ID.r2.cloudflarestorage.com"
-# R2_ACCESS_KEY_ID = "your-access-key"
-# R2_SECRET_ACCESS_KEY = "your-secret-key"
-# R2_PUBLIC_ENDPOINT = "https://r2-media-upload.tnguyen633.workers.dev"
+# Set these in Cloudflare Dashboard > Worker > Settings > Variables
+# R2_ACCESS_KEY_ID = "8c3535e03c0fae25d5ead129955a75bd"
+# R2_SECRET_ACCESS_KEY = "b9a54e3a8e6d4a5f8c7d2e9b1a3c8f0d4e7a6c5b8d9f0e1a2b3c4d5e6f7a8b9c"
