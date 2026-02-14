@@ -102,6 +102,7 @@ export const VIDEO_MODEL_LABELS: Record<VideoModel, string> = {
   'kling-3': 'Kling 3 — MultiShot',
   'kling-3-omni': 'Kling 3 Omni — Multimodal',
   'veo-3.1': 'Veo 3.1 — Google AI Video',
+  'director': 'Director Pipeline — AI Multi-Shot',
 };
 
 // Default Unified Video Settings

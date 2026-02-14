@@ -39,6 +39,11 @@ import {
   GripVertical,
 } from 'lucide-react';
 
+// Modular components (refactored)
+import { ImageLightbox } from './lightbox';
+import { GalleryToolbar } from './gallery-toolbar';
+import { ImageGalleryGrid } from './image-gallery-grid';
+
 // ============================================================================
 // EDITING WORKSPACE COMPONENT
 // ============================================================================
@@ -49,6 +54,9 @@ interface EditingWorkspaceProps {
 }
 
 type AssetTab = 'stock' | 'videos' | 'images';
+
+// Version to force re-render when panels change
+const EDITING_WORKSPACE_VERSION = '2';
 
 const EditingWorkspace: React.FC<EditingWorkspaceProps> = ({ allImages, generatedVideos }) => {
   // Panel collapse states (persisted)
@@ -289,16 +297,16 @@ const EditingWorkspace: React.FC<EditingWorkspaceProps> = ({ allImages, generate
               {!leftCollapsed && (
                 <>
                   <Panel
-                    defaultSize={18}
-                    minSize={15}
-                    maxSize={30}
+                    defaultSize={35}
+                    minSize={25}
+                    maxSize={45}
                     collapsible
-                    collapsedSize={5}
-                    className="transition-all duration-200"
+                    collapsedSize={6}
+                    className="transition-all duration-300"
                   >
-                    <div className="h-full flex flex-col bg-gray-900/30 border-r border-gray-800">
-                      {/* Tabs */}
-                      <div className="flex border-b border-gray-800">
+                    <div className="h-full flex flex-col bg-gray-900 border-r-2 border-lime-500/50">
+                      {/* Tabs - BIGGER */}
+                      <div className="flex border-b-2 border-gray-800 bg-gray-900/50">
                         {[
                           { id: 'stock' as const, icon: Folder, label: 'Stock' },
                           { id: 'videos' as const, icon: Film, label: 'Videos' },
@@ -308,14 +316,14 @@ const EditingWorkspace: React.FC<EditingWorkspaceProps> = ({ allImages, generate
                             key={id}
                             onClick={() => setActiveAssetTab(id)}
                             className={`
-                              flex-1 px-2 py-2 text-[10px] flex items-center justify-center gap-1 transition-all duration-200
+                              flex-1 px-4 py-3 text-sm font-medium flex items-center justify-center gap-2 transition-all duration-200
                               ${activeAssetTab === id 
-                                ? 'text-dash-400 border-b-2 border-dash-500 bg-gray-800/30' 
-                                : 'text-gray-500 hover:text-gray-300 hover:bg-gray-800/20'
+                                ? 'text-lime-400 border-b-2 border-lime-500 bg-lime-500/10' 
+                                : 'text-gray-500 hover:text-gray-300 hover:bg-gray-800/50'
                               }
                             `}
                           >
-                            <TabIcon className="w-3 h-3" strokeWidth={1.5} />
+                            <TabIcon className="w-4 h-4" strokeWidth={1.5} />
                             {label}
                           </button>
                         ))}
@@ -388,26 +396,76 @@ const EditingWorkspace: React.FC<EditingWorkspaceProps> = ({ allImages, generate
               )}
 
               {/* Center: Preview Canvas */}
-              <Panel minSize={30}>
+              <Panel minSize={25}>
                 <div 
                   id="editor-preview-mount" 
                   className="h-full flex flex-col bg-gray-950"
                 >
-                  {/* Preview placeholder */}
-                  <div className="flex-1 flex items-center justify-center animate-in fade-in duration-300">
-                    <div className="text-center">
-                      <div className="w-24 h-24 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-purple-500/20 to-dash-500/20 flex items-center justify-center border border-gray-700/30">
-                        <Video className="w-10 h-10 text-gray-500" strokeWidth={1.5} />
-                      </div>
-                      <h3 className="text-lg font-semibold text-gray-400 mb-2">Preview Canvas</h3>
-                      <p className="text-sm text-gray-600 max-w-xs">
-                        Video preview will appear here. OpenCut integration coming soon.
-                      </p>
-                      <div className="mt-4 flex items-center justify-center gap-2 text-[11px] text-gray-600">
-                        <kbd className="px-2 py-1 bg-gray-800 rounded">Space</kbd>
-                        <span>to play/pause</span>
-                      </div>
+                  {/* Preview header with aspect ratio - BIGGER */}
+                  <div className="flex items-center justify-between px-6 py-3 border-b-2 border-lime-500/30 bg-gray-900/80">
+                    <span className="text-sm font-bold text-lime-400 uppercase tracking-wider">Preview</span>
+                    <div className="flex items-center gap-4">
+                      <span className="text-sm font-mono text-lime-400 bg-lime-500/10 px-3 py-1 rounded-lg border border-lime-500/30">16:9</span>
+                      <span className="text-sm text-gray-500">|</span>
+                      <span className="text-sm font-mono text-gray-400">1920×1080</span>
                     </div>
+                  </div>
+                  
+                  {/* Preview canvas - BIGGER aspect ratio frame */}
+                  <div className="flex-1 flex items-center justify-center p-6">
+                    {/* Aspect ratio frame with lime border */}
+                    <div 
+                      className="relative bg-gray-900 border-2 border-lime-500/50 rounded-xl flex items-center justify-center shadow-2xl shadow-lime-500/10"
+                      style={{
+                        aspectRatio: '16/9',
+                        maxWidth: '100%',
+                        maxHeight: '100%',
+                        minHeight: '300px',
+                      }}
+                    >
+                      {/* Grid lines */}
+                      <div className="absolute inset-4 border border-dashed border-gray-700/50 rounded-lg">
+                        <div className="absolute top-1/2 left-0 right-0 h-px bg-gray-700/30"></div>
+                        <div className="absolute left-1/2 top-0 bottom-0 w-px bg-gray-700/30"></div>
+                      </div>
+                      
+                      <div className="text-center z-10">
+                        <div className="w-20 h-20 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-lime-500/20 to-green-500/10 flex items-center justify-center border border-lime-500/30">
+                          <Video className="w-10 h-10 text-lime-400" strokeWidth={1.5} />
+                        </div>
+                        <h3 className="text-lg font-bold text-gray-300 mb-2">Preview Canvas</h3>
+                        <p className="text-sm text-gray-500 max-w-[250px]">
+                          Drag clips from assets panel to preview
+                        </p>
+                        {/* Aspect ratio buttons - MORE VISIBLE */}
+                        <div className="flex items-center justify-center gap-2 mt-6">
+                          <button className="px-4 py-2 bg-lime-500/20 hover:bg-lime-500/30 text-lime-400 rounded-lg text-xs font-medium border border-lime-500/30 transition-all">16:9</button>
+                          <button className="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-gray-400 rounded-lg text-xs font-medium border border-gray-700 transition-all">9:16</button>
+                          <button className="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-gray-400 rounded-lg text-xs font-medium border border-gray-700 transition-all">1:1</button>
+                          <button className="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-gray-400 rounded-lg text-xs font-medium border border-gray-700 transition-all">4:5</button>
+                        </div>
+                      </div>
+                      
+                      {/* Corner markers - MORE VISIBLE */}
+                      <span className="absolute top-3 left-3 text-xs font-mono text-lime-500/70 bg-lime-500/10 px-2 py-1 rounded">TL</span>
+                      <span className="absolute top-3 right-3 text-xs font-mono text-lime-500/70 bg-lime-500/10 px-2 py-1 rounded">TR</span>
+                      <span className="absolute bottom-3 left-3 text-xs font-mono text-lime-500/70 bg-lime-500/10 px-2 py-1 rounded">BL</span>
+                      <span className="absolute bottom-3 right-3 text-xs font-mono text-lime-500/70 bg-lime-500/10 px-2 py-1 rounded">BR</span>
+                    </div>
+                  </div>
+                  
+                  {/* Playback controls - BIGGER */}
+                  <div className="flex items-center justify-center gap-6 py-4 border-t-2 border-lime-500/20 bg-gray-900/50">
+                    <button className="p-3 text-gray-500 hover:text-lime-400 transition-colors">
+                      <SkipBack className="w-5 h-5" strokeWidth={1.5} />
+                    </button>
+                    <button className="p-4 rounded-full bg-lime-500 text-gray-900 hover:bg-lime-400 transition-colors shadow-lg shadow-lime-500/20">
+                      <Play className="w-6 h-6" strokeWidth={1.5} />
+                    </button>
+                    <button className="p-3 text-gray-500 hover:text-lime-400 transition-colors">
+                      <SkipForward className="w-5 h-5" strokeWidth={1.5} />
+                    </button>
+                    <span className="text-sm font-mono text-gray-400 ml-4 bg-gray-800 px-4 py-2 rounded-lg">00:00:00 / 00:00:30</span>
                   </div>
                 </div>
               </Panel>
@@ -415,27 +473,29 @@ const EditingWorkspace: React.FC<EditingWorkspaceProps> = ({ allImages, generate
               {/* Right Panel: Properties */}
               {!rightCollapsed && (
                 <>
-                  <Separator className="w-1 bg-gray-800 hover:bg-dash-500/50 transition-colors cursor-col-resize opacity-0 hover:opacity-100" />
+                  <Separator className="w-2 bg-lime-500/30 hover:bg-lime-500/60 transition-colors cursor-col-resize" />
                   <Panel
-                    defaultSize={18}
-                    minSize={15}
-                    maxSize={25}
+                    defaultSize={35}
+                    minSize={25}
+                    maxSize={45}
                     collapsible
-                    collapsedSize={5}
-                    className="transition-all duration-200"
+                    collapsedSize={6}
+                    className="transition-all duration-300"
                   >
                     <div 
                       id="editor-properties-mount"
-                      className="h-full flex flex-col bg-gray-900/30 border-l border-gray-800"
+                      className="h-full flex flex-col bg-gray-900 border-l-2 border-lime-500/50"
                     >
-                      <div className="px-3 py-2.5 border-b border-gray-800 bg-gray-900/50">
-                        <span className="text-xs text-gray-400 uppercase tracking-wider font-semibold">Properties</span>
+                      <div className="px-5 py-4 border-b border-gray-800 bg-gray-900/80">
+                        <span className="text-base font-bold text-lime-400 uppercase tracking-wider">Properties</span>
                       </div>
-                      <div className="flex-1 flex items-center justify-center p-4">
+                      <div className="flex-1 flex items-center justify-center p-6">
                         <div className="text-center">
-                          <HelpCircle className="w-8 h-8 text-gray-700 mx-auto mb-2" strokeWidth={1.5} />
-                          <p className="text-xs text-gray-600">No selection</p>
-                          <p className="text-[10px] text-gray-700 mt-1">Select a clip to edit properties</p>
+                          <div className="w-16 h-16 mx-auto mb-4 rounded-xl bg-lime-500/10 flex items-center justify-center border border-lime-500/30">
+                            <HelpCircle className="w-8 h-8 text-lime-500" strokeWidth={1.5} />
+                          </div>
+                          <p className="text-base text-gray-400 mb-2">No selection</p>
+                          <p className="text-sm text-gray-600">Select a clip to edit properties</p>
                         </div>
                       </div>
                     </div>
@@ -450,52 +510,101 @@ const EditingWorkspace: React.FC<EditingWorkspaceProps> = ({ allImages, generate
             <GripVertical className="w-4 h-4 text-gray-600 rotate-90" strokeWidth={1.5} />
           </Separator>
 
-          {/* Bottom: Timeline */}
-          <Panel defaultSize={35} minSize={20} maxSize={50}>
+          {/* Bottom: Timeline - BIGGER */}
+          <Panel defaultSize={40} minSize={25} maxSize={60}>
             <div 
               id="editor-timeline-mount" 
-              className="h-full flex flex-col bg-gray-900/50"
+              className="h-full flex flex-col bg-gray-900 border-t-2 border-lime-500/30"
             >
-              {/* Timeline header */}
-              <div className="flex items-center justify-between px-4 py-2 border-b border-gray-800/50 shrink-0">
-                <span className="text-xs text-gray-500 uppercase tracking-wider">Timeline</span>
-                <div className="flex items-center gap-2">
+              {/* Timeline header - BIGGER */}
+              <div className="flex items-center justify-between px-6 py-3 border-b border-gray-800 bg-gray-900/80">
+                <span className="text-sm font-bold text-lime-400 uppercase tracking-wider">Timeline</span>
+                <div className="flex items-center gap-4">
                   <button 
-                    className="p-1 rounded bg-gray-800/50 text-gray-500 hover:text-gray-300 hover:bg-gray-700 transition-all duration-150" 
-                    disabled
+                    className="p-2 rounded-lg bg-gray-800 text-gray-500 hover:text-lime-400 hover:bg-gray-700 transition-all" 
                     title="Previous"
                   >
-                    <SkipBack className="w-3.5 h-3.5" strokeWidth={1.5} />
+                    <SkipBack className="w-4 h-4" strokeWidth={1.5} />
                   </button>
                   <button 
-                    className="px-3 py-1 rounded bg-dash-600/30 text-dash-400 hover:bg-dash-600/50 transition-all duration-150 flex items-center gap-1" 
-                    disabled
+                    className="p-3 rounded-full bg-lime-500 text-gray-900 hover:bg-lime-400 transition-all shadow-lg shadow-lime-500/20"
                     title="Play (Space)"
                   >
-                    <Play className="w-3.5 h-3.5" strokeWidth={1.5} />
-                    <span className="text-[10px]">Play</span>
+                    <Play className="w-5 h-5" strokeWidth={1.5} />
                   </button>
                   <button 
-                    className="p-1 rounded bg-gray-800/50 text-gray-500 hover:text-gray-300 hover:bg-gray-700 transition-all duration-150" 
-                    disabled
+                    className="p-2 rounded-lg bg-gray-800 text-gray-500 hover:text-lime-400 hover:bg-gray-700 transition-all" 
                     title="Next"
                   >
-                    <SkipForward className="w-3.5 h-3.5" strokeWidth={1.5} />
+                    <SkipForward className="w-4 h-4" strokeWidth={1.5} />
                   </button>
-                  <span className="text-[10px] text-gray-600 font-mono ml-2">00:00:00 / 00:00:00</span>
+                  <span className="text-sm font-mono text-gray-400 ml-4 bg-gray-800 px-4 py-2 rounded-lg">00:00:00 / 00:00:30</span>
                 </div>
               </div>
 
-              {/* Timeline content placeholder */}
-              <div className="flex-1 flex items-center justify-center">
-                <div className="text-center">
-                  <div className="flex items-center gap-2 text-xs text-gray-600 mb-2">
-                    <GripVertical className="w-4 h-4" strokeWidth={1.5} />
-                    <span>Drag assets here to build your timeline</span>
+              {/* Timeline content - BIGGER track placeholders */}
+              <div className="flex-1 p-4 overflow-hidden">
+                {/* Timeline ruler - MORE VISIBLE */}
+                <div className="h-8 bg-gray-800/80 border-b border-gray-700 flex items-end mb-3 relative">
+                  <div className="absolute left-0 top-0 h-full w-16 bg-lime-500/10 border-r border-lime-500/30"></div>
+                  {['0:00', '0:05', '0:10', '0:15', '0:20', '0:25', '0:30'].map((time, i) => (
+                    <div 
+                      key={time}
+                      className="flex-1 text-[11px] text-gray-500 text-center border-l border-gray-700/50 py-1"
+                    >
+                      {time}
+                    </div>
+                  ))}
+                </div>
+                
+                {/* Track placeholders - BIGGER */}
+                <div className="space-y-3">
+                  {/* Video Track */}
+                  <div className="flex items-center gap-3">
+                    <div className="w-16 flex-shrink-0">
+                      <span className="text-xs font-bold text-lime-400 uppercase">Video</span>
+                    </div>
+                    <div className="flex-1 h-12 bg-gray-800/50 border-2 border-dashed border-gray-700 rounded-lg flex items-center justify-center hover:border-lime-500/50 hover:bg-gray-800 transition-all cursor-pointer">
+                      <div className="flex items-center gap-2 text-gray-500">
+                        <GripVertical className="w-4 h-4" strokeWidth={1.5} />
+                        <span className="text-sm">Drop video clips here</span>
+                      </div>
+                    </div>
                   </div>
-                  <p className="text-[10px] text-gray-700">
-                    Tracks: Video, Audio, Captions
-                  </p>
+                  
+                  {/* Audio Track */}
+                  <div className="flex items-center gap-3">
+                    <div className="w-16 flex-shrink-0">
+                      <span className="text-xs font-bold text-blue-400 uppercase">Audio</span>
+                    </div>
+                    <div className="flex-1 h-10 bg-gray-800/50 border-2 border-dashed border-gray-700 rounded-lg flex items-center justify-center hover:border-blue-500/50 hover:bg-gray-800 transition-all cursor-pointer">
+                      <div className="flex items-center gap-2 text-gray-500">
+                        <GripVertical className="w-4 h-4" strokeWidth={1.5} />
+                        <span className="text-sm">Drop audio here</span>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {/* Captions Track */}
+                  <div className="flex items-center gap-3">
+                    <div className="w-16 flex-shrink-0">
+                      <span className="text-xs font-bold text-purple-400 uppercase">Captions</span>
+                    </div>
+                    <div className="flex-1 h-8 bg-gray-800/50 border-2 border-dashed border-gray-700 rounded-lg flex items-center justify-center hover:border-purple-500/50 hover:bg-gray-800 transition-all cursor-pointer">
+                      <div className="flex items-center gap-2 text-gray-500">
+                        <GripVertical className="w-4 h-4" strokeWidth={1.5} />
+                        <span className="text-sm">Add captions</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                
+                {/* Drop hint - MORE VISIBLE */}
+                <div className="mt-6 text-center">
+                  <div className="inline-flex items-center gap-3 px-5 py-3 bg-lime-500/10 rounded-xl border border-lime-500/30">
+                    <GripVertical className="w-5 h-5 text-lime-500" strokeWidth={1.5} />
+                    <span className="text-sm text-lime-400 font-medium">Drag assets from left panel to timeline</span>
+                  </div>
                 </div>
               </div>
             </div>

@@ -49,18 +49,15 @@ interface LoraRow {
 const rowToModel = (row: LoraRow): LoraModel => ({
   id: row.id,
   name: row.name,
-  trigger_word: row.trigger_word,
   triggerWord: row.trigger_word,
   status: row.status as LoraStatus,
-  created_at: row.created_at,
   createdAt: new Date(row.created_at).getTime(),
-  file_size_bytes: row.file_size_bytes ?? undefined,
   fileSize: row.file_size_bytes ?? undefined,
-  error_message: row.error_message ?? undefined,
   errorMessage: row.error_message ?? undefined,
-  training_progress: row.training_progress ?? undefined,
   trainingProgress: row.training_progress ?? undefined,
-  training_images_count: row.training_images_count ?? 0,
+  trainingImagesCount: row.training_images_count ?? 0,
+  trainingJobId: row.runpod_job_id ?? undefined,
+  storageUrl: row.storage_url ?? undefined,
 });
 
 // ---------------------------------------------------------------------------

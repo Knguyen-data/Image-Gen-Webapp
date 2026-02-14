@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { VideoModel } from '../../types';
+import { VideoModel } from '../types';
 
 interface VideoModelSelectorProps {
   selectedModel: VideoModel;

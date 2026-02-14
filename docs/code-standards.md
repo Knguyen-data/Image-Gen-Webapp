@@ -925,3 +925,122 @@ npm run test:coverage # Coverage report
 - **React Docs:** https://react.dev/
 - **Vitest Docs:** https://vitest.dev/
 - **Conventional Commits:** https://www.conventionalcommits.org/
+
+---
+
+## Refactoring Progress
+
+This section tracks ongoing refactoring efforts to improve maintainability.
+
+### Completed Refactors
+
+| Date | File | Original Size | New Size | Components Extracted |
+|------|------|--------------|----------|---------------------|
+| 2026-02-13 | left-panel.tsx | 2254 lines | ~1200 lines | `generation-mode-selector.tsx`, `video-model-selector.tsx`, `kling-settings-panel.tsx`, `veo-settings-panel.tsx`, `prompt-input-section.tsx` |
+| 2026-02-13 | app.tsx | ~2800 lines | - | `generation-manager.ts`, `video-generation-manager.ts`, `app-header.tsx`, `loading-overlay.tsx` |
+| 2026-02-13 | types/index.ts | mixed case | standardized | `LoraModel`, `Kling3ImageListItem`, `Kling3Element` |
+
+### Modular Components Library
+
+New modular components following the pattern `src/components/[feature]-[type].tsx`:
+
+```typescript
+// Generated 2026-02-13
+src/components/
+├── generation-mode-selector.tsx  // Spicy mode toggle + sub-modes
+├── video-model-selector.tsx      // Hierarchical video model selector
+├── kling-settings-panel.tsx       // Kling 2.6/Pro settings
+├── veo-settings-panel.tsx        // Veo 3.1 settings
+├── prompt-input-section.tsx      // Prompt tabs + text area
+├── app-header.tsx                // App header with settings button
+├── loading-overlay.tsx           // Loading states
+└── index.ts                      // Component exports
+```
+
+### Services Library
+
+New services:
+
+```typescript
+src/services/
+├── generation-manager.ts          // Generation logic & API key routing
+├── video-generation-manager.ts    // Video generation orchestration
+└── batch-operations.ts           // Batch operations barrel export
+```
+
+### Pending Refactors
+
+| Component | Est. Lines | Priority | Sections to Extract |
+|-----------|------------|----------|---------------------|
+| left-panel.tsx | ~1200 | Medium | Fixed block section, Gemini settings, Action buttons |
+| app.tsx | ~2800 | Medium | Reduce further, integrate managers |
+| right-panel.tsx | ~1300 | Medium | Image card, Modify modal |
+| video-scene-queue.tsx | ~1000 | Medium | Extract scene card, timeline |
+
+### Naming Convention Standardization
+
+**Completed:** Migrated from mixed snake_case/camelCase to consistent camelCase:
+
+```typescript
+// Before (mixed)
+interface LoraModel {
+  created_at?: string;      // DB column
+  createdAt?: number;        // TypeScript
+  trigger_word?: string;
+  triggerWord?: string;
+}
+
+// After (standardized camelCase)
+interface LoraModel {
+  triggerWord?: string;
+  createdAt?: number;
+  fileSize?: number;
+  errorMessage?: string;
+  trainingProgress?: number;
+  trainingImagesCount?: number;
+  trainingJobId?: string;
+  storageUrl?: string;
+  userId?: string;
+}
+```
+
+**DB Mapping:** Service layer (`lora-model-service.ts`) maps from Supabase snake_case to TypeScript camelCase:
+
+```typescript
+// lora-model-service.ts
+const rowToModel = (row: LoraRow): LoraModel => ({
+  id: row.id,
+  name: row.name,
+  triggerWord: row.trigger_word,           // DB → TS
+  createdAt: new Date(row.created_at).getTime(),  // DB → TS
+  // ... all camelCase
+});
+```
+
+### Component Extraction Pattern
+
+When extracting from monolithic files:
+
+1. **Create new file:** `src/components/[feature]-[type].tsx`
+2. **Define Props interface** matching original component props
+3. **Move related state/handlers** to new component
+4. **Update imports** in parent component
+5. **Add to index.ts** for barrel export
+6. **Test functionality** remains identical
+
+Example:
+```typescript
+// src/components/generation-mode-selector.tsx
+interface GenerationModeSelectorProps {
+  spicyMode: SpicyModeSettings | undefined;
+  setSpicyMode: (settings: SpicyModeSettings) => void;
+  credits: number | null;
+  creditsLoading: boolean;
+  isLowCredits: boolean;
+  isCriticalCredits: boolean;
+}
+
+export const GenerationModeSelector: React.FC<GenerationModeSelectorProps> = (props) => {
+  // Implementation
+};
+```

@@ -532,7 +532,8 @@ class VideoEditorService {
    */
   async play(time?: number): Promise<void> {
     if (!this.composition) throw new Error('No project created');
-    await this.composition.play(time);
+    // Pass time as seconds string if provided; raw number would be interpreted as frames
+    await this.composition.play(time != null ? `${time}s` as any : undefined);
   }
 
   /**
@@ -548,7 +549,8 @@ class VideoEditorService {
    */
   async seek(time: number): Promise<void> {
     if (!this.composition) throw new Error('No project created');
-    await this.composition.seek(time);
+    // Pass as seconds string to avoid frame interpretation
+    await this.composition.seek(`${time}s` as any);
   }
 
   /**
@@ -566,12 +568,12 @@ class VideoEditorService {
   }
 
   /**
-   * Get total duration in seconds
+   * Get total duration in seconds.
+   * Note: composition.duration getter returns seconds (like currentTime),
+   * even though the setter accepts frames as raw numbers.
    */
   get duration(): number {
-    return this.composition?.duration
-      ? this.composition.duration / this.fps
-      : 0;
+    return this.composition?.duration ?? 0;
   }
 
   /**

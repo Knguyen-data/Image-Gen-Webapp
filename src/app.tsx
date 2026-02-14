@@ -11,7 +11,7 @@ import { BatchActionsToolbar } from './components/batch-actions-toolbar';
 const VideoEditorModalCapCutStyle = lazy(() => import('./components/video-editor/video-editor-modal-capcut-style'));
 const SettingsPage = lazy(() => import('./components/settings-page'));
 const ModifyImageModal = lazy(() => import('./components/modify-image-modal'));
-const CompareModal = lazy(() => import('./components/compare-modal'));
+const CompareModal = lazy(() => import('./components/compare-modal').then(m => ({ default: m.default })));
 const SaveCollectionModal = lazy(() => import('./components/save-collection-modal').then(m => ({ default: m.SaveCollectionModal })));
 const SavePayloadDialog = lazy(() => import('./components/save-payload-dialog').then(m => ({ default: m.SavePayloadDialog })));
 const SavedPayloadsPage = lazy(() => import('./components/saved-payloads-page').then(m => ({ default: m.SavedPayloadsPage })));
@@ -1261,13 +1261,13 @@ INSTRUCTIONS:
       if (startImage) {
         onProgress?.('Uploading start frame...');
         const startUrl = await uploadBase64ToR2(startImage.base64, startImage.mimeType);
-        imageList = [{ image_url: startUrl, type: 'first_frame' }];
+        imageList = [{ imageUrl: startUrl, type: 'first_frame' }];
       }
       if (endImage) {
         onProgress?.('Uploading end frame...');
         const endUrl = await uploadBase64ToR2(endImage.base64, endImage.mimeType);
         if (!imageList) imageList = [];
-        imageList.push({ image_url: endUrl, type: 'end_frame' });
+        imageList.push({ imageUrl: endUrl, type: 'end_frame' });
       }
 
       // Create + poll with auto-retry on FAILED
@@ -1658,7 +1658,7 @@ INSTRUCTIONS:
     if (selectedVideos.length === 0) return;
 
     try {
-      addLog({ type: 'info', message: 'Preparing ZIP file...' });
+      addLog({ level: 'info', message: 'Preparing ZIP file...' });
 
       const zip = new JSZip();
 
@@ -1692,7 +1692,7 @@ INSTRUCTIONS:
       });
       zip.file('metadata.json', JSON.stringify(metadata, null, 2));
 
-      addLog({ type: 'info', message: 'Generating ZIP...' });
+      addLog({ level: 'info', message: 'Generating ZIP...' });
       const zipBlob = await zip.generateAsync({ type: 'blob' });
 
       const url = URL.createObjectURL(zipBlob);
@@ -1704,7 +1704,7 @@ INSTRUCTIONS:
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
 
-      addLog({ type: 'success', message: `Downloaded ${selectedVideos.length} videos as ZIP` });
+      addLog({ level: 'success', message: `Downloaded ${selectedVideos.length} videos as ZIP` });
     } catch (error) {
       logger.error('ZipDownload', 'Failed to create ZIP', { error });
       addLog({ type: 'error', message: 'Failed to create ZIP file' });
@@ -1791,7 +1791,7 @@ INSTRUCTIONS:
 
     setGeneratedVideos(prev => prev.filter(v => !selectedVideos.includes(v.id)));
 
-    addLog({ type: 'success', message: `Deleted ${selectedVideos.length} videos` });
+    addLog({ level: 'success', message: `Deleted ${selectedVideos.length} videos` });
     clearSelection();
   }
 
@@ -1841,12 +1841,12 @@ INSTRUCTIONS:
       lastRetryAt: Date.now(),
     });
 
-    addLog({ type: 'info', message: 'Retrying generation...' });
+    addLog({ level: 'info', message: 'Retrying generation...' });
 
     try {
       // Retry based on provider
       // Note: This is simplified - in production you'd call the actual generation functions
-      addLog({ type: 'success', message: 'Generation succeeded! Payload removed.' });
+      addLog({ level: 'success', message: 'Generation succeeded! Payload removed.' });
 
       await updateSavedPayload(payload.id, {
         status: 'succeeded',
@@ -1860,13 +1860,13 @@ INSTRUCTIONS:
           failureReason: `Failed after ${payload.retryCount + 1} retries: ${error.message}`,
         });
 
-        addLog({ type: 'error', message: 'Generation failed permanently after 3 retries.' });
+        addLog({ level: 'error', message: 'Generation failed permanently after 3 retries.' });
       } else {
         await updateSavedPayload(payload.id, {
           status: 'pending',
         });
 
-        addLog({ type: 'error', message: 'Retry failed. Try again later.' });
+        addLog({ level: 'error', message: 'Retry failed. Try again later.' });
       }
 
       await loadSavedPayloads();

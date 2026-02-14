@@ -9,6 +9,7 @@ export interface VeoTaskResult {
   error?: string;
   progress?: string;
   videoUrls?: string[];
+  resolution?: string; // 720p, 1080p, 4K
 }
 
 export interface VeoSettings {

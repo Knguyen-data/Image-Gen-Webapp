@@ -1,17 +1,17 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { Grid, CellComponentProps } from 'react-window';
-import { 
-  listStockCategories, 
-  listStockVideos, 
-  searchStockVideos, 
+import {
+  listStockCategories,
+  listStockVideos,
+  searchStockVideos,
   getMoodCounts,
   getSceneTypeCounts,
-  StockCategory, 
+  StockCategory,
   StockVideo
 } from '../../services/supabase-stock-service';
-import { 
-  getCachedThumbnail, 
-  generateThumbnail 
+import {
+  getCachedThumbnail,
+  generateThumbnail
 } from '../../services/thumbnail-cache-service';
 import { logger } from '../../services/logger';
 
@@ -35,12 +35,12 @@ function ThumbnailSkeleton() {
  * Lazy-loading thumbnail with IntersectionObserver and IndexedDB caching.
  * Only generates thumbnails when visible, caches them for reuse.
  */
-function LazyVideoThumbnail({ 
-  src, 
+function LazyVideoThumbnail({
+  src,
   alt,
   onDurationExtracted
-}: { 
-  src: string; 
+}: {
+  src: string;
   alt: string;
   onDurationExtracted?: (duration: number) => void;
 }) {
@@ -141,14 +141,14 @@ function HoverVideoPreview({ src, isHovered }: { src: string; isHovered: boolean
 
     if (isHovered) {
       video.currentTime = 0;
-      video.play().catch(() => {});
-      
+      video.play().catch(() => { });
+
       // Stop after 3 seconds
       const timeout = setTimeout(() => {
         video.pause();
         video.currentTime = 0;
       }, 3000);
-      
+
       return () => clearTimeout(timeout);
     } else {
       video.pause();
@@ -184,22 +184,22 @@ interface VideoGridCellProps {
 }
 
 /** Virtual grid cell component for react-window v2 */
-function VideoGridCell({ 
-  columnIndex, 
-  rowIndex, 
-  style, 
-  ...cellProps 
+function VideoGridCell({
+  columnIndex,
+  rowIndex,
+  style,
+  ...cellProps
 }: CellComponentProps<VideoGridCellProps>) {
-  const { 
-    videos, 
-    videoDurations, 
+  const {
+    videos,
+    videoDurations,
     hoveredVideoId,
-    columnCount, 
-    isSearchMode, 
-    onPreview, 
-    onAdd, 
-    onHover, 
-    onDurationExtracted 
+    columnCount,
+    isSearchMode,
+    onPreview,
+    onAdd,
+    onHover,
+    onDurationExtracted
   } = cellProps;
 
   const videoIndex = rowIndex * columnCount + columnIndex;
@@ -227,8 +227,8 @@ function VideoGridCell({
       >
         {/* Lazy Thumbnail with caching */}
         <div className="absolute inset-0">
-          <LazyVideoThumbnail 
-            src={video.url} 
+          <LazyVideoThumbnail
+            src={video.url}
             alt={video.name}
             onDurationExtracted={(d) => onDurationExtracted(video.id, d)}
           />
@@ -246,7 +246,7 @@ function VideoGridCell({
 
         {/* Mood badge */}
         {video.mood && (
-          <span 
+          <span
             className="absolute top-1 left-1 px-1.5 py-0.5 rounded bg-purple-500/30 text-[9px] text-purple-300 font-medium backdrop-blur-sm"
             style={isSearchMode && video.category ? { left: 'auto', right: '4px' } : {}}
           >
@@ -338,10 +338,10 @@ const StockGallery: React.FC<StockGalleryProps> = ({ onSelectVideo, onClose, mod
   const [hasMore, setHasMore] = useState(true);
   const [isSearchMode, setIsSearchMode] = useState(false);
   const [hoveredVideoId, setHoveredVideoId] = useState<string | null>(null);
-  
+
   // Video durations extracted from thumbnails
   const [videoDurations, setVideoDurations] = useState<Record<string, number>>({});
-  
+
   // Filter states
   const [selectedMood, setSelectedMood] = useState<string | null>(null);
   const [selectedSceneType, setSelectedSceneType] = useState<string | null>(null);
@@ -349,7 +349,7 @@ const StockGallery: React.FC<StockGalleryProps> = ({ onSelectVideo, onClose, mod
   const [sceneTypeCounts, setSceneTypeCounts] = useState<{ sceneType: string; count: number }[]>([]);
   const [showSidebar, setShowSidebar] = useState(true);
   const [gridContainerSize, setGridContainerSize] = useState({ width: 0, height: 0 });
-  
+
   const scrollRef = useRef<HTMLDivElement>(null);
   const gridContainerRef = useRef<HTMLDivElement>(null);
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -716,9 +716,8 @@ const StockGallery: React.FC<StockGalleryProps> = ({ onSelectVideo, onClose, mod
                     <button
                       key={`${opt.sortBy}-${opt.sortDir}`}
                       onClick={() => { setSortOption(opt); setShowSortMenu(false); }}
-                      className={`w-full text-left px-3 py-1.5 text-xs transition-colors ${
-                        sortOption === opt ? 'text-dash-400 bg-dash-500/10' : 'text-gray-400 hover:text-white hover:bg-gray-700/50'
-                      }`}
+                      className={`w-full text-left px-3 py-1.5 text-xs transition-colors ${sortOption === opt ? 'text-dash-400 bg-dash-500/10' : 'text-gray-400 hover:text-white hover:bg-gray-700/50'
+                        }`}
                     >
                       {opt.label}
                     </button>
@@ -758,9 +757,8 @@ const StockGallery: React.FC<StockGalleryProps> = ({ onSelectVideo, onClose, mod
               </div>
               <button
                 onClick={handleBack}
-                className={`w-full text-left px-2 py-1.5 rounded text-xs transition-colors mb-1 ${
-                  !selectedCategory ? 'text-dash-400 bg-dash-500/10' : 'text-gray-400 hover:text-white hover:bg-gray-800/50'
-                }`}
+                className={`w-full text-left px-2 py-1.5 rounded text-xs transition-colors mb-1 ${!selectedCategory ? 'text-dash-400 bg-dash-500/10' : 'text-gray-400 hover:text-white hover:bg-gray-800/50'
+                  }`}
               >
                 📂 All Categories
               </button>
@@ -768,9 +766,8 @@ const StockGallery: React.FC<StockGalleryProps> = ({ onSelectVideo, onClose, mod
                 <button
                   key={cat.id}
                   onClick={() => handleCategorySelect(cat)}
-                  className={`w-full text-left px-2 py-1.5 rounded text-xs transition-colors flex items-center justify-between ${
-                    selectedCategory?.id === cat.id ? 'text-dash-400 bg-dash-500/10' : 'text-gray-400 hover:text-white hover:bg-gray-800/50'
-                  }`}
+                  className={`w-full text-left px-2 py-1.5 rounded text-xs transition-colors flex items-center justify-between ${selectedCategory?.id === cat.id ? 'text-dash-400 bg-dash-500/10' : 'text-gray-400 hover:text-white hover:bg-gray-800/50'
+                    }`}
                 >
                   <span className="truncate">{cat.icon} {cat.name}</span>
                   {cat.videoCount != null && cat.videoCount > 0 && (
@@ -781,7 +778,7 @@ const StockGallery: React.FC<StockGalleryProps> = ({ onSelectVideo, onClose, mod
             </div>
           </div>
         )}
-        
+
         {/* Collapsed sidebar toggle */}
         {(selectedCategory || isSearchMode) && !showSidebar && (
           <button
@@ -815,18 +812,17 @@ const StockGallery: React.FC<StockGalleryProps> = ({ onSelectVideo, onClose, mod
                 <button
                   key={mood}
                   onClick={() => handleMoodFilter(selectedMood === mood ? null : mood)}
-                  className={`px-2 py-1 rounded-full text-[10px] transition-colors flex items-center gap-1 ${
-                    selectedMood === mood
+                  className={`px-2 py-1 rounded-full text-[10px] transition-colors flex items-center gap-1 ${selectedMood === mood
                       ? 'bg-purple-500/30 text-purple-300 border border-purple-500/50'
                       : 'bg-gray-800/50 text-gray-400 border border-gray-700/50 hover:border-gray-600'
-                  }`}
+                    }`}
                 >
                   <span>{getMoodIcon(mood)}</span>
                   <span>{mood}</span>
                   <span className="text-gray-600">({count})</span>
                 </button>
               ))}
-              
+
               {/* Scene type filters */}
               {sceneTypeCounts.length > 0 && (
                 <>
@@ -835,18 +831,17 @@ const StockGallery: React.FC<StockGalleryProps> = ({ onSelectVideo, onClose, mod
                     <button
                       key={sceneType}
                       onClick={() => handleSceneTypeFilter(selectedSceneType === sceneType ? null : sceneType)}
-                      className={`px-2 py-1 rounded-full text-[10px] transition-colors ${
-                        selectedSceneType === sceneType
+                      className={`px-2 py-1 rounded-full text-[10px] transition-colors ${selectedSceneType === sceneType
                           ? 'bg-cyan-500/30 text-cyan-300 border border-cyan-500/50'
                           : 'bg-gray-800/50 text-gray-400 border border-gray-700/50 hover:border-gray-600'
-                      }`}
+                        }`}
                     >
                       {sceneType} ({count})
                     </button>
                   ))}
                 </>
               )}
-              
+
               {/* Clear filters */}
               {(selectedMood || selectedSceneType) && (
                 <button
@@ -889,60 +884,70 @@ const StockGallery: React.FC<StockGalleryProps> = ({ onSelectVideo, onClose, mod
           ) : videos.length === 0 && !loading ? (
             <div className="flex flex-col items-center justify-center h-40 text-gray-500">
               <span className="text-2xl mb-2">🎬</span>
-            <p className="text-sm">No videos found</p>
-            {isSearchMode && (
-              <button
-                onClick={handleClearSearch}
-                className="mt-2 text-xs text-dash-400 hover:text-dash-300"
-              >
-                Clear search
-              </button>
-            )}
-          </div>
-        ) : (
-          /* Virtual Video Grid */
-          <div ref={gridContainerRef} className="flex-1 relative">
-            {gridContainerSize.width > 0 && gridContainerSize.height > 0 && (
-              <Grid
-                cellComponent={VideoGridCell}
-                cellProps={{
-                  videos,
-                  videoDurations,
-                  hoveredVideoId,
-                  columnCount,
-                  isSearchMode,
-                  onPreview: handlePreview,
-                  onAdd: handleAddToTimeline,
-                  onHover: handleVideoHover,
-                  onDurationExtracted: handleDurationExtracted,
-                }}
-                columnCount={columnCount}
-                columnWidth={(gridContainerSize.width - CARD_GAP * (columnCount - 1)) / columnCount}
-                height={gridContainerSize.height}
-                rowCount={rowCount}
-                rowHeight={CARD_HEIGHT + CARD_GAP}
-                width={gridContainerSize.width}
-                // @ts-expect-error react-window v2 onScroll type mismatch
-                onScroll={({ scrollTop }: { scrollTop: number }) => {
-                  // Infinite scroll - load more when near bottom
-                  const threshold = 400;
-                  const totalHeight = rowCount * (CARD_HEIGHT + CARD_GAP);
-                  if (!loading && hasMore && totalHeight - scrollTop - gridContainerSize.height < threshold) {
-                    handleLoadMore();
-                  }
-                }}
-              />
-            )}
+              <p className="text-sm">No videos found</p>
+              {isSearchMode && (
+                <button
+                  onClick={handleClearSearch}
+                  className="mt-2 text-xs text-dash-400 hover:text-dash-300"
+                >
+                  Clear search
+                </button>
+              )}
+            </div>
+          ) : (
+            /* Video Grid - use explicit height instead of virtual grid when container size is unknown */
+            <div
+              ref={gridContainerRef}
+              className="relative"
+              style={{ minHeight: Math.max(400, rowCount * (CARD_HEIGHT + CARD_GAP)) }}
+            >
+              {(() => {
+                const effectiveWidth = gridContainerSize.width > 0 ? gridContainerSize.width : 800;
+                const effectiveHeight = gridContainerSize.height > 0
+                  ? gridContainerSize.height
+                  : Math.max(400, rowCount * (CARD_HEIGHT + CARD_GAP));
+                return (
+                  <Grid
+                    cellComponent={VideoGridCell}
+                    cellProps={{
+                      videos,
+                      videoDurations,
+                      hoveredVideoId,
+                      columnCount,
+                      isSearchMode,
+                      onPreview: handlePreview,
+                      onAdd: handleAddToTimeline,
+                      onHover: handleVideoHover,
+                      onDurationExtracted: handleDurationExtracted,
+                    }}
+                    columnCount={columnCount}
+                    columnWidth={(effectiveWidth - CARD_GAP * (columnCount - 1)) / columnCount}
+                    height={effectiveHeight}
+                    rowCount={rowCount}
+                    rowHeight={CARD_HEIGHT + CARD_GAP}
+                    width={effectiveWidth}
+                    // @ts-expect-error react-window v2 onScroll type mismatch
+                    onScroll={({ scrollTop }: { scrollTop: number }) => {
+                      // Infinite scroll - load more when near bottom
+                      const threshold = 400;
+                      const totalHeight = rowCount * (CARD_HEIGHT + CARD_GAP);
+                      if (!loading && hasMore && totalHeight - scrollTop - effectiveHeight < threshold) {
+                        handleLoadMore();
+                      }
+                    }}
+                  />
+                );
+              })()}
 
-            {/* Loading indicator overlay */}
-            {loading && videos.length > 0 && (
-              <div className="absolute bottom-4 left-1/2 -translate-x-1/2 px-4 py-2 rounded-lg bg-gray-900/90 border border-gray-700/50 flex items-center gap-2">
-                <div className="w-4 h-4 border-2 border-dash-500/30 border-t-dash-500 rounded-full animate-spin" />
-                <span className="text-xs text-gray-400">Loading more...</span>
-              </div>
-            )}
-          </div>
-        )}
+              {/* Loading indicator overlay */}
+              {loading && videos.length > 0 && (
+                <div className="absolute bottom-4 left-1/2 -translate-x-1/2 px-4 py-2 rounded-lg bg-gray-900/90 border border-gray-700/50 flex items-center gap-2">
+                  <div className="w-4 h-4 border-2 border-dash-500/30 border-t-dash-500 rounded-full animate-spin" />
+                  <span className="text-xs text-gray-400">Loading more...</span>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
 

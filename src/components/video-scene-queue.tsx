@@ -859,7 +859,7 @@ const VideoSceneQueue: React.FC<VideoSceneQueueProps> = ({
               </>
             ) : (
               <>
-                {(videoSettings.model === 'kling-2.6' || videoSettings.model === 'kling-2.6-pro') && videoSettings.globalReferenceVideo
+                {((videoSettings.model as string) === 'kling-2.6' || videoSettings.model === 'kling-2.6-pro') && videoSettings.globalReferenceVideo
                   ? '🏃 Auto Motion Control'
                   : isKling3 
                   ? (isKling3Omni ? '🎬 Auto Omni' : '🎬 Auto MultiShot')

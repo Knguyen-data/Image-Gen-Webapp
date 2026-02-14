@@ -90,7 +90,7 @@ const LoraSelector: React.FC<LoraSelectorProps> = ({
               <span className="flex items-center gap-2">
                 <span className="truncate">{selectedLora.name}</span>
                 <span className="text-[10px] text-violet-400/70 font-mono shrink-0">
-                  {selectedLora.trigger_word}
+                  {selectedLora.triggerWord}
                 </span>
               </span>
             ) : (
@@ -154,7 +154,7 @@ const LoraSelector: React.FC<LoraSelectorProps> = ({
               >
                 <span className="truncate">{lora.name}</span>
                 <span className="text-[10px] text-zinc-500 font-mono shrink-0">
-                  {lora.trigger_word}
+                  {lora.triggerWord}
                 </span>
               </button>
             ))}

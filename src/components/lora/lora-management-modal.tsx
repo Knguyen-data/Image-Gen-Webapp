@@ -656,22 +656,22 @@ const LoraManagementModal: React.FC<LoraManagementModalProps> = ({ isOpen, onClo
                             <StatusBadge status={lora.status} />
                           </div>
                           <div className="flex items-center gap-3 text-[11px] text-zinc-500">
-                            <span className="font-mono text-violet-400/70">{lora.trigger_word}</span>
+                            <span className="font-mono text-violet-400/70">{lora.triggerWord}</span>
                             <span>•</span>
-                            <span>{lora.training_images_count} images</span>
-                            {lora.file_size_bytes && (
+                            <span>{lora.trainingImagesCount} images</span>
+                            {lora.fileSize && (
                               <>
                                 <span>•</span>
-                                <span>{formatBytes(lora.file_size_bytes)}</span>
+                                <span>{formatBytes(lora.fileSize)}</span>
                               </>
                             )}
                             <span>•</span>
-                            <span>{formatDate(lora.created_at)}</span>
+                            <span>{formatDate(lora.createdAt)}</span>
                           </div>
-                          {lora.status === 'failed' && lora.error_message && (
+                          {lora.status === 'failed' && lora.errorMessage && (
                             <p className="text-[11px] text-red-400/80 mt-1.5 flex items-start gap-1">
                               <AlertCircle className="w-3 h-3 shrink-0 mt-0.5" />
-                              {lora.error_message}
+                              {lora.errorMessage}
                             </p>
                           )}
                           {lora.status === 'training' && (

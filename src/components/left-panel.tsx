@@ -3,6 +3,7 @@ import { AppSettings, PromptItem, ReferenceImage, ImageSize, SeedreamQuality, Ap
 import { ASPECT_RATIO_LABELS, IMAGE_SIZE_LABELS, SEEDREAM_QUALITY_LABELS, DEFAULT_SETTINGS, MAX_REFERENCE_IMAGES, MAX_PROMPTS, DEFAULT_COMFYUI_SETTINGS, COMFYUI_SAMPLER_LABELS, COMFYUI_SCHEDULER_LABELS } from '../constants';
 import BulkInputModal from './bulk-input-modal';
 import VideoSceneQueue from './video-scene-queue';
+import { DirectorPanel } from './director-panel';
 import VideoTrimmerModal from './video-trimmer-modal';
 import VideoReferenceModal from './video-reference-modal';
 import PromptGenerator from './prompt-generator';
@@ -97,14 +98,16 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
   const fixedBlockFileRef = useRef<HTMLInputElement>(null);
 
   // Video model family state for hierarchical selector
-  const [selectedFamily, setSelectedFamily] = useState<'kling' | 'veo'>(() => {
+  const [selectedFamily, setSelectedFamily] = useState<'kling' | 'veo' | 'director'>(() => {
     if (videoModelProp === 'veo-3.1') return 'veo';
+    if (videoModelProp === 'director') return 'director';
     return 'kling';
   });
 
   // Keep family in sync when model changes externally
   useEffect(() => {
     if (videoModelProp === 'veo-3.1') setSelectedFamily('veo');
+    else if (videoModelProp === 'director') setSelectedFamily('director');
     else setSelectedFamily('kling');
   }, [videoModelProp]);
 
@@ -523,6 +526,7 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
       if (selectedVideoModel === 'kling-3') return 'Kling 3 — MultiShot';
       if (selectedVideoModel === 'kling-3-omni') return 'Kling 3 Omni — Multimodal';
       if (selectedVideoModel === 'veo-3.1') return 'Veo 3.1 — Google AI Video';
+      if (selectedVideoModel === 'director') return '🎬 Director — AI Multi-Shot Video';
       return 'Kling 2.6 Motion Control';
     }
     if (safeSettings.spicyMode?.enabled) {
@@ -572,9 +576,6 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
       <LoraManagementModal
         isOpen={loraModalOpen}
         onClose={() => setLoraModalOpen(false)}
-        onLoraCreated={(lora) => {
-          setLoras(prev => [...prev, lora]);
-        }}
       />
 
       <div className="flex flex-col h-full bg-gray-900/80 backdrop-blur-xl border-r border-gray-800/50 p-0 overflow-y-auto w-full md:w-[450px] shrink-0 custom-scrollbar relative">
@@ -781,6 +782,25 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
                     </svg>
                     Veo
                   </button>
+
+                  {/* Director Family Tab */}
+                  <button
+                    onClick={() => {
+                      setSelectedFamily('director');
+                      if (selectedVideoModel !== 'director') {
+                        handleModelSelect('director');
+                      }
+                    }}
+                    className={`flex-1 py-2 px-3 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1.5 relative ${
+                      selectedFamily === 'director'
+                        ? 'bg-orange-700/30 text-orange-300 border border-orange-500/30 shadow-[0_0_8px_rgba(249,115,22,0.12)]'
+                        : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800/50 border border-transparent'
+                    }`}
+                  >
+                    <span className="text-sm">🎬</span>
+                    Director
+                    <span className="absolute -top-2 -right-1 text-[8px] px-1 py-0.5 rounded bg-orange-500 text-black font-bold leading-none">NEW</span>
+                  </button>
                 </div>
 
                 {/* Model Variants */}
@@ -817,9 +837,30 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
                       <span className="text-[10px] opacity-60">Google AI Video</span>
                     </button>
                   )}
+                  {selectedFamily === 'director' && (
+                    <button
+                      onClick={() => handleModelSelect('director')}
+                      className={`py-2 px-2.5 rounded-lg text-xs font-medium transition-all ${
+                        selectedVideoModel === 'director'
+                          ? 'bg-orange-600/20 backdrop-blur-sm text-orange-200 ring-1 ring-orange-400/50 shadow-[0_0_12px_rgba(249,115,22,0.15)]'
+                          : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800/50'
+                      }`}
+                    >
+                      <span className="block leading-tight">
+                        Director Pipeline
+                        <span className="ml-1.5 text-[9px] px-1.5 py-0.5 rounded bg-orange-500 text-black font-bold align-middle">NSFW</span>
+                      </span>
+                      <span className="text-[10px] opacity-60">Multi-shot • Gemini + Wan 2.2</span>
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
+
+            {/* ----- DIRECTOR CONTENT ----- */}
+            {selectedVideoModel === 'director' && (
+              <DirectorPanel />
+            )}
 
             {/* ----- KLING 2.6 CONTENT ----- */}
             {selectedVideoModel === 'kling-2.6' && videoSettings && (
@@ -836,7 +877,6 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
                     onGenerate={onVideoGenerate}
                     isGenerating={isGenerating}
                     geminiApiKey={geminiApiKey}
-                    videoModel={selectedVideoModel}
                   />
                 </div>
 
@@ -982,7 +1022,6 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
                     isGenerating={isGenerating}
                     hideReferenceVideo
                     geminiApiKey={geminiApiKey}
-                    videoModel={selectedVideoModel}
                   />
                 </div>
 
@@ -2049,7 +2088,7 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
                   {/* Trigger Word Hint */}
                   {selectedLora && (
                     <div className="p-2 bg-amber-900/20 border border-amber-500/30 rounded text-xs text-amber-300">
-                      <span className="font-medium">Trigger word:</span> {selectedLora.trigger_word}
+                      <span className="font-medium">Trigger word:</span> {selectedLora.triggerWord}
                     </div>
                   )}
 

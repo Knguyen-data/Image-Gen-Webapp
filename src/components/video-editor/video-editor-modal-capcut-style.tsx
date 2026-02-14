@@ -11,7 +11,7 @@ import TimelineTrackCapCutStyle from './timeline-track-capcut-style';
 import TransitionPicker from './transition-picker';
 import StockGallery from '../stock-gallery/stock-gallery';
 import { logger } from '../../services/logger';
-import { Group, Panel, Separator } from 'react-resizable-panels';
+// Layout uses plain CSS flexbox (react-resizable-panels was not sizing correctly)
 
 interface VideoEditorModalProps {
   isOpen: boolean;
@@ -68,8 +68,11 @@ const VideoEditorModalCapCutStyle: React.FC<VideoEditorModalProps> = ({
   onExportComplete,
 }) => {
   const canvasContainerRef = useRef<HTMLDivElement>(null);
+  const playerRef = useRef<HTMLDivElement>(null);
   const animFrameRef = useRef<number>(0);
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const resizeObserverRef = useRef<ResizeObserver | null>(null);
+  const projDimsRef = useRef<{ w: number; h: number }>({ w: 1920, h: 1080 });
 
   // Editor state
   const [layers, setLayers] = useState<EditorLayerInfo[]>([]);
@@ -118,6 +121,10 @@ const VideoEditorModalCapCutStyle: React.FC<VideoEditorModalProps> = ({
 
   const pixelsPerSecond = 80 * zoom;
 
+  // Timeline scrubbing state
+  const [isScrubbing, setIsScrubbing] = useState(false);
+  const timelineContentRef = useRef<HTMLDivElement>(null);
+
   // Initialize the composition
   useEffect(() => {
     if (!isOpen) return;
@@ -131,11 +138,61 @@ const VideoEditorModalCapCutStyle: React.FC<VideoEditorModalProps> = ({
       setInitError(null);
 
       try {
-        await videoEditorService.createProject(1920, 1080);
+        // Detect first video's aspect ratio to set project dimensions
+        let projW = 1920, projH = 1080;
+        const firstVideo = videos.find(v => v.status === 'success' && v.url);
+        if (firstVideo?.url) {
+          try {
+            const dims = await new Promise<{ w: number; h: number }>((resolve) => {
+              const probe = document.createElement('video');
+              probe.muted = true;
+              probe.preload = 'metadata';
+              probe.onloadedmetadata = () => {
+                resolve({ w: probe.videoWidth, h: probe.videoHeight });
+                probe.src = '';
+              };
+              probe.onerror = () => resolve({ w: 1920, h: 1080 });
+              setTimeout(() => resolve({ w: 1920, h: 1080 }), 3000);
+              probe.src = firstVideo.url!;
+            });
+            if (dims.w && dims.h) {
+              projW = dims.w;
+              projH = dims.h;
+            }
+          } catch {
+            // Fallback to 1920x1080
+          }
+        }
 
-        // Mount to canvas container
-        if (canvasContainerRef.current) {
-          videoEditorService.mount(canvasContainerRef.current);
+        await videoEditorService.createProject(projW, projH);
+        projDimsRef.current = { w: projW, h: projH };
+
+        // Mount to player element (Diffusion Studio renders canvas inside it)
+        if (playerRef.current && canvasContainerRef.current) {
+          videoEditorService.mount(playerRef.current);
+
+          // Set player to exact composition dimensions
+          playerRef.current.style.width = `${projW}px`;
+          playerRef.current.style.height = `${projH}px`;
+
+          // Scale player to fit container using CSS transform
+          const fitPlayerToContainer = () => {
+            const container = canvasContainerRef.current;
+            const player = playerRef.current;
+            if (!container || !player) return;
+
+            const padding = 16; // px padding inside container
+            const availW = container.clientWidth - padding * 2;
+            const availH = container.clientHeight - padding * 2;
+            const scale = Math.min(availW / projDimsRef.current.w, availH / projDimsRef.current.h, 1);
+
+            player.style.transform = `scale(${scale})`;
+            player.style.transformOrigin = 'center center';
+          };
+
+          resizeObserverRef.current = new ResizeObserver(fitPlayerToContainer);
+          resizeObserverRef.current.observe(canvasContainerRef.current);
+          fitPlayerToContainer();
         }
 
         // Add default layer
@@ -171,10 +228,32 @@ const VideoEditorModalCapCutStyle: React.FC<VideoEditorModalProps> = ({
 
     return () => {
       cancelAnimationFrame(animFrameRef.current);
+      resizeObserverRef.current?.disconnect();
+      resizeObserverRef.current = null;
       videoEditorService.destroy();
       restoreConsole();
     };
   }, [isOpen]);
+
+  // Re-fit player when fitMode changes
+  useEffect(() => {
+    const container = canvasContainerRef.current;
+    const player = playerRef.current;
+    if (!container || !player) return;
+
+    const { w, h } = projDimsRef.current;
+    if (!w || !h) return;
+
+    if (fitMode === '100') {
+      player.style.transform = 'scale(1)';
+    } else {
+      const padding = 16;
+      const availW = container.clientWidth - padding * 2;
+      const availH = container.clientHeight - padding * 2;
+      const scale = Math.min(availW / w, availH / h, 1);
+      player.style.transform = `scale(${scale})`;
+    }
+  }, [fitMode]);
 
   // Playback time updater
   useEffect(() => {
@@ -183,11 +262,12 @@ const VideoEditorModalCapCutStyle: React.FC<VideoEditorModalProps> = ({
     const updateTime = () => {
       const comp = videoEditorService.getComposition();
       if (comp) {
-        setCurrentTime(comp.currentTime);
-        setDuration(comp.duration / 30);
-        // CapCut-style timecode display
-        const currentTC = formatTimecode(comp.currentTime);
-        const durationTC = formatTimecode(comp.duration / 30);
+        const ct = comp.currentTime;  // seconds
+        const dur = videoEditorService.duration;  // seconds (converted from frames)
+        setCurrentTime(ct);
+        setDuration(dur);
+        const currentTC = formatTimecode(ct);
+        const durationTC = formatTimecode(dur);
         setTimeDisplay(`${currentTC} / ${durationTC}`);
         setIsPlaying(comp.playing);
       }
@@ -200,13 +280,13 @@ const VideoEditorModalCapCutStyle: React.FC<VideoEditorModalProps> = ({
 
   // Frame-by-frame navigation
   const handleFrameBack = useCallback(() => {
-    const newTime = Math.max(0, currentTime - 1/30);
+    const newTime = Math.max(0, currentTime - 1 / 30);
     videoEditorService.seek(newTime);
     setCurrentTime(newTime);
   }, [currentTime]);
 
   const handleFrameForward = useCallback(() => {
-    const newTime = Math.min(duration, currentTime + 1/30);
+    const newTime = Math.min(duration, currentTime + 1 / 30);
     videoEditorService.seek(newTime);
     setCurrentTime(newTime);
   }, [currentTime, duration]);
@@ -255,6 +335,34 @@ const VideoEditorModalCapCutStyle: React.FC<VideoEditorModalProps> = ({
       logger.warn('VideoEditor', 'Seek failed', e);
     }
   };
+
+  // Timeline scrub: convert mouse X to time and seek
+  const scrubFromEvent = useCallback((e: MouseEvent | React.MouseEvent) => {
+    const contentEl = timelineContentRef.current;
+    if (!contentEl) return;
+    const rect = contentEl.getBoundingClientRect();
+    const x = e.clientX - rect.left + contentEl.scrollLeft;
+    const time = Math.max(0, Math.min(x / pixelsPerSecond, duration));
+    videoEditorService.seek(time);
+    setCurrentTime(time);
+  }, [pixelsPerSecond, duration]);
+
+  const handleTimelineMouseDown = useCallback((e: React.MouseEvent) => {
+    scrubFromEvent(e);
+    setIsScrubbing(true);
+  }, [scrubFromEvent]);
+
+  useEffect(() => {
+    if (!isScrubbing) return;
+    const onMove = (e: MouseEvent) => scrubFromEvent(e);
+    const onUp = () => setIsScrubbing(false);
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+    return () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    };
+  }, [isScrubbing, scrubFromEvent]);
 
   // --- Clip handlers ---
   const handleTrimStart = useCallback((clipId: string, newStartSec: number) => {
@@ -609,9 +717,9 @@ const VideoEditorModalCapCutStyle: React.FC<VideoEditorModalProps> = ({
       </div>
 
       {/* 3-Column Layout: Media | Preview | Properties */}
-      <Group orientation="horizontal" className="flex-1 min-h-0">
+      <div className="flex-1 min-h-0 overflow-hidden flex">
         {/* LEFT: Media Panel */}
-        <Panel defaultSize={18} minSize={12} maxSize={30}>
+        <div className="w-[220px] flex-shrink-0">
           <div className="h-full flex flex-col bg-[#111827] border-r border-slate-700/50 overflow-hidden">
             <div className="px-3 py-2.5 border-b border-slate-700/30 bg-[#1E293B]/80">
               <h2 className="text-xs font-semibold text-lime-400 uppercase tracking-wider">Media</h2>
@@ -622,11 +730,10 @@ const VideoEditorModalCapCutStyle: React.FC<VideoEditorModalProps> = ({
                 <button
                   key={tab}
                   onClick={() => setMediaTab(tab)}
-                  className={`flex-1 px-2 py-2 text-[10px] font-medium uppercase tracking-wide transition-all ${
-                    mediaTab === tab
-                      ? 'text-lime-400 border-b-2 border-lime-400 bg-lime-500/5'
-                      : 'text-slate-500 hover:text-slate-300'
-                  }`}
+                  className={`flex-1 px-2 py-2 text-[10px] font-medium uppercase tracking-wide transition-all ${mediaTab === tab
+                    ? 'text-lime-400 border-b-2 border-lime-400 bg-lime-500/5'
+                    : 'text-slate-500 hover:text-slate-300'
+                    }`}
                 >
                   {tab}
                 </button>
@@ -638,11 +745,10 @@ const VideoEditorModalCapCutStyle: React.FC<VideoEditorModalProps> = ({
                   key={clip.id}
                   draggable
                   onClick={() => setSelectedClipId(clip.id)}
-                  className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-all ${
-                    selectedClipId === clip.id
-                      ? 'bg-lime-500/10 border border-lime-500/30'
-                      : 'bg-slate-800/40 border border-transparent hover:bg-slate-800/60 hover:border-slate-700/50'
-                  }`}
+                  className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-all ${selectedClipId === clip.id
+                    ? 'bg-lime-500/10 border border-lime-500/30'
+                    : 'bg-slate-800/40 border border-transparent hover:bg-slate-800/60 hover:border-slate-700/50'
+                    }`}
                 >
                   <div className="w-12 h-8 bg-slate-900 rounded flex items-center justify-center">
                     <svg className="w-4 h-4 text-lime-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -662,11 +768,10 @@ const VideoEditorModalCapCutStyle: React.FC<VideoEditorModalProps> = ({
                   key={clip.id}
                   draggable
                   onClick={() => setSelectedClipId(clip.id)}
-                  className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-all ${
-                    selectedClipId === clip.id
-                      ? 'bg-blue-500/10 border border-blue-500/30'
-                      : 'bg-slate-800/40 border border-transparent hover:bg-slate-800/60 hover:border-slate-700/50'
-                  }`}
+                  className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-all ${selectedClipId === clip.id
+                    ? 'bg-blue-500/10 border border-blue-500/30'
+                    : 'bg-slate-800/40 border border-transparent hover:bg-slate-800/60 hover:border-slate-700/50'
+                    }`}
                 >
                   <div className="w-12 h-8 bg-slate-900 rounded flex items-center justify-center">
                     <svg className="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -719,301 +824,278 @@ const VideoEditorModalCapCutStyle: React.FC<VideoEditorModalProps> = ({
               )}
             </div>
           </div>
-        </Panel>
-
-        <Separator className="w-1 bg-slate-800 hover:bg-lime-500/50 transition-colors cursor-col-resize" />
-
-        {/* CENTER: Preview */}
-        <Panel defaultSize={64} minSize={40}>
-      <div className="h-full flex flex-col bg-black/95 relative overflow-hidden">
-        {/* Top toolbar with utility buttons - CapCut style */}
-        <div className="flex items-center justify-between px-4 py-2.5 bg-[#1E293B]/80 border-b border-slate-700/30">
-          <div className="flex items-center gap-2">
-            {/* Zoom controls */}
-            <div className="flex items-center gap-1 bg-slate-800/60 rounded-lg p-1 border border-slate-700/50">
-              <button
-                onClick={() => setZoom(z => Math.max(z - 0.25, 0.25))}
-                className="p-1.5 rounded text-slate-400 hover:text-white hover:bg-slate-700/60 transition-all duration-150"
-                title="Zoom Out"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM13 10H7" />
-                </svg>
-              </button>
-              <span className="px-2 text-xs text-slate-400 font-mono min-w-[48px] text-center">
-                {Math.round(zoom * 100)}%
-              </span>
-              <button
-                onClick={() => setZoom(z => Math.min(z + 0.25, 5))}
-                className="p-1.5 rounded text-slate-400 hover:text-white hover:bg-slate-700/60 transition-all duration-150"
-                title="Zoom In"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7" />
-                </svg>
-              </button>
-            </div>
-
-            {/* Fit / 100% toggle */}
-            <button
-              onClick={() => setFitMode(m => m === 'fit' ? '100' : 'fit')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-150 ${
-                fitMode === '100'
-                  ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30'
-                  : 'text-slate-400 hover:text-white hover:bg-slate-800/50 border border-transparent'
-              }`}
-              title="Toggle Fit/Fill"
-            >
-              {fitMode === 'fit' ? 'Fit' : '100%'}
-            </button>
-          </div>
-
-          {/* Utility toggles - CapCut style */}
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setRippleMode(!rippleMode)}
-              className={`px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all duration-150 flex items-center gap-1.5 ${
-                rippleMode
-                  ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
-                  : 'text-slate-400 hover:text-white hover:bg-slate-800/50 border border-transparent'
-              }`}
-              title="Ripple Edit: Shifts clips after edit point"
-            >
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 5l7 7-7 7M5 5l7 7-7 7" />
-              </svg>
-              Ripple
-            </button>
-
-            <button
-              onClick={() => setSnapToGrid(!snapToGrid)}
-              className={`px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all duration-150 flex items-center gap-1.5 ${
-                snapToGrid
-                  ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30'
-                  : 'text-slate-400 hover:text-white hover:bg-slate-800/50 border border-transparent'
-              }`}
-              title="Snap to Grid"
-            >
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z" />
-              </svg>
-              Snap
-            </button>
-
-            <button
-              onClick={() => setShowWaveforms(!showWaveforms)}
-              className={`px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all duration-150 flex items-center gap-1.5 ${
-                showWaveforms
-                  ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30'
-                  : 'text-slate-400 hover:text-white hover:bg-slate-800/50 border border-transparent'
-              }`}
-              title="Show Waveforms"
-            >
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
-              </svg>
-              Waveform
-            </button>
-          </div>
-
-          {/* Clip actions */}
-          <div className="flex items-center gap-2">
-            <button
-              onClick={handleSplitAtPlayhead}
-              disabled={!selectedClipId}
-              className="px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-800/60 text-slate-300 hover:text-white hover:bg-slate-700/60 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5 transition-all duration-150 border border-slate-700/50"
-              title="Split at Playhead (S)"
-            >
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              Split
-            </button>
-
-            <button
-              onClick={() => {
-                if (selectedClipId) {
-                  handleRemoveClip(selectedClipId);
-                }
-              }}
-              disabled={!selectedClipId}
-              className="px-3 py-1.5 rounded-lg text-xs font-medium bg-red-900/20 text-red-400 hover:text-red-300 hover:bg-red-900/40 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5 transition-all duration-150 border border-red-900/30"
-              title="Delete Clip (Delete)"
-            >
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-              </svg>
-              Delete
-            </button>
-          </div>
         </div>
 
-        {/* Preview canvas */}
-        <div className="flex-1 flex items-center justify-center relative overflow-hidden">
-          {isLoading && (
-            <div className="absolute inset-0 bg-[#0F172A]/90 flex flex-col items-center justify-center z-20">
-              <div className="w-12 h-12 border-4 border-cyan-400 border-t-transparent rounded-full animate-spin mb-4 shadow-lg shadow-cyan-400/20" />
-              <p className="text-sm text-slate-300 font-medium">{loadingMessage}</p>
-            </div>
-          )}
-
-          {initError ? (
-            <div className="flex flex-col items-center gap-4 text-center max-w-md p-6">
-              <div className="w-14 h-14 rounded-full bg-red-500/10 flex items-center justify-center">
-                <svg className="w-7 h-7 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
-                </svg>
-              </div>
-              <div>
-                <p className="text-red-400 font-medium mb-1">Editor Initialization Failed</p>
-                <p className="text-xs text-slate-500">{initError}</p>
-                <p className="text-xs text-slate-600 mt-3 leading-relaxed">
-                  This editor requires WebCodecs API support.<br />
-                  Ensure COOP/COEP headers are configured.
-                </p>
-              </div>
-            </div>
-          ) : (
-            <div
-              ref={canvasContainerRef}
-              className={`flex items-center justify-center w-full h-full ${
-                fitMode === 'fit' ? 'p-4' : ''
-              }`}
-              style={{
-                maxHeight: fitMode === 'fit' ? 'calc(100% - 120px)' : '100%'
-              }}
-            >
-              <div
-                ref={el => {
-                  if (el && canvasContainerRef.current && !el.contains(canvasContainerRef.current)) {
-                    // Diffusion Studio Core mounts here
-                  }
-                }}
-                className="max-w-full max-h-full"
-              />
-            </div>
-          )}
-
-          {/* Timecode overlay */}
-          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 px-4 py-2 bg-slate-900/90 backdrop-blur-xl rounded-lg text-sm font-mono text-slate-200 border border-slate-700/50 shadow-lg">
-            {formatTimecode(currentTime)}
-          </div>
-
-          {/* Export progress overlay */}
-          {isExporting && (
-            <div className="absolute inset-0 bg-[#0F172A]/90 flex flex-col items-center justify-center z-30">
-              <div className="w-80 space-y-4">
-                <div className="text-center">
-                  <p className="text-sm text-slate-200 font-medium mb-1">Exporting Video</p>
-                  <p className="text-xs text-slate-500">{exportProgress}% complete</p>
+        {/* CENTER: Preview */}
+        <div className="flex-1 min-w-0">
+          <div className="h-full flex flex-col bg-black/95 relative overflow-hidden">
+            {/* Top toolbar with utility buttons - CapCut style */}
+            <div className="flex items-center justify-between px-4 py-2.5 bg-[#1E293B]/80 border-b border-slate-700/30">
+              <div className="flex items-center gap-2">
+                {/* Zoom controls */}
+                <div className="flex items-center gap-1 bg-slate-800/60 rounded-lg p-1 border border-slate-700/50">
+                  <button
+                    onClick={() => setZoom(z => Math.max(z - 0.25, 0.25))}
+                    className="p-1.5 rounded text-slate-400 hover:text-white hover:bg-slate-700/60 transition-all duration-150"
+                    title="Zoom Out"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM13 10H7" />
+                    </svg>
+                  </button>
+                  <span className="px-2 text-xs text-slate-400 font-mono min-w-[48px] text-center">
+                    {Math.round(zoom * 100)}%
+                  </span>
+                  <button
+                    onClick={() => setZoom(z => Math.min(z + 0.25, 5))}
+                    className="p-1.5 rounded text-slate-400 hover:text-white hover:bg-slate-700/60 transition-all duration-150"
+                    title="Zoom In"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7" />
+                    </svg>
+                  </button>
                 </div>
-                <div className="w-full h-2.5 bg-slate-800 rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-gradient-to-r from-cyan-500 to-blue-500 transition-all duration-300 rounded-full shadow-lg shadow-cyan-500/30"
-                    style={{ width: `${exportProgress}%` }}
-                  />
-                </div>
+
+                {/* Fit / 100% toggle */}
                 <button
-                  onClick={() => videoEditorService.cancelExport()}
-                  className="w-full py-2 rounded-lg bg-red-900/30 text-red-400 text-xs font-medium hover:bg-red-900/50 transition-all duration-150 border border-red-900/30"
+                  onClick={() => setFitMode(m => m === 'fit' ? '100' : 'fit')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-150 ${fitMode === '100'
+                    ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30'
+                    : 'text-slate-400 hover:text-white hover:bg-slate-800/50 border border-transparent'
+                    }`}
+                  title="Toggle Fit/Fill"
                 >
-                  Cancel Export
+                  {fitMode === 'fit' ? 'Fit' : '100%'}
+                </button>
+              </div>
+
+              {/* Utility toggles - CapCut style */}
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setRippleMode(!rippleMode)}
+                  className={`px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all duration-150 flex items-center gap-1.5 ${rippleMode
+                    ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
+                    : 'text-slate-400 hover:text-white hover:bg-slate-800/50 border border-transparent'
+                    }`}
+                  title="Ripple Edit: Shifts clips after edit point"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 5l7 7-7 7M5 5l7 7-7 7" />
+                  </svg>
+                  Ripple
+                </button>
+
+                <button
+                  onClick={() => setSnapToGrid(!snapToGrid)}
+                  className={`px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all duration-150 flex items-center gap-1.5 ${snapToGrid
+                    ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30'
+                    : 'text-slate-400 hover:text-white hover:bg-slate-800/50 border border-transparent'
+                    }`}
+                  title="Snap to Grid"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z" />
+                  </svg>
+                  Snap
+                </button>
+
+                <button
+                  onClick={() => setShowWaveforms(!showWaveforms)}
+                  className={`px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all duration-150 flex items-center gap-1.5 ${showWaveforms
+                    ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30'
+                    : 'text-slate-400 hover:text-white hover:bg-slate-800/50 border border-transparent'
+                    }`}
+                  title="Show Waveforms"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
+                  </svg>
+                  Waveform
+                </button>
+              </div>
+
+              {/* Clip actions */}
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleSplitAtPlayhead}
+                  disabled={!selectedClipId}
+                  className="px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-800/60 text-slate-300 hover:text-white hover:bg-slate-700/60 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5 transition-all duration-150 border border-slate-700/50"
+                  title="Split at Playhead (S)"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  Split
+                </button>
+
+                <button
+                  onClick={() => {
+                    if (selectedClipId) {
+                      handleRemoveClip(selectedClipId);
+                    }
+                  }}
+                  disabled={!selectedClipId}
+                  className="px-3 py-1.5 rounded-lg text-xs font-medium bg-red-900/20 text-red-400 hover:text-red-300 hover:bg-red-900/40 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5 transition-all duration-150 border border-red-900/30"
+                  title="Delete Clip (Delete)"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                  Delete
                 </button>
               </div>
             </div>
-          )}
-        </div>
 
-        {/* Playback controls bar - CapCut style */}
-        <div className="flex items-center justify-center gap-4 px-4 py-3 bg-[#1E293B]/80 border-t border-slate-700/30">
-          {/* Frame back */}
-          <button
-            onClick={handleFrameBack}
-            className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800/50 transition-all duration-150"
-            title="Previous Frame (Left Arrow)"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7" />
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 19l-7-7 7-7" />
-            </svg>
-          </button>
+            {/* Preview canvas */}
+            <div className="flex-1 flex items-center justify-center relative overflow-hidden">
+              {isLoading && (
+                <div className="absolute inset-0 bg-[#0F172A]/90 flex flex-col items-center justify-center z-20">
+                  <div className="w-12 h-12 border-4 border-cyan-400 border-t-transparent rounded-full animate-spin mb-4 shadow-lg shadow-cyan-400/20" />
+                  <p className="text-sm text-slate-300 font-medium">{loadingMessage}</p>
+                </div>
+              )}
 
-          {/* Step back 1s */}
-          <button
-            onClick={() => videoEditorService.seek(Math.max(0, currentTime - 1))}
-            className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800/50 transition-all duration-150"
-            title="Back 1s"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12.066 11.2a1 1 0 000 1.6l5.334 4A1 1 0 0019 16V8a1 1 0 00-1.6-.8l-5.333 4zM4.066 11.2a1 1 0 000 1.6l5.334 4A1 1 0 0011 16V8a1 1 0 00-1.6-.8l-5.334 4z" />
-            </svg>
-          </button>
+              {initError ? (
+                <div className="flex flex-col items-center gap-4 text-center max-w-md p-6">
+                  <div className="w-14 h-14 rounded-full bg-red-500/10 flex items-center justify-center">
+                    <svg className="w-7 h-7 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <p className="text-red-400 font-medium mb-1">Editor Initialization Failed</p>
+                    <p className="text-xs text-slate-500">{initError}</p>
+                    <p className="text-xs text-slate-600 mt-3 leading-relaxed">
+                      This editor requires WebCodecs API support.<br />
+                      Ensure COOP/COEP headers are configured.
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <div
+                  ref={canvasContainerRef}
+                  className="flex items-center justify-center w-full h-full overflow-hidden"
+                >
+                  <div ref={playerRef} />
+                </div>
+              )}
 
-          {/* Play/Pause - CapCut style */}
-          <button
-            onClick={isPlaying ? handlePause : handlePlay}
-            className="p-3.5 rounded-full bg-gradient-to-r from-cyan-600 to-blue-600 text-white hover:from-cyan-500 hover:to-blue-500 transition-all duration-150 shadow-lg shadow-cyan-500/20"
-            title={isPlaying ? 'Pause (Space)' : 'Play (Space)'}
-          >
-            {isPlaying ? (
-              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z" />
-              </svg>
-            ) : (
-              <svg className="w-5 h-5 ml-0.5" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M8 5v14l11-7z" />
-              </svg>
-            )}
-          </button>
+              {/* Timecode overlay removed - already shown in playback controls bar */}
 
-          {/* Step forward 1s */}
-          <button
-            onClick={() => videoEditorService.seek(Math.min(duration, currentTime + 1))}
-            className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800/50 transition-all duration-150"
-            title="Forward 1s"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11.933 12.8a1 1 0 000-1.6L6.6 7.2A1 1 0 005 8v8a1 1 0 001.6.8l5.333-4zM19.933 12.8a1 1 0 000-1.6l-5.333-4A1 1 0 0013 8v8a1 1 0 001.6.8l5.333-4z" />
-            </svg>
-          </button>
+              {/* Export progress overlay */}
+              {isExporting && (
+                <div className="absolute inset-0 bg-[#0F172A]/90 flex flex-col items-center justify-center z-30">
+                  <div className="w-80 space-y-4">
+                    <div className="text-center">
+                      <p className="text-sm text-slate-200 font-medium mb-1">Exporting Video</p>
+                      <p className="text-xs text-slate-500">{exportProgress}% complete</p>
+                    </div>
+                    <div className="w-full h-2.5 bg-slate-800 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-gradient-to-r from-cyan-500 to-blue-500 transition-all duration-300 rounded-full shadow-lg shadow-cyan-500/30"
+                        style={{ width: `${exportProgress}%` }}
+                      />
+                    </div>
+                    <button
+                      onClick={() => videoEditorService.cancelExport()}
+                      className="w-full py-2 rounded-lg bg-red-900/30 text-red-400 text-xs font-medium hover:bg-red-900/50 transition-all duration-150 border border-red-900/30"
+                    >
+                      Cancel Export
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
 
-          {/* Frame forward */}
-          <button
-            onClick={handleFrameForward}
-            className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800/50 transition-all duration-150"
-            title="Next Frame (Right Arrow)"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 5l7 7-7 7" />
-            </svg>
-          </button>
+            {/* Playback controls bar - CapCut style */}
+            <div className="flex items-center justify-center gap-4 px-4 py-3 bg-[#1E293B]/80 border-t border-slate-700/30">
+              {/* Frame back */}
+              <button
+                onClick={handleFrameBack}
+                className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800/50 transition-all duration-150"
+                title="Previous Frame (Left Arrow)"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 19l-7-7 7-7" />
+                </svg>
+              </button>
 
-          {/* Timecode display - CapCut style */}
-          <div className="flex items-center gap-2 ml-4 px-4 py-2 bg-slate-800/60 rounded-lg border border-slate-700/50">
-            <span className="text-sm font-mono text-cyan-400">{formatTimecode(currentTime)}</span>
-            <span className="text-xs text-slate-600">/</span>
-            <span className="text-sm font-mono text-slate-400">{formatTimecode(duration)}</span>
+              {/* Step back 1s */}
+              <button
+                onClick={() => videoEditorService.seek(Math.max(0, currentTime - 1))}
+                className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800/50 transition-all duration-150"
+                title="Back 1s"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12.066 11.2a1 1 0 000 1.6l5.334 4A1 1 0 0019 16V8a1 1 0 00-1.6-.8l-5.333 4zM4.066 11.2a1 1 0 000 1.6l5.334 4A1 1 0 0011 16V8a1 1 0 00-1.6-.8l-5.334 4z" />
+                </svg>
+              </button>
+
+              {/* Play/Pause - CapCut style */}
+              <button
+                onClick={isPlaying ? handlePause : handlePlay}
+                className="p-3.5 rounded-full bg-gradient-to-r from-cyan-600 to-blue-600 text-white hover:from-cyan-500 hover:to-blue-500 transition-all duration-150 shadow-lg shadow-cyan-500/20"
+                title={isPlaying ? 'Pause (Space)' : 'Play (Space)'}
+              >
+                {isPlaying ? (
+                  <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z" />
+                  </svg>
+                ) : (
+                  <svg className="w-5 h-5 ml-0.5" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M8 5v14l11-7z" />
+                  </svg>
+                )}
+              </button>
+
+              {/* Step forward 1s */}
+              <button
+                onClick={() => videoEditorService.seek(Math.min(duration, currentTime + 1))}
+                className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800/50 transition-all duration-150"
+                title="Forward 1s"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11.933 12.8a1 1 0 000-1.6L6.6 7.2A1 1 0 005 8v8a1 1 0 001.6.8l5.333-4zM19.933 12.8a1 1 0 000-1.6l-5.333-4A1 1 0 0013 8v8a1 1 0 001.6.8l5.333-4z" />
+                </svg>
+              </button>
+
+              {/* Frame forward */}
+              <button
+                onClick={handleFrameForward}
+                className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800/50 transition-all duration-150"
+                title="Next Frame (Right Arrow)"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 5l7 7-7 7" />
+                </svg>
+              </button>
+
+              {/* Timecode display - CapCut style */}
+              <div className="flex items-center gap-2 ml-4 px-4 py-2 bg-slate-800/60 rounded-lg border border-slate-700/50">
+                <span className="text-sm font-mono text-cyan-400">{formatTimecode(currentTime)}</span>
+                <span className="text-xs text-slate-600">/</span>
+                <span className="text-sm font-mono text-slate-400">{formatTimecode(duration)}</span>
+              </div>
+
+              {/* Volume (placeholder) */}
+              <button
+                className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800/50 transition-all duration-150"
+                title="Mute/Unmute"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                </svg>
+              </button>
+            </div>
           </div>
-
-          {/* Volume (placeholder) */}
-          <button
-            className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800/50 transition-all duration-150"
-            title="Mute/Unmute"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
-            </svg>
-          </button>
         </div>
-      </div>
-        </Panel>
-
-        <Separator className="w-1 bg-slate-800 hover:bg-lime-500/50 transition-colors cursor-col-resize" />
 
         {/* RIGHT: Properties Panel */}
-        <Panel defaultSize={18} minSize={12} maxSize={30}>
+        <div className="w-[260px] flex-shrink-0">
           <div className="h-full flex flex-col bg-[#111827] border-l border-slate-700/50 overflow-hidden">
             <div className="px-3 py-2.5 border-b border-slate-700/30 bg-[#1E293B]/80">
               <h2 className="text-xs font-semibold text-lime-400 uppercase tracking-wider">Properties</h2>
@@ -1125,8 +1207,8 @@ const VideoEditorModalCapCutStyle: React.FC<VideoEditorModalProps> = ({
               )}
             </div>
           </div>
-        </Panel>
-      </Group>
+        </div>
+      </div>
       {showStockGallery && (
         <StockGallery
           onSelectVideo={handleStockVideoSelect}
@@ -1190,98 +1272,107 @@ const VideoEditorModalCapCutStyle: React.FC<VideoEditorModalProps> = ({
 
         {/* Timeline scroll area */}
         <div className="flex-1 overflow-auto bg-[#0F172A]">
-          <div className="min-w-full">
-            {/* Time ruler - CapCut style */}
-            <div className="sticky top-0 z-20 bg-[#1E293B]/95 backdrop-blur border-b border-slate-700/20">
-              <div
-                className="flex items-end h-7 relative"
-                style={{ minWidth: `${Math.max(duration * pixelsPerSecond + 200, 800)}px`, paddingLeft: '100px' }}
-              >
-                {Array.from({ length: Math.ceil(duration) + 1 }, (_, i) => (
-                  <div
-                    key={i}
-                    className="absolute bottom-0 flex flex-col items-center"
-                    style={{ left: `${i * pixelsPerSecond + 100}px` }}
-                  >
-                    <div className="w-px h-2.5 bg-slate-600" />
-                    <span className="text-[9px] text-slate-500 font-mono mt-0.5">
-                      {Math.floor(i / 60)}:{(i % 60).toString().padStart(2, '0')}
-                    </span>
-                  </div>
-                ))}
-
-                {/* Playhead indicator - CapCut style */}
+          <div className="flex min-w-full">
+            {/* Track header column (fixed width) */}
+            <div className="flex-shrink-0 w-[100px] sticky left-0 z-10 bg-[#1E293B]">
+              {/* Ruler header spacer */}
+              <div className="h-7 border-b border-slate-700/20 bg-[#1E293B]/95" />
+              {/* Track labels */}
+              {layers.map((layer) => (
                 <div
-                  className="absolute top-0 bottom-0 w-0.5 bg-cyan-400 z-30 shadow-lg shadow-cyan-400/30"
-                  style={{ left: `${currentTime * pixelsPerSecond + 100}px` }}
+                  key={layer.index}
+                  className={`flex items-center gap-1 px-3 h-12 border-b border-slate-700/30 ${layer.index % 2 === 0 ? 'bg-[#1E293B]' : 'bg-[#1a2538]'
+                    }`}
                 >
-                  <div className="w-3 h-3 bg-cyan-400 rounded-full -ml-[5.5px] -mt-0.5 shadow-lg shadow-cyan-400/50" />
+                  <span className="text-xs text-slate-500 font-medium">
+                    Track {layer.index + 1}
+                  </span>
+                  {layer.clips.length === 0 && (
+                    <button
+                      onClick={() => handleRemoveTrack(layer.index)}
+                      className="p-1 rounded text-slate-600 hover:text-red-400 hover:bg-red-900/20 transition-all duration-150"
+                      title="Remove empty track"
+                    >
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {/* Timeline content column (scrollable) */}
+            <div ref={timelineContentRef} className="flex-1 min-w-0 relative" style={{ minWidth: `${Math.max(duration * pixelsPerSecond + 200, 700)}px` }}>
+              {/* Playhead line spanning full height (ruler + tracks) */}
+              <div
+                className="absolute top-0 bottom-0 w-0.5 bg-cyan-400/60 z-30 pointer-events-none"
+                style={{ left: `${currentTime * pixelsPerSecond}px` }}
+              />
+              {/* Time ruler - CapCut style (click/drag to seek) */}
+              <div className="sticky top-0 z-20 bg-[#1E293B]/95 backdrop-blur border-b border-slate-700/20">
+                <div
+                  className="relative h-7 cursor-pointer select-none"
+                  onMouseDown={handleTimelineMouseDown}
+                >
+                  {Array.from({ length: Math.max(Math.ceil(duration) + 1, 10) }, (_, i) => (
+                    <div
+                      key={i}
+                      className="absolute bottom-0 flex flex-col items-center"
+                      style={{ left: `${i * pixelsPerSecond}px` }}
+                    >
+                      <div className="w-px h-2.5 bg-slate-600" />
+                      <span className="text-[9px] text-slate-500 font-mono mt-0.5">
+                        {Math.floor(i / 60)}:{(i % 60).toString().padStart(2, '0')}
+                      </span>
+                    </div>
+                  ))}
+
+                  {/* Playhead indicator */}
+                  <div
+                    className="absolute top-0 bottom-0 w-0.5 bg-cyan-400 z-30 shadow-lg shadow-cyan-400/30 pointer-events-none"
+                    style={{ left: `${currentTime * pixelsPerSecond}px` }}
+                  >
+                    <div className="w-3.5 h-3.5 bg-cyan-400 rounded-sm -ml-[6.5px] -mt-0.5 shadow-lg shadow-cyan-400/50 pointer-events-auto cursor-col-resize"
+                      onMouseDown={(e) => { e.stopPropagation(); setIsScrubbing(true); }}
+                    />
+                  </div>
                 </div>
               </div>
+
+              {/* Track clip lanes */}
+              {layers.map((layer) => (
+                <TimelineTrackCapCutStyle
+                  key={layer.index}
+                  layer={layer}
+                  pixelsPerSecond={pixelsPerSecond}
+                  selectedClipId={selectedClipId}
+                  onSelectClip={setSelectedClipId}
+                  onTrimStart={handleTrimStart}
+                  onTrimEnd={handleTrimEnd}
+                  onTransitionClick={handleTransitionClick}
+                  onRemoveClip={handleRemoveClip}
+                  onRemoveTrack={handleRemoveTrack}
+                  dragOverClipId={dragOverClipId}
+                  onDragStart={handleDragStart}
+                  onDragOver={handleDragOver}
+                  onDragEnd={handleDragEnd}
+                  showWaveforms={showWaveforms}
+                />
+              ))}
+
+              {layers.length === 0 && (
+                <div className="flex flex-col items-center justify-center h-40 text-slate-500">
+                  <svg className="w-10 h-10 mb-3 text-slate-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                  </svg>
+                  <p className="text-sm">No clips yet</p>
+                  <p className="text-xs text-slate-600 mt-1">
+                    Import videos or add from stock gallery
+                  </p>
+                </div>
+              )}
             </div>
-
-            {/* Track headers and clips */}
-            <div className="relative" style={{ minWidth: `${Math.max(duration * pixelsPerSecond + 200, 800)}px` }}>
-              {/* Track headers */}
-              <div className="sticky left-0 z-10 bg-[#1E293B]">
-                {layers.map((layer) => (
-                  <div
-                    key={layer.index}
-                    className="flex items-center px-3 h-12 border-b border-slate-800/30 bg-[#1E293B]/95"
-                  >
-                    <span className="text-xs text-slate-500 font-medium w-16">
-                      Track {layer.index + 1}
-                    </span>
-                    {layer.clips.length === 0 && (
-                      <button
-                        onClick={() => handleRemoveTrack(layer.index)}
-                        className="p-1 rounded text-slate-600 hover:text-red-400 hover:bg-red-900/20 transition-all duration-150"
-                        title="Remove empty track"
-                      >
-                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-                        </svg>
-                      </button>
-                    )}
-                  </div>
-                ))}
-              </div>
-
-              {/* Clips area */}
-              <div className="absolute top-0 left-[100px] right-0">
-                {layers.map((layer) => (
-                  <TimelineTrackCapCutStyle
-                    key={layer.index}
-                    layer={layer}
-                    pixelsPerSecond={pixelsPerSecond}
-                    selectedClipId={selectedClipId}
-                    onSelectClip={setSelectedClipId}
-                    onTrimStart={handleTrimStart}
-                    onTrimEnd={handleTrimEnd}
-                    onTransitionClick={handleTransitionClick}
-                    onRemoveClip={handleRemoveClip}
-                    onRemoveTrack={handleRemoveTrack}
-                    dragOverClipId={dragOverClipId}
-                    onDragStart={handleDragStart}
-                    onDragOver={handleDragOver}
-                    onDragEnd={handleDragEnd}
-                    showWaveforms={showWaveforms}
-                  />
-                ))}
-              </div>
-            </div>
-
-            {layers.length === 0 && (
-              <div className="flex flex-col items-center justify-center h-40 text-slate-500">
-                <svg className="w-10 h-10 mb-3 text-slate-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                </svg>
-                <p className="text-sm">No clips yet</p>
-                <p className="text-xs text-slate-600 mt-1">
-                  Import videos or add from stock gallery
-                </p>
-              </div>
-            )}
           </div>
         </div>
       </div>
