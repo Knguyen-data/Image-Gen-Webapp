@@ -145,17 +145,17 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
     fetchLoras();
   }, []);
 
+  // Helper to ensure settings exist before access
+  const safeSettings: AppSettings = settings || DEFAULT_SETTINGS;
+
   // Get selected LoRA details
-  const selectedLora = loras.find(l => l.id === (safeSettings.spicyMode?.comfyui?.loraId || comfySettings.loraId));
+  const selectedLora = loras.find(l => l.id === safeSettings.spicyMode?.comfyui?.loraId);
 
   // Use parent video model state (no local shadow)
   const selectedVideoModel = videoModelProp;
   const setSelectedVideoModel = setVideoModelProp;
 
   const isVideoMode = appMode === 'video';
-
-  // Helper to ensure settings exist before access
-  const safeSettings: AppSettings = settings || DEFAULT_SETTINGS;
 
   // Check if current mode supports reference images
   const supportsReferenceImages = (): boolean => {

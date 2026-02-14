@@ -12,7 +12,7 @@ import type { LoraModel, LoraStatus, LoraTrainingConfig } from '../types';
 type AnyRecord = any;
 
 const RUNPOD_BASE = '/api/runpod'; // Proxied via Vite -> https://api.runpod.ai
-const LORA_TRAINING_ENDPOINT_ID = import.meta.env.VITE_RUNPOD_LORA_ENDPOINT_ID || '';
+const LORA_TRAINING_ENDPOINT_ID = import.meta.env.VITE_RUNPOD_LORA_TRAINING_ENDPOINT_ID || '';
 const MAX_POLL_ATTEMPTS = 120; // 10 min at 5s intervals
 const POLL_INTERVAL_MS = 5000;
 
@@ -41,19 +41,26 @@ interface LoraRow {
   file_size_bytes: number | null;
   error_message: string | null;
   training_progress: number | null;
-  training_job_id: string | null;
+  training_images_count: number | null;
+  runpod_job_id: string | null;
   storage_url: string | null;
 }
 
 const rowToModel = (row: LoraRow): LoraModel => ({
   id: row.id,
   name: row.name,
+  trigger_word: row.trigger_word,
   triggerWord: row.trigger_word,
   status: row.status as LoraStatus,
+  created_at: row.created_at,
   createdAt: new Date(row.created_at).getTime(),
+  file_size_bytes: row.file_size_bytes ?? undefined,
   fileSize: row.file_size_bytes ?? undefined,
+  error_message: row.error_message ?? undefined,
   errorMessage: row.error_message ?? undefined,
+  training_progress: row.training_progress ?? undefined,
   trainingProgress: row.training_progress ?? undefined,
+  training_images_count: row.training_images_count ?? 0,
 });
 
 // ---------------------------------------------------------------------------
@@ -96,7 +103,7 @@ class LoraModelServiceImpl implements LoraModelService {
       const { data: images, error: selectError } = await supabase
         .from('lora_training_images' as AnyRecord)
         .select('storage_path')
-        .eq('lora_model_id', loraId);
+        .eq('lora_id', loraId);
 
       if (selectError) {
         logger.warn('LoraService', 'Failed to fetch training images for deletion', selectError);
@@ -192,19 +199,20 @@ class LoraModelServiceImpl implements LoraModelService {
       const { data: images, error: imagesError } = await supabase
         .from('lora_training_images' as AnyRecord)
         .select('storage_path')
-        .eq('lora_model_id', loraId);
+        .eq('lora_id', loraId);
 
       if (imagesError || !images?.length) {
         throw new Error('No training images found for this LoRA model');
       }
 
-      // Get public URLs for images
-      const imageUrls = ((images as unknown) as Array<{ storage_path: string }>).map((img) => {
-        const { data } = supabase.storage
+      // Get signed URLs for images (bucket is private)
+      const imageUrls: string[] = [];
+      for (const img of (images as unknown) as Array<{ storage_path: string }>) {
+        const { data } = await supabase.storage
           .from('lora-training-images')
-          .getPublicUrl(img.storage_path);
-        return data.publicUrl;
-      });
+          .createSignedUrl(img.storage_path, 7200); // 2 hour expiry
+        if (data?.signedUrl) imageUrls.push(data.signedUrl);
+      }
 
       // Submit RunPod training job
       const workflowInput = {
@@ -245,7 +253,7 @@ class LoraModelServiceImpl implements LoraModelService {
         .from('lora_models' as AnyRecord)
         .update({
           status: 'training',
-          training_job_id: jobId,
+          runpod_job_id: jobId,
         } as AnyRecord)
         .eq('id', loraId);
 
@@ -313,10 +321,9 @@ class LoraModelServiceImpl implements LoraModelService {
 
         // Record in DB
         const { error: insertError } = await supabase.from('lora_training_images' as AnyRecord).insert({
-          lora_model_id: loraId,
+          lora_id: loraId,
           storage_path: storagePath,
           original_filename: file.name,
-          file_size: file.size,
         } as AnyRecord);
 
         if (insertError) {
@@ -367,20 +374,38 @@ class LoraModelServiceImpl implements LoraModelService {
 
       const job = await response.json();
       const status = job.status;
-      const progress = job.output?.progress || 0;
+      // RunPod serverless doesn't stream progress; estimate from status + poll attempt
+      const estimatedProgress = status === 'IN_QUEUE' ? 5
+        : status === 'IN_PROGRESS' ? Math.min(10 + Math.round((attempt / MAX_POLL_ATTEMPTS) * 80), 90)
+        : job.output?.progress || 0;
 
       // Update progress in database
       await supabase
         .from('lora_models' as AnyRecord)
-        .update({ training_progress: Math.round(progress) } as AnyRecord)
+        .update({ training_progress: Math.round(estimatedProgress) } as AnyRecord)
         .eq('id', loraId);
 
-      if (status === 'COMPLETED' && job.output?.success) {
-        const modelUrl = job.output.model_url;
+      if (status === 'COMPLETED' && (job.output?.status === 'completed' || job.output?.success)) {
+        const modelUrl = job.output.lora_url || job.output.model_url;
         if (!modelUrl) throw new Error('No model URL in output');
+        const fileSize = job.output.file_size || 0;
 
-        await this.downloadAndStoreModel(loraId, modelUrl);
-        logger.info('LoraService', 'Training completed', { loraId });
+        // Store R2 URL directly in DB (no re-upload needed)
+        const { error: updateError } = await supabase
+          .from('lora_models' as AnyRecord)
+          .update({
+            status: 'ready',
+            storage_url: modelUrl,
+            file_size_bytes: fileSize,
+            training_progress: 100,
+          } as AnyRecord)
+          .eq('id', loraId);
+
+        if (updateError) {
+          logger.error('LoraService', 'Failed to update model status', updateError);
+        }
+
+        logger.info('LoraService', 'Training completed', { loraId, modelUrl });
         return;
       }
 

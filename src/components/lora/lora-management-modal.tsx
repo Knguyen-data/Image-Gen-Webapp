@@ -677,11 +677,14 @@ const LoraManagementModal: React.FC<LoraManagementModalProps> = ({ isOpen, onClo
                           {lora.status === 'training' && (
                             <div className="mt-2">
                               <div className="w-full h-1.5 bg-zinc-800 rounded-full overflow-hidden">
-                                <div className="h-full bg-gradient-to-r from-violet-600 to-violet-400 rounded-full animate-pulse" style={{ width: '60%' }} />
+                                <div
+                                  className={`h-full bg-gradient-to-r from-violet-600 to-violet-400 rounded-full transition-all duration-500 ${(lora.training_progress ?? 0) === 0 ? 'animate-pulse' : ''}`}
+                                  style={{ width: `${Math.max(lora.training_progress ?? 5, 5)}%` }}
+                                />
                               </div>
                               <p className="text-[10px] text-zinc-500 mt-1 flex items-center gap-1">
                                 <Clock className="w-3 h-3" />
-                                Training in progress…
+                                Training in progress… {(lora.training_progress ?? 0) > 0 ? `${lora.training_progress}%` : ''}
                               </p>
                             </div>
                           )}
