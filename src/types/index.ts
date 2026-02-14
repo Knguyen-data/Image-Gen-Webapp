@@ -4,7 +4,51 @@ export type ImageSize = '1K' | '2K' | '4K'; // Gemini 3 Pro supports up to 4K
 export type AppMode = 'image' | 'video' | 'editing';
 export type FixedBlockPosition = 'top' | 'bottom';
 
-export type VideoModel = 'kling-2.6' | 'kling-2.6-pro' | 'kling-3' | 'kling-3-omni' | 'veo-3.1';
+export type VideoModel = 'kling-2.6' | 'kling-2.6-pro' | 'kling-3' | 'kling-3-omni' | 'veo-3.1' | 'director';
+
+// Director Pipeline Types
+export type DirectorMode = 't2v' | 'i2v' | 'clone';
+export type DirectorStyle = 'cinematic' | 'anime' | 'documentary' | 'music-video' | 'film-noir' | 'custom';
+export type DirectorPhaseStatus = 'pending' | 'active' | 'done' | 'error';
+
+export interface DirectorSettings {
+  mode: DirectorMode;
+  style: DirectorStyle;
+  customStyle?: string;
+  targetDuration: number; // seconds
+  resolution: { width: number; height: number };
+  nsfw: boolean;
+  generateAudio: boolean;
+  consistencyCheck: boolean;
+  consistencyThreshold: number; // 50-95
+  maxParallel: number; // 1-5
+  fps: number;
+}
+
+export interface DirectorPhase {
+  phase: number;
+  name: string;
+  status: DirectorPhaseStatus;
+  detail?: string;
+  timeSec?: number;
+}
+
+export interface DirectorPipelineState {
+  jobId: string | null;
+  status: 'idle' | 'submitting' | 'running' | 'completed' | 'failed' | 'cancelled';
+  phases: DirectorPhase[];
+  result?: {
+    videoBase64: string;
+    duration: number;
+    shots: number;
+    consistencyAvg: number;
+    cost: number;
+    timings: Record<string, number>;
+  };
+  error?: string;
+  startedAt?: number;
+  characterImages: string[]; // base64 refs
+}
 export type KlingProvider = 'freepik' | 'kieai';
 
 export interface ReferenceImage {
@@ -141,21 +185,16 @@ export type LoraModelStatus = LoraStatus;
 export interface LoraModel {
   id: string;
   name: string;
-  trigger_word?: string; // DB column name
   triggerWord?: string;
   status: LoraStatus;
-  created_at?: string; // DB column name
   createdAt?: number;
-  file_size_bytes?: number; // DB column name
   fileSize?: number;
-  error_message?: string; // DB column name
   errorMessage?: string;
-  training_progress?: number; // DB column name
   trainingProgress?: number;
-  training_images_count?: number;
-  training_job_id?: string;
-  storage_url?: string;
-  user_id?: string;
+  trainingImagesCount?: number;
+  trainingJobId?: string;
+  storageUrl?: string;
+  userId?: string;
 }
 
 export interface LoraTrainingConfig {
@@ -212,6 +251,8 @@ export interface GeneratedVideo {
   status: 'pending' | 'generating' | 'success' | 'failed';
   error?: string;
   provider?: KlingProvider;
+  aspectRatio?: string; // Video aspect ratio for ZIP metadata
+  r2Url?: string; // R2 Storage URL for persistent access
   // AMT Interpolation result
   isInterpolated?: boolean;
   originalVideoId?: string; // Reference to source video if this is an interpolated result
@@ -228,7 +269,7 @@ export type Kling3OmniInputMode = 'text-to-video' | 'image-to-video' | 'video-to
 
 // Kling 3 image_list item
 export interface Kling3ImageListItem {
-  image_url: string;
+  imageUrl: string;
   type: 'first_frame' | 'end_frame';
 }
 
@@ -241,8 +282,8 @@ export interface Kling3MultiPromptItem {
 
 // Kling 3 Omni element definition
 export interface Kling3Element {
-  reference_image_urls: string[];
-  frontal_image_url?: string;
+  referenceImageUrls: string[];
+  frontalImageUrl?: string;
 }
 
 // Unified Video Settings (Kling 2.6 + Kling 3)
