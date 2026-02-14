@@ -11,7 +11,7 @@ import { BatchActionsToolbar } from './components/batch-actions-toolbar';
 const VideoEditorModalCapCutStyle = lazy(() => import('./components/video-editor/video-editor-modal-capcut-style'));
 const SettingsPage = lazy(() => import('./components/settings-page'));
 const ModifyImageModal = lazy(() => import('./components/modify-image-modal'));
-const CompareModal = lazy(() => import('./components/compare-modal').then(m => ({ default: m.default })));
+const CompareModal = lazy(() => import('./components/compare-modal').then(m => ({ default: m.CompareModal })));
 const SaveCollectionModal = lazy(() => import('./components/save-collection-modal').then(m => ({ default: m.SaveCollectionModal })));
 const SavePayloadDialog = lazy(() => import('./components/save-payload-dialog').then(m => ({ default: m.SavePayloadDialog })));
 const SavedPayloadsPage = lazy(() => import('./components/saved-payloads-page').then(m => ({ default: m.SavedPayloadsPage })));
@@ -1707,7 +1707,7 @@ INSTRUCTIONS:
       addLog({ level: 'success', message: `Downloaded ${selectedVideos.length} videos as ZIP` });
     } catch (error) {
       logger.error('ZipDownload', 'Failed to create ZIP', { error });
-      addLog({ type: 'error', message: 'Failed to create ZIP file' });
+      addLog({ level: 'error', message: 'Failed to create ZIP file' });
     }
   }
 
@@ -1752,7 +1752,7 @@ INSTRUCTIONS:
     }
 
     setUploadProgress(null);
-    addLog({ type: 'success', message: `Uploaded ${completed - skipped}/${total} videos to R2 (${skipped} already uploaded)` });
+    addLog({ level: 'success', message: `Uploaded ${completed - skipped}/${total} videos to R2 (${skipped} already uploaded)` });
   }
 
   async function handleSaveCollection(name: string, description: string, tags: string[]) {
@@ -1767,12 +1767,12 @@ INSTRUCTIONS:
         tags,
       });
 
-      addLog({ type: 'success', message: 'Collection saved' });
+      addLog({ level: 'success', message: 'Collection saved' });
       setShowSaveCollectionModal(false);
       clearSelection();
     } catch (error) {
       logger.error('SaveCollection', 'Failed to save collection', { error });
-      addLog({ type: 'error', message: 'Failed to save collection' });
+      addLog({ level: 'error', message: 'Failed to save collection' });
     }
   }
 
@@ -2836,3 +2836,4 @@ const App: React.FC = () => {
 };
 
 export default App;
+

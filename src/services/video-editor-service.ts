@@ -577,6 +577,16 @@ class VideoEditorService {
   }
 
   /**
+   * Set a fixed composition duration in seconds.
+   * Useful for extending the timeline beyond the last clip.
+   * Note: setter exists at runtime per docs but isn't in d.ts
+   */
+  setDuration(seconds: number): void {
+    if (!this.composition) throw new Error('No project created');
+    (this.composition as any).duration = `${seconds}s`;
+  }
+
+  /**
    * Check if playing
    */
   get playing(): boolean {

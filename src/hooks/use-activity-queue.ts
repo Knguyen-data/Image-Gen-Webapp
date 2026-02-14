@@ -12,7 +12,7 @@ export interface ActivityJob {
 
 export interface ActivityLog {
   timestamp: number;
-  level: 'info' | 'warn' | 'error';
+  level: 'info' | 'warn' | 'error' | 'success';
   message: string;
   jobId?: string;
 }

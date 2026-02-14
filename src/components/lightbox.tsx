@@ -1,5 +1,5 @@
 import React from 'react';
-import { GeneratedImage } from '../../types';
+import { GeneratedImage } from '../types';
 
 interface LightboxProps {
   image: GeneratedImage | null;
@@ -83,3 +83,4 @@ export const ImageLightbox: React.FC<LightboxProps> = ({
 };
 
 export default ImageLightbox;
+

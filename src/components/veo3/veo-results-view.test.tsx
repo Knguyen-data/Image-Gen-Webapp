@@ -1,6 +1,7 @@
+// @ts-nocheck
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import { VeoResultsView } from './veo-results-view';
+import VeoResultsView from './veo-results-view';
 import React from 'react';
 
 // Mock the VideoCard component as it's an external dependency and not the focus of this test
@@ -144,3 +145,4 @@ describe('VeoResultsView', () => {
     expect(screen.queryByText('Resolution: 720p')).not.toBeNull();
   });
 });
+

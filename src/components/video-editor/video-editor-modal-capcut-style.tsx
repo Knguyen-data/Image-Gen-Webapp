@@ -337,12 +337,18 @@ const VideoEditorModalCapCutStyle: React.FC<VideoEditorModalProps> = ({
   };
 
   // Timeline scrub: convert mouse X to time and seek
+  // Allows scrubbing beyond current duration to extend the composition
   const scrubFromEvent = useCallback((e: MouseEvent | React.MouseEvent) => {
     const contentEl = timelineContentRef.current;
     if (!contentEl) return;
     const rect = contentEl.getBoundingClientRect();
     const x = e.clientX - rect.left + contentEl.scrollLeft;
-    const time = Math.max(0, Math.min(x / pixelsPerSecond, duration));
+    const time = Math.max(0, x / pixelsPerSecond);
+    // If scrubbing beyond current duration, extend the composition
+    if (time > duration && time > 0) {
+      videoEditorService.setDuration(time);
+      setDuration(time);
+    }
     videoEditorService.seek(time);
     setCurrentTime(time);
   }, [pixelsPerSecond, duration]);

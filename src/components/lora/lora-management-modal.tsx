@@ -666,7 +666,7 @@ const LoraManagementModal: React.FC<LoraManagementModalProps> = ({ isOpen, onClo
                               </>
                             )}
                             <span>•</span>
-                            <span>{formatDate(lora.createdAt)}</span>
+                            <span>{formatDate(String(lora.createdAt))}</span>
                           </div>
                           {lora.status === 'failed' && lora.errorMessage && (
                             <p className="text-[11px] text-red-400/80 mt-1.5 flex items-start gap-1">
@@ -678,13 +678,13 @@ const LoraManagementModal: React.FC<LoraManagementModalProps> = ({ isOpen, onClo
                             <div className="mt-2">
                               <div className="w-full h-1.5 bg-zinc-800 rounded-full overflow-hidden">
                                 <div
-                                  className={`h-full bg-gradient-to-r from-violet-600 to-violet-400 rounded-full transition-all duration-500 ${(lora.training_progress ?? 0) === 0 ? 'animate-pulse' : ''}`}
-                                  style={{ width: `${Math.max(lora.training_progress ?? 5, 5)}%` }}
+                                  className={`h-full bg-gradient-to-r from-violet-600 to-violet-400 rounded-full transition-all duration-500 ${(lora.trainingProgress ?? 0) === 0 ? 'animate-pulse' : ''}`}
+                                  style={{ width: `${Math.max(lora.trainingProgress ?? 5, 5)}%` }}
                                 />
                               </div>
                               <p className="text-[10px] text-zinc-500 mt-1 flex items-center gap-1">
                                 <Clock className="w-3 h-3" />
-                                Training in progress… {(lora.training_progress ?? 0) > 0 ? `${lora.training_progress}%` : ''}
+                                Training in progress… {(lora.trainingProgress ?? 0) > 0 ? `${lora.trainingProgress}%` : ''}
                               </p>
                             </div>
                           )}
@@ -798,3 +798,4 @@ const LoraManagementModal: React.FC<LoraManagementModalProps> = ({ isOpen, onClo
 };
 
 export default LoraManagementModal;
+

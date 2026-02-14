@@ -159,13 +159,13 @@ export function useVideoGeneration(opts: UseVideoGenerationOptions): UseVideoGen
             if (startImage) {
                 onProgress?.('Uploading start frame...');
                 const startUrl = await uploadBase64ToR2(startImage.base64, startImage.mimeType);
-                imageList = [{ image_url: startUrl, type: 'first_frame' }];
+                imageList = [{ imageUrl: startUrl, type: 'first_frame' }];
             }
             if (endImage) {
                 onProgress?.('Uploading end frame...');
                 const endUrl = await uploadBase64ToR2(endImage.base64, endImage.mimeType);
                 if (!imageList) imageList = [];
-                imageList.push({ image_url: endUrl, type: 'end_frame' });
+                imageList.push({ imageUrl: endUrl, type: 'end_frame' });
             }
 
             const result = await createAndPollWithRetry(

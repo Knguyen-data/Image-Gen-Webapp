@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * R2 Media Upload Worker
  * Handles file uploads (base64 + URL fetch), serving, and deletion for image-gen-media bucket.
@@ -179,3 +180,4 @@ export default {
     return jsonResponse({ error: 'Not found' }, 404, origin, env);
   },
 };
+

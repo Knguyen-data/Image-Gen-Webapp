@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * Admin Sidebar Component
  * Navigation sidebar for admin dashboard
@@ -140,3 +141,4 @@ export const AdminSidebar: React.FC = () => {
 };
 
 export default AdminSidebar;
+

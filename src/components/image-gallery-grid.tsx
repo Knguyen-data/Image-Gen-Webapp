@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Run, GeneratedImage } from '../../types';
+import { Run, GeneratedImage } from '../types';
 import ImageCard from './image-card';
 
 interface ImageGalleryGridProps {
@@ -105,3 +105,4 @@ export const ImageGalleryGrid: React.FC<ImageGalleryGridProps> = ({
 };
 
 export default ImageGalleryGrid;
+

@@ -117,6 +117,13 @@ export const DEFAULT_UNIFIED_VIDEO_SETTINGS: UnifiedVideoSettings = {
   klingCfgScale: 0.5,
   klingProNegativePrompt: '',
   klingProGenerateAudio: false,
+  // Kling 3 defaults
+  kling3AspectRatio: '16:9',
+  kling3Duration: 5,
+  kling3CfgScale: 0.5,
+  kling3NegativePrompt: '',
+  kling3GenerateAudio: false,
+  kling3OmniInputMode: 'text-to-video',
 };
 
 // Maximum reference images per prompt

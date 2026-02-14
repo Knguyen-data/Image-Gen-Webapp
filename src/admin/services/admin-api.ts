@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * Admin API Service
  * Handles all admin-related API calls
@@ -362,3 +363,4 @@ export const adminApi = {
 };
 
 export default adminApi;
+

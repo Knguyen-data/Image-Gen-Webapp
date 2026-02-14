@@ -1,5 +1,5 @@
 import React from 'react';
-import { AppMode } from '../../types';
+import { AppMode } from '../types';
 import { ImagePlus, Video, Clapperboard } from 'lucide-react';
 
 interface GalleryToolbarProps {
@@ -108,3 +108,4 @@ export const GalleryToolbar: React.FC<GalleryToolbarProps> = ({
 };
 
 export default GalleryToolbar;
+

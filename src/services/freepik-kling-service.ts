@@ -310,9 +310,9 @@ export const createKling3Task = async (
   if (options.imageList && options.imageList.length > 0) {
     for (const img of options.imageList) {
       if (img.type === 'first_frame') {
-        body.start_image_url = img.image_url;
+        body.start_image_url = img.imageUrl;
       } else if (img.type === 'end_frame') {
-        body.end_image_url = img.image_url;
+        body.end_image_url = img.imageUrl;
       }
     }
   }
