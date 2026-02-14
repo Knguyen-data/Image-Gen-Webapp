@@ -5,7 +5,7 @@ import VideoCard from './video-card';
 import StockGallery from './stock-gallery/stock-gallery';
 import { saveAndRevealVideo } from '../services/video-file-service';
 import JSZip from 'jszip';
-import { Panel, PanelGroup as Group, PanelResizeHandle as Separator } from 'react-resizable-panels';
+import { Panel, Group, Separator } from 'react-resizable-panels';
 import {
   ImagePlus,
   Video,
@@ -281,10 +281,10 @@ const EditingWorkspace: React.FC<EditingWorkspaceProps> = ({ allImages, generate
 
       {/* Main content with resizable panels */}
       <div className="flex-1 overflow-hidden">
-        <Group direction="vertical" className="h-full">
+        <Group orientation="vertical" className="h-full">
           {/* Top section: Asset tray + Preview + Properties */}
           <Panel defaultSize={65} minSize={40}>
-            <Group direction="horizontal" className="h-full">
+            <Group orientation="horizontal" className="h-full">
               {/* Left Panel: Asset Tray */}
               {!leftCollapsed && (
                 <>
