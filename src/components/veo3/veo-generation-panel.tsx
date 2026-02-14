@@ -1,6 +1,7 @@
 import React, { useState, useCallback } from "react";
 import {
   ReferenceImage,
+  VideoScene,
   VeoGenerationType,
   VeoModel,
   VeoAspectRatio,
@@ -9,6 +10,8 @@ import { VeoFrameZones, VeoMaterialZone } from "./veo-image-upload";
 import VeoSettingsPanel, { VeoSettings } from "./veo-settings-panel";
 import VeoResultsView from "./veo-results-view";
 import { VeoTaskResult } from "./veo-results-view-types";
+import BulkInputModal from '../bulk-input-modal';
+import PromptEnhanceButton from '../prompt-enhance-button';
 
 // ============ Validation ============
 
@@ -119,6 +122,12 @@ interface VeoGenerationPanelProps {
   onGet4k?: (taskId: string) => void;
   onExtend?: (taskId: string) => void;
   isUpgrading?: boolean;
+  /** Optional scenes from the main queue to allow quick import */
+  scenes?: VideoScene[];
+  /** Callback to update scenes in parent state */
+  setScenes?: (scenes: VideoScene[]) => void;
+  /** Gemini API key for prompt enhancement */
+  geminiApiKey?: string;
 }
 
 const VeoGenerationPanel: React.FC<VeoGenerationPanelProps> = ({
@@ -130,6 +139,9 @@ const VeoGenerationPanel: React.FC<VeoGenerationPanelProps> = ({
   onGet4k,
   onExtend,
   isUpgrading,
+  scenes = [],
+  setScenes,
+  geminiApiKey = '',
 }) => {
   // Generation mode
   const [mode, setMode] = useState<VeoGenerationType>("TEXT_2_VIDEO");
@@ -213,6 +225,49 @@ const VeoGenerationPanel: React.FC<VeoGenerationPanelProps> = ({
     setErrors([]);
   };
 
+  const handleBulkProcess = (lines: string[]) => {
+    if (lines.length === 0) return;
+    
+    // Process prompts in bulk
+    const queue = lines.filter(l => l.trim().length >= 10);
+    if (queue.length === 0) {
+      alert("Prompts must be at least 10 characters.");
+      return;
+    }
+
+    // Auto-generate for each prompt in the bulk list
+    const generateAll = async () => {
+      for (const p of queue) {
+        onGenerate({
+          mode,
+          prompt: p,
+          settings,
+          startImage: mode === "FIRST_AND_LAST_FRAMES_2_VIDEO" ? startImage : undefined,
+          endImage: mode === "FIRST_AND_LAST_FRAMES_2_VIDEO" ? endImage : undefined,
+          materials: mode === "REFERENCE_2_VIDEO" ? materials : undefined,
+        });
+        // Tiny delay to ensure timestamps/IDs are unique and UI remains fluid
+        await new Promise(r => setTimeout(r, 200));
+      }
+    };
+
+    generateAll();
+    setIsBulkModalOpen(false);
+  };
+
+  const handleSceneToVeo = (scene: VideoScene) => {
+    // Inject scene into the current Veo form
+    setPrompt(scene.prompt);
+    if (mode === "FIRST_AND_LAST_FRAMES_2_VIDEO" && scene.referenceImage) {
+      setStartImage(scene.referenceImage);
+    }
+    // Note: materials mode requires manual 1-3 image selection 
+    // but we'll put the first one in just in case it's helpful
+    if (mode === "REFERENCE_2_VIDEO" && scene.referenceImage) {
+      setMaterials([scene.referenceImage]);
+    }
+  };
+
   // Get error for a specific field
   const fieldError = (field: string) =>
     errors.find((e) => e.field === field)?.message;
@@ -233,13 +288,55 @@ const VeoGenerationPanel: React.FC<VeoGenerationPanelProps> = ({
       },
     ];
 
+  const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
+
   return (
     <>
+      <BulkInputModal
+        isOpen={isBulkModalOpen}
+        onClose={() => setIsBulkModalOpen(false)}
+        onProcess={handleBulkProcess}
+      />
+
       {/* 1. Mode Selection */}
       <div className="px-6 py-4 border-b border-gray-800">
-        <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2 block">
-          Generation Mode
-        </label>
+        <div className="flex justify-between items-center mb-2">
+          <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
+            Generation Mode
+          </label>
+          <div className="flex gap-2">
+            <button 
+              onClick={() => setIsBulkModalOpen(true)}
+              className="text-[10px] bg-gray-800 hover:bg-gray-700 text-gray-300 px-2 py-1 rounded border border-gray-700 transition-colors flex items-center gap-1"
+            >
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+              Bulk
+            </button>
+            <button 
+              onClick={() => {
+                const finalPrompt = prompt.trim();
+                if (!finalPrompt) {
+                  alert("Please enter a prompt first.");
+                  return;
+                }
+                const newScene: VideoScene = { 
+                  id: crypto.randomUUID(), 
+                  prompt: finalPrompt, 
+                  referenceImage: startImage,
+                  usePrompt: true 
+                };
+                if (setScenes) {
+                  setScenes([...scenes, newScene]);
+                  setPrompt(""); // Clear after adding to queue
+                }
+              }}
+              className="text-[10px] bg-dash-900/20 hover:bg-dash-900/40 text-dash-300 px-2 py-1 rounded border border-dash-700/50 transition-colors flex items-center gap-1 shadow-sm active:scale-95"
+            >
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" /></svg>
+              Queue
+            </button>
+          </div>
+        </div>
         <div className="flex gap-2">
           {modeTabs.map((tab) => (
             <button
@@ -298,11 +395,53 @@ const VeoGenerationPanel: React.FC<VeoGenerationPanelProps> = ({
         </>
       )}
 
+      {/* Quick Queue Import */}
+      {scenes.length > 0 && (
+        <div className="px-6 py-2 border-b border-gray-800">
+          <label className="text-[10px] font-semibold text-gray-500 uppercase tracking-widest block mb-2">
+            Import from Scene Queue
+          </label>
+          <div className="flex gap-2 overflow-x-auto pb-2 custom-scrollbar no-scrollbar">
+            {scenes.map((scene, idx) => (
+              <button
+                key={scene.id}
+                onClick={() => handleSceneToVeo(scene)}
+                className="flex-shrink-0 w-12 h-12 rounded-lg border border-gray-800 overflow-hidden hover:border-dash-500/50 transition-all relative group"
+                title={scene.prompt}
+              >
+                {scene.referenceImage ? (
+                  <img src={scene.referenceImage.previewUrl} className="w-full h-full object-cover opacity-60 group-hover:opacity-100" />
+                ) : (
+                  <div className="w-full h-full bg-gray-950 flex items-center justify-center text-[10px] text-gray-600">
+                    {idx + 1}
+                  </div>
+                )}
+                <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 bg-black/40">
+                  <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
+                  </svg>
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* 3. Prompt */}
       <div className="px-6 py-4 border-b border-gray-800 space-y-2">
-        <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
-          Video Prompt
-        </label>
+        <div className="flex items-center justify-between">
+          <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
+            Video Prompt
+          </label>
+          <PromptEnhanceButton
+            prompt={prompt}
+            onEnhance={setPrompt}
+            target="veo-3.1"
+            apiKey={geminiApiKey}
+            referenceImage={startImage ? { base64: startImage.base64, mimeType: startImage.mimeType } : undefined}
+            disabled={isGenerating}
+          />
+        </div>
         <textarea
           className={`w-full bg-gray-950 border rounded-lg p-3 text-sm text-gray-200 resize-y min-h-[80px] focus:ring-1 focus:ring-dash-400 focus:border-dash-500/50 transition-all placeholder:text-gray-600 ${
             fieldError("prompt") ? "border-red-500/50" : "border-gray-700"

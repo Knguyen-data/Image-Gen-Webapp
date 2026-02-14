@@ -16,6 +16,8 @@ import LoraSelector from './lora/lora-selector';
 import LoraManagementModal from './lora/lora-management-modal';
 import type { LoraModel } from '../types';
 import { supabase } from '../services/supabase';
+import PromptEnhanceButton from './prompt-enhance-button';
+import { imageModelToTarget } from '../services/prompt-enhance-service';
 
 interface LeftPanelProps {
   prompts: PromptItem[];
@@ -1539,21 +1541,64 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
                 onVideoGenerate={onVideoGenerate}
                 isGenerating={isGenerating}
                 handleImageUpload={handleImageUpload}
+                geminiApiKey={geminiApiKey}
               />
             )}
 
             {/* ----- VEO 3.1 CONTENT ----- */}
             {selectedVideoModel === 'veo-3.1' && onVeoGenerate && (
-              <VeoGenerationPanel
-                handleImageUpload={handleImageUpload}
-                onGenerate={onVeoGenerate}
-                isGenerating={isGenerating}
-                taskResult={veoTaskResult}
-                onGet1080p={onVeoGet1080p}
-                onGet4k={onVeoGet4k}
-                onExtend={onVeoExtend}
-                isUpgrading={isVeoUpgrading}
-              />
+              <>
+                {/* Scene Queue for Veo */}
+                <div className="px-6 py-4 border-b border-gray-800">
+                  <VideoSceneQueue
+                    scenes={videoScenes}
+                    setScenes={setVideoScenes}
+                    videoSettings={videoSettings as any}
+                    setVideoSettings={setVideoSettings as any}
+                    onOpenVideoTrimmer={handleOpenVideoTrimmer}
+                    appMode={appMode}
+                    onGenerate={() => {
+                      // Filter out empty scenes
+                      const validScenes = videoScenes.filter(s => s.prompt?.trim());
+                      if (validScenes.length === 0) {
+                        alert("Add at least one scene with a prompt to the queue.");
+                        return;
+                      }
+
+                      // Trigger batch generation
+                      validScenes.forEach(scene => {
+                        onVeoGenerate({
+                          mode: scene.referenceImage ? 'FIRST_AND_LAST_FRAMES_2_VIDEO' : 'TEXT_2_VIDEO',
+                          prompt: scene.prompt,
+                          settings: {
+                            model: 'veo3_fast',
+                            aspectRatio: '16:9',
+                            enableTranslation: true
+                          },
+                          startImage: scene.referenceImage
+                        });
+                      });
+                    }}
+                    isGenerating={isGenerating}
+                    hideReferenceVideo
+                    geminiApiKey={geminiApiKey}
+                  />
+                </div>
+
+                <VeoGenerationPanel
+                  handleImageUpload={handleImageUpload}
+                  onGenerate={onVeoGenerate}
+                  isGenerating={isGenerating}
+                  taskResult={veoTaskResult}
+                  onGet1080p={onVeoGet1080p}
+                  onGet4k={onVeoGet4k}
+                  onExtend={onVeoExtend}
+                  isUpgrading={isVeoUpgrading}
+                  scenes={videoScenes}
+                  setScenes={setVideoScenes}
+                  geminiApiKey={geminiApiKey}
+                />
+              </>
             )}
           </>
         )}
@@ -1674,6 +1719,23 @@ const LeftPanel: React.FC<LeftPanelProps> = ({
                           onFocus={() => setActivePromptIndex(index)}
           
                         />
+
+                        {/* Enhance button */}
+                        <div className="px-3 pt-1 flex justify-end">
+                          <PromptEnhanceButton
+                            prompt={pItem.text}
+                            onEnhance={(enhanced) => updatePromptText(index, enhanced)}
+                            target={imageModelToTarget(
+                              safeSettings.spicyMode?.enabled
+                                ? (safeSettings.spicyMode.subMode === 'extreme' ? 'extreme' : 'spicy')
+                                : (appMode === 'image' ? 'gemini' : 'gemini')
+                            )}
+                            apiKey={geminiApiKey}
+                            referenceImage={pItem.referenceImages[0] ? { base64: pItem.referenceImages[0].base64, mimeType: pItem.referenceImages[0].mimeType } : undefined}
+                            disabled={isGenerating}
+                            size="sm"
+                          />
+                        </div>
 
                         {/* Mode-specific drop zone guidance */}
                         {(() => {

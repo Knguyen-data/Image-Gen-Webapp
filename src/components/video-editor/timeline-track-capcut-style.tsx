@@ -110,6 +110,20 @@ const TimelineTrackCapCutStyle: React.FC<TimelineTrackCapCutStyleProps> = ({
         ))}
       </div>
 
+      {/* Snap guide lines at clip boundaries */}
+      {layer.clips.map((clip) => (
+        <React.Fragment key={`snap-${clip.id}`}>
+          <div
+            className="absolute top-0 bottom-0 w-px bg-slate-500/20 pointer-events-none z-0"
+            style={{ left: `${clip.startSec * pixelsPerSecond}px` }}
+          />
+          <div
+            className="absolute top-0 bottom-0 w-px bg-slate-500/20 pointer-events-none z-0"
+            style={{ left: `${clip.endSec * pixelsPerSecond}px` }}
+          />
+        </React.Fragment>
+      ))}
+
       {layer.clips.map((clip) => {
         const isSelected = selectedClipId === clip.id;
         const isDragOver = dragOverClipId === clip.id;
@@ -146,7 +160,13 @@ const TimelineTrackCapCutStyle: React.FC<TimelineTrackCapCutStyleProps> = ({
                   ? 'bg-gradient-to-r from-violet-600 to-indigo-600'
                   : clip.type === 'broll'
                     ? 'bg-gradient-to-r from-cyan-600 to-teal-600'
-                    : 'bg-gradient-to-r from-amber-600 to-orange-600'
+                    : clip.type === 'audio'
+                      ? 'bg-gradient-to-r from-orange-600 to-amber-600'
+                      : clip.type === 'text'
+                        ? 'bg-gradient-to-r from-pink-600 to-rose-600'
+                        : clip.type === 'image'
+                          ? 'bg-gradient-to-r from-emerald-600 to-green-600'
+                          : 'bg-gradient-to-r from-amber-600 to-orange-600'
                 }`}
             >
               {/* Clip label */}

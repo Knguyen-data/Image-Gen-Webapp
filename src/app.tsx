@@ -1903,6 +1903,25 @@ INSTRUCTIONS:
     const jobId = addJob({ type: 'video', status: 'active', prompt: params.prompt.slice(0, 50) });
     addLog({ level: 'info', message: `Starting Veo 3.1 ${params.mode} generation`, jobId });
 
+    // 0. Create instant placeholder in main gallery
+    const placeholderId = `video-${Date.now()}-veo-pending`;
+    const placeholder: GeneratedVideo = {
+      id: placeholderId,
+      sceneId: 'veo3-direct',
+      url: '', duration: 0,
+      prompt: params.prompt,
+      createdAt: Date.now(),
+      status: 'generating',
+    };
+    
+    // Add to state
+    setGeneratedVideos(prev => [placeholder, ...prev]);
+    
+    // PERSIST placeholder to IndexedDB so it survives a refresh during polling
+    saveGeneratedVideoToDB(placeholder).catch(e => 
+      logger.warn('App', 'Failed to persist placeholder to DB', e)
+    );
+
     // 1. Create persistent request FIRST
     const requestId = await requestManager.createRequest('veo', params);
 
@@ -1976,16 +1995,38 @@ INSTRUCTIONS:
       await requestManager.updateTaskId(requestId, taskId);
 
       setVeoTaskResult({ taskId, status: 'generating', progress: 'Generating video...' });
+      
+      // Update gallery card with task ID so it's not "lost" if user switches modes
+      setGeneratedVideos(prev => prev.map(v => 
+        v.id === placeholderId ? { ...v, taskId } : v
+      ));
 
-      // Poll for completion with retries
-      const pollResult = await pollVeoTask(kieApiKey, taskId, async (status, attempt) => {
-        setVeoTaskResult(prev => prev ? {
-          ...prev,
-          progress: `${status} (${attempt + 1}/180)`,
-        } : prev);
-        // 3. Update progress during polling
-        await requestManager.updateProgress(requestId, `${status} (${attempt + 1}/180)`);
+      // RELEASE THE UI: Mark generating as false so the user can prompt again
+      setIsGenerating(false);
+
+    // 2. Poll for completion with retries
+    const pollResult = await pollVeoTask(kieApiKey, taskId, async (status, attempt) => {
+      setVeoTaskResult(prev => prev ? {
+        ...prev,
+        taskId, // Ensure taskId is preserved during polling
+        status: 'polling',
+        progress: `${status} (${attempt + 1}/180)`,
+      } : {
+        taskId,
+        status: 'polling',
+        progress: `${status} (${attempt + 1}/180)`,
       });
+      
+      // Update the gallery card status message NON-BLOCKING
+      setGeneratedVideos(prev => prev.map(v => 
+        v.id === placeholderId ? { ...v, statusMessage: `${status} (${attempt + 1}/180)` } : v
+      ));
+
+      // 3. Update progress during polling (async, don't await if it's blocking UI)
+      requestManager.updateProgress(requestId, `${status} (${attempt + 1}/180)` || '').catch(err => 
+        logger.warn('App', 'Failed to update request manager progress', err)
+      );
+    });
 
       // Success — extract video URLs
       const videoUrls = pollResult.data.response?.resultUrls || [];
@@ -2007,18 +2048,28 @@ INSTRUCTIONS:
           resolution,
         });
 
-        // Also save to generatedVideos for gallery
-        const video: GeneratedVideo = {
-          id: `video-${Date.now()}-veo3`,
+        // Update the existing placeholder card with the final result
+        setGeneratedVideos(prev => prev.map(v => 
+          v.id === placeholderId ? {
+            ...v,
+            url: finalUrl,
+            status: 'success' as const,
+            statusMessage: undefined,
+            taskId // Persist task ID in gallery card
+          } : v
+        ));
+
+        // Persist the updated video to DB
+        const finalVideo = {
+          id: placeholderId,
           sceneId: 'veo3-direct',
           url: finalUrl,
           duration: 0,
           prompt: params.prompt,
           createdAt: Date.now(),
-          status: 'success',
+          status: 'success' as const,
         };
-        setGeneratedVideos(prev => [video, ...prev]);
-        saveGeneratedVideoToDB(video).catch(e =>
+        saveGeneratedVideoToDB(finalVideo).catch(e =>
           logger.warn('App', 'Failed to persist Veo video to IndexedDB', e)
         );
 
@@ -2037,11 +2088,23 @@ INSTRUCTIONS:
         status: 'failed',
         error: error.message || 'Unknown error',
       });
+      
+      // Update the placeholder card to show failure
+      setGeneratedVideos(prev => prev.map(v => 
+        v.id === placeholderId ? {
+          ...v,
+          status: 'failed',
+          error: error.message || 'Unknown error'
+        } : v
+      ));
+
       updateJob(jobId, { status: 'failed', error: error.message });
       addLog({ level: 'error', message: `Veo 3.1 error: ${error.message}`, jobId });
       // 5. Fail request
       await requestManager.failRequest(requestId, error.message || 'Unknown error');
     } finally {
+      // isGenerating is now set to false earlier to allow continuous use, 
+      // but we still want to ensure it's false if an error occurs.
       setIsGenerating(false);
     }
   };
@@ -2197,8 +2260,20 @@ INSTRUCTIONS:
       const pollResult = await pollVeoTask(kieApiKey, request.taskId, async (status, attempt) => {
         setVeoTaskResult(prev => prev ? {
           ...prev,
+          taskId: request.taskId, // Ensure ID is preserved
+          status: 'polling',
           progress: `${status} (${attempt + 1}/180)`,
-        } : prev);
+        } : {
+          taskId: request.taskId,
+          status: 'polling',
+          progress: `${status} (${attempt + 1}/180)`,
+        });
+        
+        // Update gallery card during recovery
+        setGeneratedVideos(prev => prev.map(v => 
+          v.taskId === request.taskId ? { ...v, statusMessage: `${status} (${attempt + 1}/180)` } : v
+        ));
+
         await requestManager.updateProgress(request.requestId, `${status} (${attempt + 1}/180)`);
       });
 
@@ -2227,9 +2302,23 @@ INSTRUCTIONS:
           duration: 0,
           prompt: request.prompt,
           createdAt: Date.now(),
-          status: 'success',
+          status: 'success' as const,
+          taskId: request.taskId,
         };
-        setGeneratedVideos(prev => [video, ...prev]);
+
+        // If a placeholder with this taskId already exists, update it instead of adding a new one
+        setGeneratedVideos(prev => {
+          const exists = prev.some(v => v.taskId === request.taskId);
+          if (exists) {
+            return prev.map(v => v.taskId === request.taskId ? {
+              ...v,
+              url: finalUrl,
+              status: 'success' as const,
+              statusMessage: undefined
+            } : v);
+          }
+          return [video, ...prev];
+        });
         saveGeneratedVideoToDB(video).catch(e =>
           logger.warn('Recovery', 'Failed to persist recovered Veo video to IndexedDB', e)
         );

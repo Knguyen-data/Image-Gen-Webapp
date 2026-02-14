@@ -111,13 +111,18 @@ const VideoEditorModalCapCutStyle: React.FC<VideoEditorModalProps> = ({
   const [showStockGallery, setShowStockGallery] = useState(false);
 
   // Media panel state
-  const [mediaTab, setMediaTab] = useState<'generated' | 'imported' | 'stock'>('generated');
+  const [mediaTab, setMediaTab] = useState<'generated' | 'imported' | 'stock' | 'audio' | 'text'>('generated');
 
   // Clip properties state
   const [speed, setSpeed] = useState(1);
   const [volume, setVolume] = useState(100);
   const [opacity, setOpacity] = useState(100);
   const [rotation, setRotation] = useState(0);
+
+  // Filter state
+  const [brightness, setBrightness] = useState(100);
+  const [contrast, setContrast] = useState(100);
+  const [saturation, setSaturation] = useState(100);
 
   const pixelsPerSecond = 80 * zoom;
 
@@ -516,6 +521,64 @@ const VideoEditorModalCapCutStyle: React.FC<VideoEditorModalProps> = ({
     setIsLoading(false);
   };
 
+  // --- Audio import handler ---
+  const handleImportAudio = async (files: FileList) => {
+    setIsLoading(true);
+    setLoadingMessage('Importing audio...');
+
+    // Audio goes on its own track
+    const targetLayerIndex = await videoEditorService.addLayer('DEFAULT');
+
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      setLoadingMessage(`Importing ${file.name}...`);
+      try {
+        await videoEditorService.addAudioFromFile(targetLayerIndex, file);
+      } catch (e) {
+        logger.warn('VideoEditor', `Failed to import audio ${file.name}`, e);
+      }
+    }
+
+    refreshLayers();
+    setIsLoading(false);
+  };
+
+  // --- Text clip handler ---
+  const handleAddText = async (text: string) => {
+    const targetLayerIndex = await videoEditorService.addLayer('DEFAULT');
+    try {
+      const clipId = await videoEditorService.addTextClip(targetLayerIndex, text, {
+        fontSize: 48,
+        color: '#ffffff',
+      });
+      refreshLayers();
+      setSelectedClipId(clipId);
+    } catch (e: any) {
+      logger.error('VideoEditor', 'Failed to add text clip', e);
+    }
+  };
+
+  // --- Image overlay handler ---
+  const handleImportImage = async (files: FileList) => {
+    setIsLoading(true);
+    setLoadingMessage('Importing image...');
+
+    const targetLayerIndex = await videoEditorService.addLayer('DEFAULT');
+
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      const url = URL.createObjectURL(file);
+      try {
+        await videoEditorService.addImageClip(targetLayerIndex, url);
+      } catch (e) {
+        logger.warn('VideoEditor', `Failed to import image ${file.name}`, e);
+      }
+    }
+
+    refreshLayers();
+    setIsLoading(false);
+  };
+
   // --- Drag reorder handlers ---
   const handleDragStart = (clipId: string) => setDragClipId(clipId);
   const handleDragOver = (clipId: string) => {
@@ -547,7 +610,7 @@ const VideoEditorModalCapCutStyle: React.FC<VideoEditorModalProps> = ({
     for (const layer of layers) {
       const clipIdx = layer.clips.findIndex(c => c.id === selectedClipId);
       if (clipIdx >= 0) {
-        // Apply speed change logic here when implemented
+        videoEditorService.setSpeed(layer.index, clipIdx, value);
         break;
       }
     }
@@ -559,7 +622,7 @@ const VideoEditorModalCapCutStyle: React.FC<VideoEditorModalProps> = ({
     for (const layer of layers) {
       const clipIdx = layer.clips.findIndex(c => c.id === selectedClipId);
       if (clipIdx >= 0) {
-        // Apply volume change logic here when implemented
+        videoEditorService.setVolume(layer.index, clipIdx, value / 100);
         break;
       }
     }
@@ -571,7 +634,7 @@ const VideoEditorModalCapCutStyle: React.FC<VideoEditorModalProps> = ({
     for (const layer of layers) {
       const clipIdx = layer.clips.findIndex(c => c.id === selectedClipId);
       if (clipIdx >= 0) {
-        // Apply opacity change logic here when implemented
+        videoEditorService.setOpacity(layer.index, clipIdx, value / 100);
         break;
       }
     }
@@ -583,7 +646,7 @@ const VideoEditorModalCapCutStyle: React.FC<VideoEditorModalProps> = ({
     for (const layer of layers) {
       const clipIdx = layer.clips.findIndex(c => c.id === selectedClipId);
       if (clipIdx >= 0) {
-        // Apply rotation change logic here when implemented
+        videoEditorService.setRotation(layer.index, clipIdx, value);
         break;
       }
     }
@@ -664,13 +727,42 @@ const VideoEditorModalCapCutStyle: React.FC<VideoEditorModalProps> = ({
         e.preventDefault();
         isPlaying ? handlePause() : handlePlay();
       }
+      // S key = split
+      if (e.key === 's' && !e.ctrlKey && !e.metaKey && selectedClipId) {
+        handleSplitAtPlayhead();
+      }
+      // Delete key = remove clip
+      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedClipId) {
+        handleRemoveClip(selectedClipId);
+      }
+      // Left/Right arrow = frame navigation
+      if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        handleFrameBack();
+      }
+      if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        handleFrameForward();
+      }
     };
 
     if (isOpen) {
       document.addEventListener('keydown', handleKeyDown);
       return () => document.removeEventListener('keydown', handleKeyDown);
     }
-  }, [isOpen, transitionPicker, isPlaying]);
+  }, [isOpen, transitionPicker, isPlaying, selectedClipId, handleSplitAtPlayhead, handleRemoveClip, handleFrameBack, handleFrameForward]);
+
+  // --- Zoom to fit ---
+  const handleZoomToFit = useCallback(() => {
+    if (duration <= 0) return;
+    const contentEl = timelineContentRef.current;
+    if (!contentEl) return;
+    // Target: fit all content in visible width with some padding
+    const availableWidth = contentEl.parentElement?.clientWidth ?? 700;
+    const targetPPS = (availableWidth - 200) / Math.max(duration, 1); // 200px margin
+    const newZoom = Math.max(0.25, Math.min(5, targetPPS / 80));
+    setZoom(newZoom);
+  }, [duration]);
 
   if (!isOpen) return null;
 
@@ -732,7 +824,7 @@ const VideoEditorModalCapCutStyle: React.FC<VideoEditorModalProps> = ({
             </div>
             {/* Media tabs */}
             <div className="flex border-b border-slate-700/30">
-              {(['generated', 'imported', 'stock'] as const).map(tab => (
+              {(['generated', 'imported', 'audio', 'text', 'stock'] as const).map(tab => (
                 <button
                   key={tab}
                   onClick={() => setMediaTab(tab)}
@@ -828,6 +920,105 @@ const VideoEditorModalCapCutStyle: React.FC<VideoEditorModalProps> = ({
                   </button>
                 </div>
               )}
+              {mediaTab === 'audio' && (
+                <div className="space-y-3">
+                  <button
+                    onClick={() => document.getElementById('audio-import')?.click()}
+                    className="w-full py-8 rounded-xl border-2 border-dashed border-slate-700/50 hover:border-orange-500/40 text-slate-500 hover:text-orange-400 transition-all flex flex-col items-center gap-2"
+                  >
+                    <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
+                    </svg>
+                    <span className="text-xs font-medium">Import Audio</span>
+                    <span className="text-[9px] text-slate-600">MP3, WAV, OGG</span>
+                  </button>
+                  <input
+                    id="audio-import"
+                    type="file"
+                    accept="audio/*"
+                    multiple
+                    className="hidden"
+                    onChange={(e) => e.target.files && handleImportAudio(e.target.files)}
+                  />
+                  {/* List audio clips */}
+                  {layers.flatMap(l => l.clips.filter(c => c.type === 'audio')).map(clip => (
+                    <div
+                      key={clip.id}
+                      onClick={() => setSelectedClipId(clip.id)}
+                      className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-all ${selectedClipId === clip.id
+                        ? 'bg-orange-500/10 border border-orange-500/30'
+                        : 'bg-slate-800/40 border border-transparent hover:bg-slate-800/60'
+                        }`}
+                    >
+                      <div className="w-8 h-8 bg-orange-900/30 rounded flex items-center justify-center">
+                        <svg className="w-4 h-4 text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2z" />
+                        </svg>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-[11px] text-slate-300 truncate">{clip.name}</div>
+                        <div className="text-[9px] text-slate-500 font-mono">{clip.durationSec.toFixed(1)}s</div>
+                      </div>
+                      <span className="text-[8px] px-1.5 py-0.5 rounded-full bg-orange-500/15 text-orange-400 font-medium">AUDIO</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {mediaTab === 'text' && (
+                <div className="space-y-3">
+                  <button
+                    onClick={() => handleAddText('Your text here')}
+                    className="w-full py-6 rounded-xl border-2 border-dashed border-slate-700/50 hover:border-pink-500/40 text-slate-500 hover:text-pink-400 transition-all flex flex-col items-center gap-2"
+                  >
+                    <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                    </svg>
+                    <span className="text-xs font-medium">Add Text</span>
+                  </button>
+                  <button
+                    onClick={() => document.getElementById('image-import')?.click()}
+                    className="w-full py-6 rounded-xl border-2 border-dashed border-slate-700/50 hover:border-emerald-500/40 text-slate-500 hover:text-emerald-400 transition-all flex flex-col items-center gap-2"
+                  >
+                    <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                    <span className="text-xs font-medium">Add Image Overlay</span>
+                    <span className="text-[9px] text-slate-600">PNG, JPG</span>
+                  </button>
+                  <input
+                    id="image-import"
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    className="hidden"
+                    onChange={(e) => e.target.files && handleImportImage(e.target.files)}
+                  />
+                  {/* List text and image clips */}
+                  {layers.flatMap(l => l.clips.filter(c => c.type === 'text' || c.type === 'image')).map(clip => (
+                    <div
+                      key={clip.id}
+                      onClick={() => setSelectedClipId(clip.id)}
+                      className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-all ${selectedClipId === clip.id
+                        ? 'bg-pink-500/10 border border-pink-500/30'
+                        : 'bg-slate-800/40 border border-transparent hover:bg-slate-800/60'
+                        }`}
+                    >
+                      <div className={`w-8 h-8 rounded flex items-center justify-center ${clip.type === 'text' ? 'bg-pink-900/30' : 'bg-emerald-900/30'}`}>
+                        <span className={`text-sm font-bold ${clip.type === 'text' ? 'text-pink-400' : 'text-emerald-400'}`}>
+                          {clip.type === 'text' ? 'T' : 'I'}
+                        </span>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-[11px] text-slate-300 truncate">{clip.name}</div>
+                        <div className="text-[9px] text-slate-500 font-mono">{clip.durationSec.toFixed(1)}s</div>
+                      </div>
+                      <span className={`text-[8px] px-1.5 py-0.5 rounded-full font-medium ${clip.type === 'text' ? 'bg-pink-500/15 text-pink-400' : 'bg-emerald-500/15 text-emerald-400'}`}>
+                        {clip.type === 'text' ? 'TEXT' : 'IMG'}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -873,6 +1064,15 @@ const VideoEditorModalCapCutStyle: React.FC<VideoEditorModalProps> = ({
                   title="Toggle Fit/Fill"
                 >
                   {fitMode === 'fit' ? 'Fit' : '100%'}
+                </button>
+
+                {/* Zoom to fit timeline */}
+                <button
+                  onClick={handleZoomToFit}
+                  className="px-3 py-1.5 rounded-lg text-xs font-medium text-slate-400 hover:text-white hover:bg-slate-800/50 border border-transparent transition-all duration-150"
+                  title="Zoom to fit all clips"
+                >
+                  Fit All
                 </button>
               </div>
 
@@ -1202,6 +1402,105 @@ const VideoEditorModalCapCutStyle: React.FC<VideoEditorModalProps> = ({
                       <span className="text-[8px] text-slate-600">360°</span>
                     </div>
                   </div>
+
+                  {/* Text editing (only for text clips) */}
+                  {(() => {
+                    const selectedClip = layers.flatMap(l => l.clips).find(c => c.id === selectedClipId);
+                    if (selectedClip?.type !== 'text') return null;
+                    return (
+                      <div className="space-y-3 pt-3 border-t border-slate-700/30">
+                        <label className="text-[10px] text-pink-400 uppercase tracking-wide font-medium">Text Content</label>
+                        <textarea
+                          defaultValue={selectedClip.name}
+                          onBlur={(e) => {
+                            if (selectedClipId) {
+                              videoEditorService.setTextContent(selectedClipId, e.target.value);
+                              refreshLayers();
+                            }
+                          }}
+                          className="w-full px-2 py-1.5 rounded-lg bg-slate-800/60 border border-slate-700/50 text-xs text-slate-200 resize-none h-16"
+                          placeholder="Enter text..."
+                        />
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => { if (selectedClipId) { videoEditorService.setTextStyle(selectedClipId, { fontSize: 32 }); } }}
+                            className="px-2 py-1 rounded bg-slate-800/60 text-[10px] text-slate-400 hover:text-white border border-slate-700/50"
+                          >S</button>
+                          <button
+                            onClick={() => { if (selectedClipId) { videoEditorService.setTextStyle(selectedClipId, { fontSize: 48 }); } }}
+                            className="px-2 py-1 rounded bg-slate-800/60 text-xs text-slate-400 hover:text-white border border-slate-700/50"
+                          >M</button>
+                          <button
+                            onClick={() => { if (selectedClipId) { videoEditorService.setTextStyle(selectedClipId, { fontSize: 72 }); } }}
+                            className="px-2 py-1 rounded bg-slate-800/60 text-sm text-slate-400 hover:text-white border border-slate-700/50"
+                          >L</button>
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+                  {/* Filters (video/image clips only) */}
+                  {(() => {
+                    const selectedClip = layers.flatMap(l => l.clips).find(c => c.id === selectedClipId);
+                    if (selectedClip?.type === 'audio') return null;
+                    return (
+                      <div className="space-y-3 pt-3 border-t border-slate-700/30">
+                        <label className="text-[10px] text-cyan-400 uppercase tracking-wide font-medium">Filters</label>
+                        <div>
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-[10px] text-slate-400">Brightness</span>
+                            <span className="text-[10px] text-slate-500 font-mono">{brightness}%</span>
+                          </div>
+                          <input type="range" min="0" max="200" step="5" value={brightness}
+                            onChange={(e) => { const v = parseFloat(e.target.value); setBrightness(v); if (selectedClipId) videoEditorService.setFilters(selectedClipId, { brightness: v / 100 }); }}
+                            className="w-full h-1 rounded-full appearance-none bg-slate-700 accent-cyan-500 cursor-pointer" />
+                        </div>
+                        <div>
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-[10px] text-slate-400">Contrast</span>
+                            <span className="text-[10px] text-slate-500 font-mono">{contrast}%</span>
+                          </div>
+                          <input type="range" min="0" max="200" step="5" value={contrast}
+                            onChange={(e) => { const v = parseFloat(e.target.value); setContrast(v); if (selectedClipId) videoEditorService.setFilters(selectedClipId, { contrast: v / 100 }); }}
+                            className="w-full h-1 rounded-full appearance-none bg-slate-700 accent-cyan-500 cursor-pointer" />
+                        </div>
+                        <div>
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-[10px] text-slate-400">Saturation</span>
+                            <span className="text-[10px] text-slate-500 font-mono">{saturation}%</span>
+                          </div>
+                          <input type="range" min="0" max="200" step="5" value={saturation}
+                            onChange={(e) => { const v = parseFloat(e.target.value); setSaturation(v); if (selectedClipId) videoEditorService.setFilters(selectedClipId, { saturation: v / 100 }); }}
+                            className="w-full h-1 rounded-full appearance-none bg-slate-700 accent-cyan-500 cursor-pointer" />
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+                  {/* Masks (video/image clips only) */}
+                  {(() => {
+                    const selectedClip = layers.flatMap(l => l.clips).find(c => c.id === selectedClipId);
+                    if (selectedClip?.type === 'audio' || selectedClip?.type === 'text') return null;
+                    return (
+                      <div className="space-y-2 pt-3 border-t border-slate-700/30">
+                        <label className="text-[10px] text-purple-400 uppercase tracking-wide font-medium">Mask</label>
+                        <div className="flex gap-1.5">
+                          <button
+                            onClick={() => selectedClipId && videoEditorService.setMask(selectedClipId, 'none')}
+                            className="flex-1 px-2 py-1.5 rounded-lg text-[10px] text-slate-400 hover:text-white bg-slate-800/60 border border-slate-700/50 transition-all"
+                          >None</button>
+                          <button
+                            onClick={() => selectedClipId && videoEditorService.setMask(selectedClipId, 'rectangle')}
+                            className="flex-1 px-2 py-1.5 rounded-lg text-[10px] text-slate-400 hover:text-white bg-slate-800/60 border border-slate-700/50 transition-all"
+                          >Rect</button>
+                          <button
+                            onClick={() => selectedClipId && videoEditorService.setMask(selectedClipId, 'ellipse')}
+                            className="flex-1 px-2 py-1.5 rounded-lg text-[10px] text-slate-400 hover:text-white bg-slate-800/60 border border-slate-700/50 transition-all"
+                          >Ellipse</button>
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
               ) : (
                 <div className="flex flex-col items-center justify-center h-full text-center py-12">
@@ -1273,6 +1572,25 @@ const VideoEditorModalCapCutStyle: React.FC<VideoEditorModalProps> = ({
               </svg>
               Stock
             </button>
+
+            {/* Audio import button */}
+            <button
+              onClick={() => document.getElementById('audio-import-timeline')?.click()}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs text-orange-400/70 hover:text-orange-400 hover:bg-orange-900/20 transition-all duration-150 border border-slate-700/50"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2z" />
+              </svg>
+              Audio
+            </button>
+            <input
+              id="audio-import-timeline"
+              type="file"
+              accept="audio/*"
+              multiple
+              className="hidden"
+              onChange={(e) => e.target.files && handleImportAudio(e.target.files)}
+            />
           </div>
         </div>
 

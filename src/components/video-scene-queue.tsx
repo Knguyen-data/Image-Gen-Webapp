@@ -3,6 +3,8 @@ import { VideoScene, VideoSettings, ReferenceImage, ReferenceVideo, UnifiedVideo
 import { validateVideoFile } from '../services/kling-motion-control-service';
 import { VIDEO_CONSTRAINTS } from '../constants';
 import { getVideoDuration } from '../utils/video-dimensions';
+import PromptEnhanceButton from './prompt-enhance-button';
+import { videoModelToTarget } from '../services/prompt-enhance-service';
 import {
   generateMotionPrompts,
   generateMotionControlPrompts, // New import
@@ -64,7 +66,7 @@ const VideoSceneQueue: React.FC<VideoSceneQueueProps> = ({
   
   // Calculate total duration for Kling 3 MultiShot
   const totalDuration = isKling3 ? scenes.reduce((acc, s) => acc + (s.duration || 3), 0) : 0;
-  const maxScenes = isKling3 ? 6 : 999;
+  const maxScenes = isKling3 ? 6 : (videoSettings.model === 'veo-3.1' ? 12 : 999);
   
   // Update scene duration (Kling 3 only)
   const updateSceneDuration = (sceneId: string, duration: number) => {
@@ -213,9 +215,9 @@ const VideoSceneQueue: React.FC<VideoSceneQueueProps> = ({
     e.preventDefault();
     setDragOverIndex(null);
 
-    // Kling 3: Max 6 scenes limit
-    if (isKling3 && scenes.length >= maxScenes) {
-      alert(`Kling 3 MultiShot mode supports maximum ${maxScenes} scenes`);
+    // Kling 3: Max scenes limit
+    if (scenes.length >= maxScenes) {
+      alert(`${videoSettings.model} supports maximum ${maxScenes} scenes`);
       return;
     }
 
@@ -719,9 +721,9 @@ const VideoSceneQueue: React.FC<VideoSceneQueueProps> = ({
 
               {/* Reference Image */}
               <div className="relative aspect-video bg-gray-950 rounded overflow-hidden">
-                {(scene.referenceImage.previewUrl || scene.referenceImage.base64) ? (
+                {scene.referenceImage ? (
                   <img
-                    src={scene.referenceImage.previewUrl || `data:${scene.referenceImage.mimeType};base64,${scene.referenceImage.base64}`}
+                    src={scene.referenceImage.previewUrl || (scene.referenceImage.base64 ? `data:${scene.referenceImage.mimeType};base64,${scene.referenceImage.base64}` : '')}
                     alt={`Scene ${index + 1}`}
                     className="w-full h-full object-contain"
                   />
@@ -757,13 +759,25 @@ const VideoSceneQueue: React.FC<VideoSceneQueueProps> = ({
                   </button>
                 </div>
                 {scene.usePrompt && (
-                  <textarea
-                    className="w-full bg-gray-950 border border-gray-700 rounded p-2 text-xs text-gray-200 outline-none focus:border-dash-500 resize-none font-mono"
-                    rows={2}
-                    placeholder={`Describe motion for scene ${index + 1}...`}
-                    value={scene.prompt || ''}
-                    onChange={(e) => updateScenePrompt(scene.id, e.target.value)}
-                  />
+                  <div className="space-y-1">
+                    <textarea
+                      className="w-full bg-gray-950 border border-gray-700 rounded p-2 text-xs text-gray-200 outline-none focus:border-dash-500 resize-none font-mono"
+                      rows={2}
+                      placeholder={`Describe motion for scene ${index + 1}...`}
+                      value={scene.prompt || ''}
+                      onChange={(e) => updateScenePrompt(scene.id, e.target.value)}
+                    />
+                    <div className="flex justify-end">
+                      <PromptEnhanceButton
+                        prompt={scene.prompt || ''}
+                        onEnhance={(enhanced) => updateScenePrompt(scene.id, enhanced)}
+                        target={videoModelToTarget(videoSettings.model)}
+                        apiKey={geminiApiKey}
+                        referenceImage={scene.referenceImage ? { base64: scene.referenceImage.base64, mimeType: scene.referenceImage.mimeType } : undefined}
+                        size="sm"
+                      />
+                    </div>
+                  </div>
                 )}
               </div>
 

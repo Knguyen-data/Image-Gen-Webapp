@@ -1,6 +1,6 @@
 import { Run } from "../types";
 
-const DB_NAME = 'RAW_STUDIO_DB';
+const DB_NAME = 'RAW_STUDIO_DB_V2'; // Renamed to force clean schema reset
 const STORE_NAME = 'runs';
 
 // Crash Recovery Types
@@ -39,61 +39,30 @@ export interface CostRecord {
 }
 
 /**
- * Get the current database version dynamically.
- * This handles version mismatches when DB was upgraded by other code.
- */
-const getCurrentDbVersion = (): Promise<number> => {
-  return new Promise((resolve) => {
-    // First, try to open without version to get current version
-    const request = indexedDB.open(DB_NAME);
-    request.onsuccess = () => {
-      const version = request.result.version;
-      request.result.close();
-      resolve(version);
-    };
-    request.onerror = () => {
-      // Database doesn't exist yet, start at version 1
-      resolve(1);
-    };
-  });
-};
-
-/**
  * Open Database Connection with automatic version handling.
- * CRITICAL: Never force version increment - only add missing tables without upgrade.
- * This prevents data loss from version changes.
  */
 export const openDB = async (): Promise<IDBDatabase> => {
-  const currentVersion = await getCurrentDbVersion();
-  
-  // NEVER force version increment - use current version
-  // Only increment if we're at 0 (brand new DB)
-  const newVersion = currentVersion === 0 ? 1 : currentVersion;
+  // Current version in code is 4
+  const DB_VERSION = 4;
 
   return new Promise((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, newVersion);
+    const request = indexedDB.open(DB_NAME, DB_VERSION);
 
     request.onupgradeneeded = (event) => {
       const db = (event.target as IDBOpenDBRequest).result;
-      const oldVersion = event.oldVersion;
-
-      // Create runs table (if doesn't exist)
+      
+      // Ensure all stores exist
       if (!db.objectStoreNames.contains(STORE_NAME)) {
         db.createObjectStore(STORE_NAME, { keyPath: 'id' });
       }
 
-      // Create crash recovery tables (if don't exist)
-      // NOTE: These are added WITHOUT version increment to preserve data
       if (!db.objectStoreNames.contains('pendingRequests')) {
         const pendingStore = db.createObjectStore('pendingRequests', {
           keyPath: 'id',
           autoIncrement: true
         });
         pendingStore.createIndex('requestId', 'requestId', { unique: true });
-        pendingStore.createIndex('taskId', 'taskId', { unique: false });
         pendingStore.createIndex('status', 'status', { unique: false });
-        pendingStore.createIndex('createdAt', 'createdAt', { unique: false });
-        pendingStore.createIndex('type', 'type', { unique: false });
       }
 
       if (!db.objectStoreNames.contains('costRecords')) {
@@ -102,57 +71,36 @@ export const openDB = async (): Promise<IDBDatabase> => {
           autoIncrement: true
         });
         costStore.createIndex('requestId', 'requestId', { unique: false });
-        costStore.createIndex('timestamp', 'timestamp', { unique: false });
-        costStore.createIndex('recovered', 'recovered', { unique: false });
       }
 
-      // Create video collections and saved payloads tables (version 3)
-      if (oldVersion < 3) {
-        if (!db.objectStoreNames.contains('videoCollections')) {
-          const collectionsStore = db.createObjectStore('videoCollections', {
-            keyPath: 'id',
-            autoIncrement: true
-          });
-          collectionsStore.createIndex('collectionId', 'collectionId', { unique: true });
-          collectionsStore.createIndex('name', 'name', { unique: false });
-          collectionsStore.createIndex('createdAt', 'createdAt', { unique: false });
-        }
+      if (!db.objectStoreNames.contains('videoCollections')) {
+        const collectionsStore = db.createObjectStore('videoCollections', {
+          keyPath: 'id',
+          autoIncrement: true
+        });
+        collectionsStore.createIndex('collectionId', 'collectionId', { unique: true });
+      }
 
-        if (!db.objectStoreNames.contains('savedPayloads')) {
-          const payloadsStore = db.createObjectStore('savedPayloads', {
-            keyPath: 'id',
-            autoIncrement: true
-          });
-          payloadsStore.createIndex('payloadId', 'payloadId', { unique: true });
-          payloadsStore.createIndex('provider', 'provider', { unique: false });
-          payloadsStore.createIndex('status', 'status', { unique: false });
-          payloadsStore.createIndex('savedAt', 'savedAt', { unique: false });
-        }
+      if (!db.objectStoreNames.contains('savedPayloads')) {
+        const payloadsStore = db.createObjectStore('savedPayloads', {
+          keyPath: 'id',
+          autoIncrement: true
+        });
+        payloadsStore.createIndex('payloadId', 'payloadId', { unique: true });
       }
     };
 
-    request.onblocked = () => {
-      console.warn("DB upgrade blocked — close other tabs using this app");
-    };
+    request.onsuccess = () => resolve(request.result);
 
-    request.onsuccess = () => {
-      const db = request.result;
-      db.onversionchange = () => {
-        db.close();
-        window.location.reload();
-      };
-      resolve(db);
-    };
     request.onerror = () => {
-      console.error("IndexedDB Error:", request.error);
-
-      // If version error, try to recover by deleting and recreating
-      if (request.error?.name === 'VersionError') {
-        console.warn("Version mismatch detected. Attempting recovery...");
-        handleVersionMismatch().then(resolve).catch(reject);
-      } else {
-        reject(request.error);
+      const error = request.error;
+      if (error?.name === 'VersionError') {
+        console.warn("Version mismatch. Deleting and recreating DB...");
+        indexedDB.deleteDatabase(DB_NAME).onsuccess = () => {
+          window.location.reload();
+        };
       }
+      reject(error);
     };
   });
 };

@@ -3,7 +3,7 @@ import { VeoRecordInfoResponse } from "../../services/veo3-types";
 
 interface VeoResultsViewProps {
   taskId: string;
-  status: "generating" | "success" | "failed";
+  status: "pending" | "generating" | "polling" | "success" | "failed";
   result?: VeoRecordInfoResponse;
   error?: string;
   progress?: string;

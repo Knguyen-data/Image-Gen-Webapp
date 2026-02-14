@@ -481,46 +481,57 @@ export function useVideoGeneration(opts: UseVideoGenerationOptions): UseVideoGen
         const jobId = addJob({ type: 'video', status: 'active', prompt: logPrompt });
         addLog({ level: 'info', message: `Starting ${videoModel} video generation`, jobId });
 
-        // Kling 3 / Kling 3 Omni
-        if (videoModel === 'kling-3' || videoModel === 'kling-3-omni') {
-            const placeholderId = `video-${Date.now()}-kling3`;
+        // Kling 3 / Kling 3 Omni / Veo 3.1
+        if (['kling-3', 'kling-3-omni', 'veo'].includes(videoModel)) {
+            const placeholderId = `video-${Date.now()}-${videoModel}`;
+            const promptSummary = videoModel === 'kling-3'
+                ? kling3PromptSummary
+                : videoModel === 'veo'
+                    ? ((videoSettings as any).veoPrompt || 'Veo Video')
+                    : videoScenes.map(s => s.prompt).join(' || ');
+
             const placeholder: GeneratedVideo = {
                 id: placeholderId,
-                sceneId: videoModel === 'kling-3' ? 'kling3-direct' : videoScenes[0]?.id || 'kling3-omni',
+                sceneId: videoModel === 'kling-3' ? 'kling3-direct' : videoModel === 'veo' ? 'veo-direct' : videoScenes[0]?.id || 'omni-direct',
                 url: '', duration: 0,
-                prompt: videoModel === 'kling-3' ? kling3PromptSummary : videoScenes.map(s => s.prompt).join(' || '),
+                prompt: promptSummary,
                 createdAt: Date.now(), status: 'generating',
             };
             setGeneratedVideos(prev => [placeholder, ...prev]);
 
             try {
                 setLoadingStatus(`Generating ${videoModel} video...`);
-                const video = videoModel === 'kling-3'
-                    ? await generateKling3((detail) => setLoadingStatus(detail))
-                    : await generateKling3Omni((detail) => setLoadingStatus(detail));
+                let video: GeneratedVideo;
+                
+                if (videoModel === 'veo') {
+                    // Import service dynamically to avoid circular refs
+                    const { generateVeoVideo } = await import('../services/veo-service');
+                    video = await generateVeoVideo(kieApiKey, videoSettings, (detail) => setLoadingStatus(detail));
+                } else {
+                    video = videoModel === 'kling-3'
+                        ? await generateKling3((detail) => setLoadingStatus(detail))
+                        : await generateKling3Omni((detail) => setLoadingStatus(detail));
+                }
 
                 setGeneratedVideos(prev => prev.map(v =>
                     v.id === placeholderId ? { ...video, id: placeholderId } : v
                 ));
 
                 if (video.status === 'success') {
-                    setLoadingStatus(`🎬 Kling 3 done! ${video.duration}s video generated`);
+                    setLoadingStatus(`🎬 ${videoModel} done!`);
                     saveGeneratedVideoToDB({ ...video, id: placeholderId }).catch(e =>
-                        logger.warn('Video', 'Failed to persist video to IndexedDB', e)
+                        logger.warn('Video', 'Failed to persist video', e)
                     );
                     updateJob(jobId, { status: 'completed' });
-                    addLog({ level: 'info', message: 'Kling 3 video generated successfully', jobId });
                 } else {
-                    setLoadingStatus('🎬 Kling 3 failed');
+                    setLoadingStatus(`🎬 ${videoModel} failed`);
                     updateJob(jobId, { status: 'failed', error: video.error });
-                    addLog({ level: 'error', message: `Kling 3 failed: ${video.error}`, jobId });
                     setTimeout(() => setGeneratedVideos(prev => prev.filter(v => v.id !== placeholderId)), 8000);
                 }
             } catch (error: any) {
-                logger.error('Video', 'Kling 3 generation error', { error });
-                setLoadingStatus('🎬 Kling 3 error');
+                logger.error('Video', `${videoModel} error`, { error });
+                setLoadingStatus(`🎬 ${videoModel} error`);
                 updateJob(jobId, { status: 'failed', error: error.message });
-                addLog({ level: 'error', message: `Kling 3 error: ${error.message}`, jobId });
                 setGeneratedVideos(prev => prev.map(v =>
                     v.id === placeholderId ? { ...v, status: 'failed' as const, error: error.message } : v
                 ));

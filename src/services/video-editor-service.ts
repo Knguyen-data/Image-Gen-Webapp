@@ -5,7 +5,7 @@
  * transitions, playback, and export.
  */
 
-import { Composition, Layer, VideoClip, Source, Encoder } from '@diffusionstudio/core';
+import { Composition, Layer, VideoClip, AudioClip, TextClip, ImageClip, Source, Encoder, EllipseMask, RectangleMask } from '@diffusionstudio/core';
 import type { TransitionType, TransitionConfig } from '@diffusionstudio/core';
 import { fetchWithTimeout, validateUrlProtocol } from '../utils/fetch-with-timeout';
 
@@ -56,7 +56,7 @@ export interface EditorClipInfo {
   durationSec: number;
   sourceUrl: string;
   transition?: TransitionConfig;
-  type: 'generated' | 'broll' | 'stock';
+  type: 'generated' | 'broll' | 'stock' | 'audio' | 'text' | 'image';
 }
 
 export interface EditorLayerInfo {
@@ -174,7 +174,7 @@ class VideoEditorService {
   private composition: Composition | null = null;
   private encoder: Encoder | null = null;
   private clipSourceMap: Map<string, string> = new Map(); // clipId -> sourceUrl
-  private clipTypeMap: Map<string, 'generated' | 'broll' | 'stock'> = new Map();
+  private clipTypeMap: Map<string, 'generated' | 'broll' | 'stock' | 'audio' | 'text' | 'image'> = new Map();
   private _isImporting = false;
 
   /**
@@ -354,6 +354,169 @@ class VideoEditorService {
   }
 
   /**
+   * Add an audio clip to a layer from a URL (MP3/WAV/OGG)
+   */
+  async addAudioClip(
+    layerIndex: number,
+    audioUrl: string,
+  ): Promise<string> {
+    if (!this.composition) throw new Error('No project created');
+
+    while (this.composition.layers.length <= layerIndex) {
+      await this.addLayer('DEFAULT');
+    }
+
+    const layer = this.composition.layers[layerIndex];
+    let source: Source;
+
+    if (audioUrl.startsWith('blob:')) {
+      const response = await fetchWithTimeout(audioUrl);
+      const blob = await response.blob();
+      const file = new File([blob], `audio-${Date.now()}.mp3`, { type: blob.type || 'audio/mpeg' });
+      source = await Source.from(file);
+    } else {
+      source = await Source.from(audioUrl);
+    }
+
+    const clip = new AudioClip(source as any);
+    await layer.add(clip);
+
+    this.clipSourceMap.set(clip.id, audioUrl);
+    this.clipTypeMap.set(clip.id, 'audio');
+    return clip.id;
+  }
+
+  /**
+   * Add an audio clip from a File object
+   */
+  async addAudioFromFile(
+    layerIndex: number,
+    file: File,
+  ): Promise<string> {
+    if (!this.composition) throw new Error('No project created');
+
+    while (this.composition.layers.length <= layerIndex) {
+      await this.addLayer('DEFAULT');
+    }
+
+    const layer = this.composition.layers[layerIndex];
+    const source = await Source.from(file);
+    const clip = new AudioClip(source as any);
+    await layer.add(clip);
+
+    this.clipSourceMap.set(clip.id, file.name);
+    this.clipTypeMap.set(clip.id, 'audio');
+    return clip.id;
+  }
+
+  /**
+   * Add a text overlay clip
+   */
+  async addTextClip(
+    layerIndex: number,
+    text: string,
+    options?: {
+      fontSize?: number;
+      color?: string;
+      x?: number;
+      y?: number;
+      fontFamily?: string;
+    },
+  ): Promise<string> {
+    if (!this.composition) throw new Error('No project created');
+
+    while (this.composition.layers.length <= layerIndex) {
+      await this.addLayer('DEFAULT');
+    }
+
+    const layer = this.composition.layers[layerIndex];
+    const clip = new TextClip({
+      text,
+      fontSize: options?.fontSize ?? 48,
+      color: (options?.color ?? '#ffffff') as any,
+      x: options?.x,
+      y: options?.y,
+      fontFamily: options?.fontFamily ?? 'Arial',
+    } as any);
+
+    await layer.add(clip);
+    this.clipTypeMap.set(clip.id, 'text');
+    return clip.id;
+  }
+
+  /**
+   * Update text content on a text clip
+   */
+  setTextContent(clipId: string, text: string): void {
+    if (!this.composition) return;
+    for (const layer of this.composition.layers) {
+      const clip = layer.clips.find(c => c.id === clipId) as any;
+      if (clip && clip.text !== undefined) {
+        clip.text = text;
+        return;
+      }
+    }
+  }
+
+  /**
+   * Update text style on a text clip
+   */
+  setTextStyle(clipId: string, style: { fontSize?: number; color?: string; fontFamily?: string }): void {
+    if (!this.composition) return;
+    for (const layer of this.composition.layers) {
+      const clip = layer.clips.find(c => c.id === clipId) as any;
+      if (clip && clip.text !== undefined) {
+        if (style.fontSize != null) clip.fontSize = style.fontSize;
+        if (style.color != null) clip.color = style.color;
+        if (style.fontFamily != null) clip.fontFamily = style.fontFamily;
+        return;
+      }
+    }
+  }
+
+  /**
+   * Add an image overlay clip (PNG/JPG for picture-in-picture)
+   */
+  async addImageClip(
+    layerIndex: number,
+    imageUrl: string,
+    options?: {
+      x?: number;
+      y?: number;
+      scale?: number;
+    },
+  ): Promise<string> {
+    if (!this.composition) throw new Error('No project created');
+
+    while (this.composition.layers.length <= layerIndex) {
+      await this.addLayer('DEFAULT');
+    }
+
+    const layer = this.composition.layers[layerIndex];
+    let source: Source;
+
+    if (imageUrl.startsWith('blob:')) {
+      const response = await fetchWithTimeout(imageUrl);
+      const blob = await response.blob();
+      const file = new File([blob], `image-${Date.now()}.png`, { type: blob.type || 'image/png' });
+      source = await Source.from(file);
+    } else {
+      source = await Source.from(imageUrl);
+    }
+
+    const clip = new ImageClip(source as any, {
+      x: options?.x,
+      y: options?.y,
+      scale: options?.scale ?? 1,
+    } as any);
+
+    await layer.add(clip);
+    this.clipSourceMap.set(clip.id, imageUrl);
+    this.clipTypeMap.set(clip.id, 'image');
+    return clip.id;
+  }
+
+  /**
    * Remove a clip from a layer
    */
   removeClip(layerIndex: number, clipIndex: number): void {
@@ -472,7 +635,7 @@ class VideoEditorService {
     clip.trim(clipStartSec, splitTimeSec);
 
     // Add second half as new clip after original
-    await this.addClip(layerIndex, sourceUrl, [splitTimeSec, clipEndSec], clipType);
+    await this.addClip(layerIndex, sourceUrl, [splitTimeSec, clipEndSec], clipType as 'generated' | 'broll' | 'stock');
   }
 
   /**
@@ -649,19 +812,70 @@ class VideoEditorService {
     return this.composition.layers.map((layer, layerIndex) => ({
       index: layerIndex,
       mode: layer.mode as 'DEFAULT' | 'SEQUENTIAL',
-      clips: layer.clips.map((clip, clipIndex) => ({
-        id: clip.id,
-        layerIndex,
-        clipIndex,
-        name: clip.name || `Clip ${clipIndex + 1}`,
-        startSec: clip.start / this.fps,
-        endSec: clip.end / this.fps,
-        durationSec: clip.duration / this.fps,
-        sourceUrl: this.clipSourceMap.get(clip.id) || '',
-        transition: clip.transition,
-        type: this.clipTypeMap.get(clip.id) || 'generated',
-      })),
+      clips: layer.clips.map((clip, clipIndex) => {
+        const clipType = this.clipTypeMap.get(clip.id) || 'generated';
+        let name = clip.name || `Clip ${clipIndex + 1}`;
+        if (clipType === 'text') name = (clip as any).text || 'Text';
+        if (clipType === 'audio') name = `Audio ${clipIndex + 1}`;
+        if (clipType === 'image') name = `Image ${clipIndex + 1}`;
+        return {
+          id: clip.id,
+          layerIndex,
+          clipIndex,
+          name,
+          startSec: clip.start / this.fps,
+          endSec: clip.end / this.fps,
+          durationSec: clip.duration / this.fps,
+          sourceUrl: this.clipSourceMap.get(clip.id) || '',
+          transition: clip.transition,
+          type: clipType,
+        };
+      }),
     }));
+  }
+
+  /**
+   * Set visual filters on a clip (brightness, contrast, saturation)
+   */
+  setFilters(clipId: string, filters: { brightness?: number; contrast?: number; saturation?: number }): void {
+    if (!this.composition) return;
+    for (const layer of this.composition.layers) {
+      const clip = layer.clips.find(c => c.id === clipId) as any;
+      if (clip) {
+        if (filters.brightness != null) clip.brightness = filters.brightness;
+        if (filters.contrast != null) clip.contrast = filters.contrast;
+        if (filters.saturation != null) clip.saturation = filters.saturation;
+        return;
+      }
+    }
+  }
+
+  /**
+   * Apply a shape mask to a clip (rectangle or ellipse)
+   */
+  setMask(clipId: string, type: 'rectangle' | 'ellipse' | 'none', options?: { x?: number; y?: number; width?: number; height?: number }): void {
+    if (!this.composition) return;
+    for (const layer of this.composition.layers) {
+      const clip = layer.clips.find(c => c.id === clipId) as any;
+      if (!clip) continue;
+
+      if (type === 'none') {
+        clip.mask = undefined;
+        return;
+      }
+
+      const maskOpts = {
+        x: options?.x ?? 0,
+        y: options?.y ?? 0,
+        width: options?.width ?? this.composition.width,
+        height: options?.height ?? this.composition.height,
+      };
+
+      clip.mask = type === 'ellipse'
+        ? new EllipseMask(maskOpts as any)
+        : new RectangleMask(maskOpts as any);
+      return;
+    }
   }
 
   /**

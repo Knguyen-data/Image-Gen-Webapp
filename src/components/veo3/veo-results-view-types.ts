@@ -4,7 +4,7 @@ import { VeoModel, VeoAspectRatio } from '../../types';
 
 export interface VeoTaskResult {
   taskId: string;
-  status: 'generating' | 'success' | 'failed';
+  status: 'pending' | 'generating' | 'polling' | 'success' | 'failed';
   result?: VeoRecordInfoResponse;
   error?: string;
   progress?: string;

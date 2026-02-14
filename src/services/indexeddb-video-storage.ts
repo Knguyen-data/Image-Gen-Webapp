@@ -224,21 +224,29 @@ export interface StoredGeneratedVideo {
  */
 export const saveGeneratedVideoToDB = async (video: GeneratedVideo): Promise<void> => {
   try {
-    if (video.status !== 'success' || !video.url) {
-      return;
-    }
+    // We allow saving 'generating' or 'pending' status to persist the placeholder
+    // but we only attempt Supabase/Blob logic for 'success' status.
+    const isSuccess = video.status === 'success';
 
-    // Upload to Supabase Storage to get a real HTTP URL (avoids blob URL HEAD errors)
+    let videoBlob: Blob | undefined;
     let supabaseUrl: string | undefined;
-    try {
-      supabaseUrl = await uploadUrlToStorage(video.url, `video-${video.id}.mp4`);
-      console.log('[IndexedDB] Uploaded to Supabase:', supabaseUrl.slice(0, 60) + '...');
-    } catch (e) {
-      console.warn('[IndexedDB] Failed to upload to Supabase, using blob URL:', e);
-    }
 
-    const videoResponse = await fetchWithTimeout(video.url);
-    const videoBlob = await videoResponse.blob();
+    if (isSuccess && video.url) {
+      // Upload to Supabase Storage to get a real HTTP URL (avoids blob URL HEAD errors)
+      try {
+        supabaseUrl = await uploadUrlToStorage(video.url, `video-${video.id}.mp4`);
+        console.log('[IndexedDB] Uploaded to Supabase:', supabaseUrl.slice(0, 60) + '...');
+      } catch (e) {
+        console.warn('[IndexedDB] Failed to upload to Supabase, using blob URL:', e);
+      }
+
+      try {
+        const videoResponse = await fetchWithTimeout(video.url);
+        videoBlob = await videoResponse.blob();
+      } catch (e) {
+        console.warn('[IndexedDB] Failed to fetch video blob:', e);
+      }
+    }
 
     let thumbnailBlob: Blob | undefined;
     if (video.thumbnailUrl) {
@@ -258,14 +266,14 @@ export const saveGeneratedVideoToDB = async (video: GeneratedVideo): Promise<voi
       const stored: StoredGeneratedVideo = {
         id: video.id,
         sceneId: video.sceneId,
-        videoBlob,
+        videoBlob: videoBlob || new Blob([], { type: 'video/mp4' }), // Placeholder blob if not success
         thumbnailBlob,
-        duration: video.duration,
-        prompt: video.prompt,
-        createdAt: video.createdAt,
+        duration: video.duration || 0,
+        prompt: video.prompt || '',
+        createdAt: video.createdAt || Date.now(),
         status: video.status,
         error: video.error,
-        supabaseUrl // Store the real HTTP URL for use in video editor
+        supabaseUrl
       };
 
       store.put(stored);

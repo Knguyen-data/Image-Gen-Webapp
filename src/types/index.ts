@@ -258,6 +258,9 @@ export interface GeneratedVideo {
   originalVideoId?: string; // Reference to source video if this is an interpolated result
   // Supabase Storage URL (real HTTP URL, avoids blob URL HEAD errors)
   supabaseUrl?: string;
+  // Veo task tracking
+  taskId?: string;
+  statusMessage?: string;
 }
 
 export type KlingProAspectRatio = 'widescreen_16_9' | 'social_story_9_16' | 'square_1_1';

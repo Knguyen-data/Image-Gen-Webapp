@@ -25,37 +25,6 @@ comfyui_process = None
 initialized = False
 _init_lock = asyncio.Lock()
 
-# HuggingFace gated model URLs (downloaded at startup, not during Docker build)
-_GATED_MODELS = [
-    (os.path.join(COMFYUI_PATH, "models", "unet", "flux1-dev.safetensors"),
-     "https://huggingface.co/black-forest-labs/FLUX.1-dev/resolve/main/flux1-dev.safetensors"),
-    (os.path.join(COMFYUI_PATH, "models", "vae", "ae.safetensors"),
-     "https://huggingface.co/black-forest-labs/FLUX.1-dev/resolve/main/ae.safetensors"),
-]
-
-
-def ensure_gated_models():
-    """Download gated Flux Dev models at startup using HF_TOKEN env var."""
-    hf_token = os.environ.get("HF_TOKEN", "")
-    if not hf_token:
-        print("WARNING: HF_TOKEN not set, gated model downloads will fail")
-        return
-
-    for dest, url in _GATED_MODELS:
-        if os.path.exists(dest) and os.path.getsize(dest) > 1000:
-            print(f"Model already exists: {dest}")
-            continue
-        print(f"Downloading gated model: {url}")
-        os.makedirs(os.path.dirname(dest), exist_ok=True)
-        result = subprocess.run([
-            "wget", "--progress=bar:force:noscroll",
-            "--header", f"Authorization: Bearer {hf_token}",
-            "-O", dest, url
-        ], timeout=3600)
-        if result.returncode != 0:
-            raise RuntimeError(f"Failed to download {url} (exit {result.returncode})")
-        print(f"Downloaded: {dest} ({os.path.getsize(dest)} bytes)")
-
 
 async def start_comfyui():
     """Start ComfyUI server"""
@@ -96,6 +65,8 @@ async def start_comfyui():
         
         print("Failed to start ComfyUI within timeout")
         return False
+    
+    return True
 
 
 async def run_workflow(prompt: dict) -> dict:
@@ -143,40 +114,15 @@ async def run_workflow(prompt: dict) -> dict:
                             status_info = entry.get("status", {})
                             if status_info.get("completed", False):
                                 outputs = entry.get("outputs", {})
-                                # Extract images and encode as base64
+                                # Extract image filenames from outputs
                                 images = []
                                 for node_id, node_output in outputs.items():
                                     if "images" in node_output:
                                         for img in node_output["images"]:
-                                            filename = img["filename"]
-                                            subfolder = img.get("subfolder", "")
-                                            img_type = img.get("type", "output")
-
-                                            # Read image file from ComfyUI output directory
-                                            if subfolder:
-                                                img_path = os.path.join(COMFYUI_PATH, "output", subfolder, filename)
-                                            else:
-                                                img_path = os.path.join(COMFYUI_PATH, "output", filename)
-
-                                            img_data = ""
-                                            if os.path.exists(img_path):
-                                                import base64 as b64
-                                                with open(img_path, "rb") as img_file:
-                                                    img_data = b64.b64encode(img_file.read()).decode("utf-8")
-                                            else:
-                                                print(f"Warning: image file not found: {img_path}")
-
-                                            # Detect mime type from extension
-                                            mime = "image/png"
-                                            if filename.lower().endswith(".jpg") or filename.lower().endswith(".jpeg"):
-                                                mime = "image/jpeg"
-                                            elif filename.lower().endswith(".webp"):
-                                                mime = "image/webp"
-
                                             images.append({
-                                                "filename": filename,
-                                                "data": img_data,
-                                                "type": mime,
+                                                "filename": img["filename"],
+                                                "subfolder": img.get("subfolder", ""),
+                                                "type": img.get("type", "output"),
                                             })
                                 return {"success": True, "outputs": outputs, "images": images}
                             elif status_info.get("status_str") == "error":
@@ -414,5 +360,4 @@ if __name__ == "__main__":
     else:
         # RunPod serverless production entrypoint
         print("Starting RunPod serverless handler...")
-        ensure_gated_models()
         runpod.serverless.start({"handler": handler})

@@ -2,12 +2,14 @@ import React, { useRef, useMemo, useState } from 'react';
 import { ReferenceImage, ReferenceVideo, VideoSettings, Kling3Element } from '../types';
 import { useMentionAutocomplete, MentionOption } from '../hooks/use-mention-autocomplete';
 import MentionDropdown from './mention-dropdown';
+import PromptEnhanceButton from './prompt-enhance-button';
 
 interface Kling3OmniPanelProps {
   videoSettings: VideoSettings | null;
   setVideoSettings: (settings: VideoSettings) => void;
   onVideoGenerate: () => void;
   isGenerating: boolean;
+  geminiApiKey?: string;
   handleImageUpload: (file: File) => Promise<ReferenceImage>;
 }
 
@@ -17,6 +19,7 @@ const Kling3OmniPanel: React.FC<Kling3OmniPanelProps> = ({
   onVideoGenerate,
   isGenerating,
   handleImageUpload,
+  geminiApiKey = '',
 }) => {
   if (!videoSettings) return null;
 
@@ -600,6 +603,16 @@ const Kling3OmniPanel: React.FC<Kling3OmniPanelProps> = ({
               position={singleMention.position}
               onSelect={singleMention.onSelect}
             />
+            <div className="flex justify-end mt-1">
+              <PromptEnhanceButton
+                prompt={singlePromptValue}
+                onEnhance={(enhanced) => setSinglePromptValue(enhanced)}
+                target="kling-3-omni"
+                apiKey={geminiApiKey}
+                disabled={isGenerating}
+                size="sm"
+              />
+            </div>
           </div>
         )}
       </div>
