@@ -155,23 +155,23 @@ const AppInner: React.FC = () => {
   // Initial Load
   useEffect(() => {
     navigator.storage?.persist?.();
-    
+
     // Initialize auto-backup system
     import('./services/db-backup').then(({ initAutoBackup }) => {
       initAutoBackup();
     });
-    
+
     // Initialize resilient DB and sync service
     import('./services/db-resilient').then(({ initResilientDB }) => {
       initResilientDB();
     });
-    
+
     import('./services/supabase-sync-service').then(({ getSyncService }) => {
       const syncService = getSyncService();
       syncService.startAutoSync();
       logger.info('App', 'Supabase sync service initialized');
     });
-    
+
     const loadData = async () => {
       logger.info('App', 'Loading application data');
       try {
@@ -253,7 +253,7 @@ const AppInner: React.FC = () => {
           }
           setRuns([...loadedRuns]);
         };
-        migrateOldThumbnails(dbRuns).catch(() => {});
+        migrateOldThumbnails(dbRuns).catch(() => { });
 
         // Load generated videos from IndexedDB (skip failed ones)
         const savedVideos = await getAllGeneratedVideosFromDB();
@@ -811,9 +811,9 @@ INSTRUCTIONS:
         taskQueue,
         async (task) => {
           if (isExtremeMode) {
-            // Extreme Mode - ComfyUI Lustify via RunPod
+            // Extreme Mode - ComfyUI Flux Dev via RunPod
             const comfySettings = task.settings.spicyMode?.comfyui || {
-              steps: 20, cfg: 8, denoise: 1.0, sampler: 'euler', scheduler: 'normal', seed: -1,
+              steps: 25, cfg: 1.0, denoise: 1.0, sampler: 'euler', scheduler: 'simple', seed: -1,
               ipAdapterWeight: 1.0, ipAdapterFaceidWeight: 1.0
             };
             const dimensions = mapAspectRatioToDimensions(task.settings.aspectRatio);
@@ -1243,12 +1243,12 @@ INSTRUCTIONS:
     try {
       // Build prompt or multi_prompt based on shot type
       let prompt: string | undefined;
-      let multiPrompt: Array<{index: number; prompt: string; duration: number}> | undefined;
+      let multiPrompt: Array<{ index: number; prompt: string; duration: number }> | undefined;
 
       if (shotType === 'intelligent') {
         prompt = (videoSettings as any).kling3Prompt || '';
       } else {
-        const shots: Array<{prompt: string; duration: number}> = (videoSettings as any).kling3MultiPrompt || [];
+        const shots: Array<{ prompt: string; duration: number }> = (videoSettings as any).kling3MultiPrompt || [];
         multiPrompt = shots.map((s, i) => ({
           index: i,
           prompt: s.prompt,
@@ -2317,8 +2317,8 @@ INSTRUCTIONS:
     // Log start — Kling 3 doesn't use videoScenes anymore
     const kling3PromptSummary = videoModel === 'kling-3'
       ? ((videoSettings as any).kling3ShotType === 'customize'
-          ? ((videoSettings as any).kling3MultiPrompt || []).map((s: any) => s.prompt).join(' || ')
-          : (videoSettings as any).kling3Prompt || 'Kling 3 video')
+        ? ((videoSettings as any).kling3MultiPrompt || []).map((s: any) => s.prompt).join(' || ')
+        : (videoSettings as any).kling3Prompt || 'Kling 3 video')
       : '';
     const logPrompt = videoModel === 'kling-3'
       ? kling3PromptSummary.slice(0, 50)
@@ -2537,7 +2537,7 @@ INSTRUCTIONS:
     <div className="flex h-screen w-screen overflow-hidden text-gray-200 font-sans bg-gray-950 transition-colors duration-300 relative">
       {/* Animated background */}
       <AnimatedBackground opacity={0.35} particleCount={15} speed={0.8} showGrid={true} />
-      
+
       {/* Settings Page (full-page overlay) */}
       {showSettings && (
         <Suspense fallback={<SuspenseFallback message="Loading settings..." minHeight="100vh" />}>
@@ -2782,11 +2782,11 @@ INSTRUCTIONS:
                   retryPayload(saveDialogPayload.payloadId);
                   setShowSavePayloadDialog(false);
                 }}
-              onViewSaved={() => {
-                setShowSavePayloadDialog(false);
-                setCurrentView('saved-payloads');
-              }}
-            />
+                onViewSaved={() => {
+                  setShowSavePayloadDialog(false);
+                  setCurrentView('saved-payloads');
+                }}
+              />
             </Suspense>
           )}
 
@@ -2827,7 +2827,7 @@ const App: React.FC = () => {
   if (!isAuthenticated) {
     return (
       <Suspense fallback={<SuspenseFallback message="Loading..." minHeight="100vh" />}>
-        <AuthPage onAuthenticated={() => {}} />
+        <AuthPage onAuthenticated={() => { }} />
       </Suspense>
     );
   }

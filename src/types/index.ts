@@ -104,14 +104,14 @@ export interface SeedreamTask {
 
 // ComfyUI RunPod Types (Extreme Spicy Mode)
 export type ComfyUISampler = 'euler' | 'euler_ancestral' | 'dpmpp_2m' | 'dpmpp_sde';
-export type ComfyUIScheduler = 'normal' | 'karras' | 'sgm_uniform';
+export type ComfyUIScheduler = 'normal' | 'simple' | 'karras' | 'sgm_uniform';
 
 export interface ComfyUISettings {
-  steps: number;        // 15-50, default 20
-  cfg: number;          // 1-15, default 8
+  steps: number;        // 15-50, default 25
+  cfg: number;          // Flux Dev: 1.0 (guidance built into model)
   denoise: number;      // 0-1, default 1.0
   sampler: ComfyUISampler;    // default 'euler'
-  scheduler: ComfyUIScheduler; // default 'normal'
+  scheduler: ComfyUIScheduler; // default 'simple'
   seed: number;         // -1 = random
   ipAdapterWeight: number;     // 0-2, default 1.0 (face strength)
   ipAdapterFaceidWeight: number; // 0-2, default 1.0

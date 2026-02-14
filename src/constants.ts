@@ -56,17 +56,18 @@ export const COMFYUI_SAMPLER_LABELS: Record<string, string> = {
 };
 
 export const COMFYUI_SCHEDULER_LABELS: Record<string, string> = {
+  'simple': 'Simple',
   'normal': 'Normal',
   'karras': 'Karras',
   'sgm_uniform': 'SGM Uniform',
 };
 
 export const DEFAULT_COMFYUI_SETTINGS: ComfyUISettings = {
-  steps: 20,
-  cfg: 8,
+  steps: 25,
+  cfg: 1.0,
   denoise: 1.0,
   sampler: 'euler',
-  scheduler: 'normal',
+  scheduler: 'simple',
   seed: -1,
   ipAdapterWeight: 1.0,
   ipAdapterFaceidWeight: 1.0,

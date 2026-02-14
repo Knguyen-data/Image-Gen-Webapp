@@ -1,7 +1,7 @@
 /**
  * ComfyUI RunPod Serverless Service
  * Handles async job submission, polling, and result extraction
- * for the Lustify SDXL + IPAdapter FaceID ComfyUI workflow.
+ * for the Flux Dev + IPAdapter FaceID ComfyUI workflow.
  */
 
 import {
@@ -17,7 +17,7 @@ const MAX_POLL_ATTEMPTS = 120;      // 10 min at 5s intervals
 const POLL_INTERVAL_MS = 5000;
 
 // ---------------------------------------------------------------------------
-// Aspect ratio -> SDXL dimensions mapping
+// Aspect ratio -> Flux Dev dimensions mapping
 // ---------------------------------------------------------------------------
 
 export const mapAspectRatioToDimensions = (
@@ -39,9 +39,18 @@ export const mapAspectRatioToDimensions = (
 // ---------------------------------------------------------------------------
 
 /**
- * Build ComfyUI workflow prompt in API format.
- * The handler.py passes event.input directly to ComfyUI /api/prompt as the
- * "prompt" field, so this object represents the node graph keyed by node id.
+ * Build ComfyUI workflow prompt for Flux Dev in API format.
+ * Node structure:
+ *   "1" UNETLoader -> MODEL
+ *   "2" DualCLIPLoader -> CLIP (clip_l + t5xxl)
+ *   "3" VAELoader -> VAE (ae.safetensors)
+ *   "20" LoraLoader (optional) -> MODEL, CLIP
+ *   "7" CLIPTextEncode (positive) -> CONDITIONING
+ *   "8" CLIPTextEncode (empty negative) -> CONDITIONING
+ *   "13" EmptyLatentImage -> LATENT
+ *   "10" KSampler -> LATENT
+ *   "11" VAEDecode -> IMAGE
+ *   "12" SaveImage -> output
  */
 export const buildWorkflowPrompt = (
   promptText: string,
@@ -60,15 +69,29 @@ export const buildWorkflowPrompt = (
   const loraWeight = settings.loraWeight ?? 0.8;
 
   // Source node IDs for MODEL and CLIP (rewired when LoRA is active)
-  let modelSource: [string, number] = ['1', 0]; // checkpoint MODEL
-  let clipSource: [string, number] = ['1', 1];  // checkpoint CLIP
+  let modelSource: [string, number] = ['1', 0]; // UNETLoader MODEL
+  let clipSource: [string, number] = ['2', 0];  // DualCLIPLoader CLIP
 
   // Base nodes (always present)
   const prompt: Record<string, unknown> = {
-    // Checkpoint loader (outputs: MODEL[0], CLIP[1], VAE[2])
+    // Flux Dev UNET loader (outputs: MODEL[0])
     '1': {
-      class_type: 'CheckpointLoaderSimple',
-      inputs: { ckpt_name: 'lustifySDXLNSFW_ggwpV7.safetensors' },
+      class_type: 'UNETLoader',
+      inputs: { unet_name: 'flux1-dev.safetensors', weight_dtype: 'fp8_e4m3fn' },
+    },
+    // Dual CLIP loader for Flux (CLIP-L + T5-XXL) (outputs: CLIP[0])
+    '2': {
+      class_type: 'DualCLIPLoader',
+      inputs: {
+        clip_name1: 'clip_l.safetensors',
+        clip_name2: 't5xxl_fp16.safetensors',
+        type: 'flux',
+      },
+    },
+    // Flux VAE (outputs: VAE[0])
+    '3': {
+      class_type: 'VAELoader',
+      inputs: { vae_name: 'ae.safetensors' },
     },
     // Empty latent image
     '13': {
@@ -81,13 +104,13 @@ export const buildWorkflowPrompt = (
     },
   };
 
-  // Inject LoRA loader between checkpoint and downstream nodes
+  // Inject LoRA loader between UNET/CLIP and downstream nodes
   if (useLora) {
     prompt['20'] = {
       class_type: 'LoraLoader',
       inputs: {
-        model: ['1', 0],
-        clip: ['1', 1],
+        model: ['1', 0],     // from UNETLoader
+        clip: ['2', 0],      // from DualCLIPLoader
         lora_name: loraFilename,
         strength_model: loraWeight,
         strength_clip: loraWeight,
@@ -97,7 +120,7 @@ export const buildWorkflowPrompt = (
     clipSource = ['20', 1];
   }
 
-  // Positive prompt (uses CLIP from LoRA or checkpoint)
+  // Positive prompt
   prompt['7'] = {
     class_type: 'CLIPTextEncode',
     inputs: {
@@ -105,20 +128,20 @@ export const buildWorkflowPrompt = (
       clip: clipSource,
     },
   };
-  // Negative prompt
+  // Empty negative (Flux Dev doesn't use negative prompts, but KSampler needs the input)
   prompt['8'] = {
     class_type: 'CLIPTextEncode',
     inputs: {
-      text: 'ugly, blurry, low quality, deformed',
+      text: '',
       clip: clipSource,
     },
   };
 
-  // KSampler -- model input wired to LoRA/IPAdapter/checkpoint
+  // KSampler — Flux Dev defaults: cfg=1.0, euler sampler, simple scheduler
   prompt['10'] = {
     class_type: 'KSampler',
     inputs: {
-      model: modelSource, // default: from LoRA or checkpoint
+      model: modelSource,
       positive: ['7', 0],
       negative: ['8', 0],
       latent_image: ['13', 0],
@@ -130,12 +153,12 @@ export const buildWorkflowPrompt = (
       denoise: settings.denoise,
     },
   };
-  // VAE Decode
+  // VAE Decode (uses Flux VAE from node "3")
   prompt['11'] = {
     class_type: 'VAEDecode',
     inputs: {
       samples: ['10', 0],
-      vae: ['1', 2],
+      vae: ['3', 0],
     },
   };
   // Save Image (output node)
@@ -150,40 +173,40 @@ export const buildWorkflowPrompt = (
   // If face reference provided, inject IPAdapter chain
   if (faceImageBase64) {
     // CLIP Vision loader
-    prompt['3'] = {
+    prompt['30'] = {
       class_type: 'CLIPVisionLoader',
       inputs: {
         clip_name: 'CLIP-ViT-bigG-14-laion2B-39B-b160k.safetensors',
       },
     };
     // IPAdapter model loader
-    prompt['4'] = {
+    prompt['31'] = {
       class_type: 'IPAdapterModelLoader',
       inputs: { ipadapter_file: 'ip-adapter-faceid_sdxl.bin' },
     };
-    // Load face image (base64 string)
-    prompt['6'] = {
+    // Load face image (base64 uploaded by handler.py)
+    prompt['32'] = {
       class_type: 'LoadImage',
       inputs: { image: faceImageBase64 },
     };
-    // IPAdapter Advanced — receives model from LoRA (or checkpoint if no LoRA)
-    prompt['5'] = {
+    // IPAdapter Advanced — receives model from LoRA (or UNET if no LoRA)
+    prompt['33'] = {
       class_type: 'IPAdapterAdvanced',
       inputs: {
-        model: modelSource, // LoRA output or checkpoint
+        model: modelSource,
         clip: clipSource,
-        ipadapter: ['4', 0],
-        clip_vision: ['3', 0],
-        image: ['6', 0],
+        ipadapter: ['31', 0],
+        clip_vision: ['30', 0],
+        image: ['32', 0],
         weight: settings.ipAdapterWeight,
         weight_faceidv2: settings.ipAdapterFaceidWeight,
         combine_embeds: 'Average',
         embeds_scaling: 'V only',
       },
     };
-    // Rewire KSampler to use IPAdapter-modified model (after LoRA)
+    // Rewire KSampler to use IPAdapter-modified model
     (prompt['10'] as Record<string, Record<string, unknown>>).inputs.model = [
-      '5',
+      '33',
       0,
     ];
   }
